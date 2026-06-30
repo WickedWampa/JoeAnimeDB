@@ -1,7 +1,6 @@
 import React from 'react';
 import { AnimeCard } from '../components/AnimeCard';
 import { Poster } from '../components/Poster';
-import { score } from '../utils/animeUtils';
 
 function normalizeStatus(status = '') {
   return String(status).toLowerCase().replace(/\s+/g, '');
@@ -9,6 +8,11 @@ function normalizeStatus(status = '') {
 
 function statusCount(anime, status) {
   return anime.filter((item) => normalizeStatus(item.status) === normalizeStatus(status)).length;
+}
+
+function myScore(anime) {
+  const value = Number(anime?.joeScore ?? 0);
+  return Number.isFinite(value) ? value.toFixed(1) : '0.0';
 }
 
 export function StatStrip({ stats, anime }) {
@@ -33,7 +37,7 @@ function MiniAnimeRow({ anime, setSelected }) {
       <Poster anime={anime} className="miniPoster" mode="thumb" />
       <span>
         <strong>{anime.title}</strong>
-        <small>#{anime.finalRank || '—'} · ★ {score(anime).toFixed(1)}</small>
+        <small>#{anime.finalRank || '—'} · ★ {myScore(anime)}</small>
       </span>
     </button>
   );
@@ -81,7 +85,7 @@ export function Dashboard({ anime, stats, setSelected, updateAnime, setView }) {
             <div>
               <span>{watching[0] ? 'Continue Watching' : 'Today\'s Pick'}</span>
               <strong>{daily.title}</strong>
-              <small>{daily.status || 'Ready when you are'} · ★ {score(daily).toFixed(1)}</small>
+              <small>{daily.status || 'Ready when you are'} · ★ {myScore(daily)}</small>
             </div>
           </button>
         )}

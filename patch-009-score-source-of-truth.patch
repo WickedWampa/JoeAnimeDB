@@ -1,0 +1,28 @@
+diff --git a/src/utils/animeUtils.js b/src/utils/animeUtils.js
+index 0000000..0000000 100644
+--- a/src/utils/animeUtils.js
++++ b/src/utils/animeUtils.js
+@@ -1,5 +1,20 @@
+ export function score(anime) {
+-  return Number(anime.rating || anime.predictedScore || 0);
++  if (!anime) return 0;
++
++  // JoeAnimeDB source of truth:
++  // joeScore is the user's real personal score.
++  // rating/predictedScore are legacy/import fallback values from the original spreadsheet era.
++  if (anime.joeScore !== undefined && anime.joeScore !== null && anime.joeScore !== '') {
++    return Number(anime.joeScore) || 0;
++  }
++
++  if (anime.rating !== undefined && anime.rating !== null && anime.rating !== '') {
++    return Number(anime.rating) || 0;
++  }
++
++  if (anime.predictedScore !== undefined && anime.predictedScore !== null && anime.predictedScore !== '') {
++    return Number(anime.predictedScore) || 0;
++  }
++
++  return 0;
+ }
+ 
+ export function countBy(items) {
