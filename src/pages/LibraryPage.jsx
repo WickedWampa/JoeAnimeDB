@@ -1,0 +1,53 @@
+import React from 'react';
+import { AnimeCard } from '../components/AnimeCard';
+import { Poster } from '../components/Poster';
+import { score } from '../utils/animeUtils';
+
+export function LibraryPage({ anime, mode, setSelected, title }) {
+  return (
+    <>
+      <section className="pageHeader">
+        <div>
+          <p className="eyebrow">Sprint 1</p>
+          <h1>{title}</h1>
+          <p>{anime.length} titles shown. Search, switch views, and click any title for details.</p>
+        </div>
+      </section>
+
+      {mode === 'list' ? (
+        <section className="tablePanel">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Anime</th>
+                <th>Score</th>
+                <th>Studio</th>
+                <th>Genres</th>
+                <th>Episodes</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {anime.map((item) => (
+                <tr key={item.id} onClick={() => setSelected(item)}>
+                  <td>{item.finalRank}</td>
+                  <td className="titleCell"><Poster anime={item} className="thumb" />{item.title}</td>
+                  <td>★ {score(item).toFixed(1)}</td>
+                  <td>{item.studio}</td>
+                  <td>{(item.genres || []).slice(0, 3).join(', ')}</td>
+                  <td>{item.episodeCount || '—'}</td>
+                  <td>{item.status}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      ) : (
+        <section className="posterGrid">
+          {anime.map((item) => <AnimeCard key={item.id} anime={item} setSelected={setSelected} />)}
+        </section>
+      )}
+    </>
+  );
+}

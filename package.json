@@ -1,0 +1,49 @@
+{
+  "name": "joeanime-db-4",
+  "version": "4.3.1",
+  "private": true,
+  "description": "JoeAnimeDB 4.3.1 SQLite Foundation",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "web": "vite",
+    "desktop": "electron .",
+    "build": "vite build",
+    "preview": "vite preview",
+    "pack:win": "electron-builder --win portable",
+    "pack:dir": "electron-builder --dir"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "latest",
+    "vite": "latest",
+    "typescript": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "concurrently": "latest",
+    "wait-on": "latest",
+    "lucide-react": "latest",
+    "sql.js": "latest"
+  },
+  "devDependencies": {
+    "electron-builder": "latest",
+    "electron": "latest"
+  },
+  "build": {
+    "appId": "com.joeanimedb.app",
+    "productName": "JoeAnimeDB",
+    "directories": {
+      "output": "dist-desktop"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json",
+      "node_modules/sql.js/dist/sql-wasm.wasm"
+    ],
+    "win": {
+      "target": [
+        "portable"
+      ]
+    }
+  }
+}
