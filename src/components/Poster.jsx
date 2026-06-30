@@ -15,7 +15,7 @@ function getPosterSources(anime) {
   ].filter(Boolean);
 }
 
-export function Poster({ anime, className = 'poster' }) {
+export function Poster({ anime, className = 'poster', mode = 'fill' }) {
   const sources = useMemo(() => getPosterSources(anime), [anime]);
   const [sourceIndex, setSourceIndex] = useState(0);
   const src = sources[sourceIndex];
@@ -24,8 +24,14 @@ export function Poster({ anime, className = 'poster' }) {
     setSourceIndex((current) => current + 1);
   }
 
+  const classes = [
+    className,
+    mode === 'thumb' ? 'posterThumb' : '',
+    src ? 'hasImage' : ''
+  ].filter(Boolean).join(' ');
+
   return (
-    <div className={`${className}${src ? ' hasImage' : ''}`}>
+    <div className={classes}>
       {src ? (
         <img src={src} alt={`${anime.title} poster`} loading="lazy" onError={handleImageError} />
       ) : (

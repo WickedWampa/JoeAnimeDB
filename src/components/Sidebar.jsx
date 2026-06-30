@@ -5,7 +5,9 @@ const THEMES = [
   { id: 'neon', label: 'Neon' },
   { id: 'sakura', label: 'Sakura' },
   { id: 'vapor', label: 'Vapor' },
-  { id: 'ramen', label: 'Ramen' }
+  { id: 'ramen', label: 'Ramen' },
+  { id: 'inferno', label: 'Inferno' },
+  { id: 'amoled', label: 'AMOLED' }
 ];
 
 function NavButton({ icon, label, id, view, setView }) {

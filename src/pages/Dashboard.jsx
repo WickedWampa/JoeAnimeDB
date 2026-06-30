@@ -30,7 +30,7 @@ export function StatStrip({ stats, anime }) {
 function MiniAnimeRow({ anime, setSelected }) {
   return (
     <button className="miniAnimeRow" type="button" onClick={() => setSelected(anime)}>
-      <Poster anime={anime} className="miniPoster" />
+      <Poster anime={anime} className="miniPoster" mode="thumb" />
       <span>
         <strong>{anime.title}</strong>
         <small>#{anime.finalRank || '—'} · ★ {score(anime).toFixed(1)}</small>
@@ -77,7 +77,7 @@ export function Dashboard({ anime, stats, setSelected, updateAnime, setView }) {
         </div>
         {daily && (
           <button className="daily spotlightCard" onClick={() => setSelected(daily)}>
-            <Poster anime={daily} className="dailyPoster" />
+            <Poster anime={daily} className="dailyPoster" mode="thumb" />
             <div>
               <span>{watching[0] ? 'Continue Watching' : 'Today\'s Pick'}</span>
               <strong>{daily.title}</strong>
@@ -116,7 +116,7 @@ export function Dashboard({ anime, stats, setSelected, updateAnime, setView }) {
           </div>
           {recommendation ? (
             <button className="recommendationCard" type="button" onClick={() => setSelected(recommendation)}>
-              <Poster anime={recommendation} className="recommendationPoster" />
+              <Poster anime={recommendation} className="recommendationPoster" mode="thumb" />
               <span>
                 <strong>{recommendation.title}</strong>
                 <small>Early match based on your rankings and scores.</small>
