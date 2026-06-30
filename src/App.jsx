@@ -9,9 +9,10 @@ import { Universe, Assistant, Analytics, Timeline, BleachShrine, SettingsPage } 
 import { useAnimeLibrary } from './hooks/useAnimeLibrary';
 
 export function App() {
-  const [view, setView] = useState('library');
+  const [view, setView] = useState('dashboard');
   const [selected, setSelected] = useState(null);
   const [mode, setMode] = useState('poster');
+  const [theme, setTheme] = useState('neon');
 
   const library = useAnimeLibrary();
   const { data, anime, filtered, stats, loading, query, setQuery, syncing, syncText, syncMetadata, updateAnime } = library;
@@ -36,10 +37,10 @@ export function App() {
 
   if (loading) {
     return (
-      <main className="shell bootScreen">
+      <main className={`shell theme-${theme} bootScreen`}>
         <div className="bootCard">
           <h1>JoeAnimeDB</h1>
-          <p>Opening SQLite database...</p>
+          <p>Remember Every Anime.</p><p className="bootSubline">Loading your library...</p>
           <div className="loader" />
         </div>
       </main>
@@ -47,8 +48,8 @@ export function App() {
   }
 
   return (
-    <main className="shell">
-      <Sidebar view={view} setView={setView} syncMetadata={syncMetadata} />
+    <main className={`shell theme-${theme}`}>
+      <Sidebar view={view} setView={setView} syncMetadata={syncMetadata} theme={theme} setTheme={setTheme} />
 
       <section className="content">
         <header className="topbar">
@@ -60,7 +61,7 @@ export function App() {
           </div>
         </header>
 
-        {view === 'dashboard' && <Dashboard anime={anime} stats={stats} setSelected={setSelected} />}
+        {view === 'dashboard' && <Dashboard anime={anime} stats={stats} setSelected={setSelected} updateAnime={handleUpdateAnime} setView={setView} />}
         {(view === 'library' || view === 'rankings') && (
           <LibraryPage anime={filtered} mode={mode} setSelected={setSelected} updateAnime={handleUpdateAnime} title={view === 'rankings' ? 'Rankings' : 'Library'} />
         )}

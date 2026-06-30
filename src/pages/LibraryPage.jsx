@@ -61,7 +61,7 @@ export function LibraryPage({ anime, mode, setSelected, title, updateAnime, empt
                   <td>{item.studio}</td>
                   <td>{(item.genres || []).slice(0, 3).join(', ')}</td>
                   <td>{item.episodeCount || '—'}</td>
-                  <td>{item.status || '—'}</td>
+                  <td>{item.status ? <span className={`statusPill compact ${item.status.replace(/\s+/g, '').toLowerCase()}`}>{item.status}</span> : '—'}</td>
                 </tr>
               ))}
             </tbody>
