@@ -1,8 +1,6 @@
-const fs = require('fs');
 const path = require('path');
-const initSqlJs = require('sql.js');
+const Database = require('better-sqlite3');
 
-let SQL = null;
 let db = null;
 let dbPath = null;
 
@@ -21,7 +19,7 @@ function decodeList(value) {
 
 function animeToRow(item) {
   return {
-    id: item.id,
+    id: String(item.id),
     title: item.title || '',
     type: item.type || '',
     year: item.year ?? null,
@@ -63,40 +61,13 @@ function rowToAnime(row) {
   };
 }
 
-function save() {
-  if (!db || !dbPath) return;
-  const bytes = db.export();
-  fs.writeFileSync(dbPath, Buffer.from(bytes));
-}
-
-function exec(sql, params = []) {
-  const stmt = db.prepare(sql);
-  try {
-    stmt.bind(params);
-    const rows = [];
-    while (stmt.step()) rows.push(stmt.getAsObject());
-    return rows;
-  } finally {
-    stmt.free();
-  }
-}
-
 async function initDatabase(userDataPath, seedDatabase) {
   if (db) return getDatabase();
 
-  SQL = await initSqlJs({
-    locateFile: (file) => require.resolve(`sql.js/dist/${file}`)
-  });
+  dbPath = path.join(userDataPath, 'JoeAnime.db');
+  db = new Database(dbPath);
 
-  dbPath = path.join(userDataPath, 'joeanime.sqlite');
-
-  if (fs.existsSync(dbPath)) {
-    db = new SQL.Database(fs.readFileSync(dbPath));
-  } else {
-    db = new SQL.Database();
-  }
-
-  db.run(`
+  db.exec(`
     CREATE TABLE IF NOT EXISTS anime (
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
@@ -118,35 +89,42 @@ async function initDatabase(userDataPath, seedDatabase) {
     );
   `);
 
-  const count = exec('SELECT COUNT(*) AS count FROM anime')[0]?.count || 0;
+  const count = db.prepare('SELECT COUNT(*) AS count FROM anime').get().count;
+
   if (count === 0 && seedDatabase?.anime?.length) {
-    replaceAll(seedDatabase.anime, false);
+    replaceAll(seedDatabase.anime);
   }
 
-  save();
   return getDatabase();
 }
 
 function getAll() {
-  return exec('SELECT * FROM anime ORDER BY CAST(finalRank AS INTEGER), title').map(rowToAnime);
+  return db
+    .prepare('SELECT * FROM anime ORDER BY finalRank IS NULL, finalRank, title')
+    .all()
+    .map(rowToAnime);
 }
 
 function getDatabase() {
   return {
-    version: '4.3.1-sqlite',
-    engine: 'SQLite/sql.js',
+    version: '4.4-better-sqlite3',
+    engine: 'SQLite/better-sqlite3',
     path: dbPath,
     anime: getAll()
   };
 }
 
-function upsertAnime(item, shouldSave = true) {
+function upsertAnime(item) {
   const row = animeToRow(item);
-  db.run(`
+
+  db.prepare(`
     INSERT INTO anime (
       id, title, type, year, episodes, studio, genres, cover, synopsis,
       malScore, joeScore, finalRank, rewatches, status, favorite, notes, updatedAt
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (
+      @id, @title, @type, @year, @episodes, @studio, @genres, @cover, @synopsis,
+      @malScore, @joeScore, @finalRank, @rewatches, @status, @favorite, @notes, @updatedAt
+    )
     ON CONFLICT(id) DO UPDATE SET
       title=excluded.title,
       type=excluded.type,
@@ -163,26 +141,19 @@ function upsertAnime(item, shouldSave = true) {
       status=excluded.status,
       favorite=excluded.favorite,
       notes=excluded.notes,
-      updatedAt=excluded.updatedAt;
-  `, [
-    row.id, row.title, row.type, row.year, row.episodes, row.studio, row.genres, row.cover, row.synopsis,
-    row.malScore, row.joeScore, row.finalRank, row.rewatches, row.status, row.favorite, row.notes, row.updatedAt
-  ]);
-  if (shouldSave) save();
+      updatedAt=excluded.updatedAt
+  `).run(row);
+
   return rowToAnime(row);
 }
 
-function replaceAll(anime, shouldSave = true) {
-  db.run('BEGIN TRANSACTION;');
-  try {
-    db.run('DELETE FROM anime;');
-    for (const item of anime || []) upsertAnime(item, false);
-    db.run('COMMIT;');
-  } catch (error) {
-    db.run('ROLLBACK;');
-    throw error;
-  }
-  if (shouldSave) save();
+function replaceAll(anime) {
+  const transaction = db.transaction((items) => {
+    db.prepare('DELETE FROM anime').run();
+    for (const item of items || []) upsertAnime(item);
+  });
+
+  transaction(anime);
   return getDatabase();
 }
 

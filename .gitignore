@@ -3,3 +3,6 @@ dist/
 out/ 
 .vite/ 
 *.log 
+JoeAnime.db
+*.zip
+*.db
