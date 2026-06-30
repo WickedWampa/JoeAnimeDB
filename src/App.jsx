@@ -14,7 +14,7 @@ export function App() {
   const [mode, setMode] = useState('poster');
 
   const library = useAnimeLibrary();
-  const { data, anime, filtered, stats, loading, query, setQuery, syncing, syncText, syncMetadata } = library;
+  const { data, anime, filtered, stats, loading, query, setQuery, syncing, syncText, syncMetadata, updateAnime } = library;
 
   if (loading) {
     return (
@@ -44,7 +44,7 @@ export function App() {
 
         {view === 'dashboard' && <Dashboard anime={anime} stats={stats} setSelected={setSelected} />}
         {(view === 'library' || view === 'rankings') && (
-          <LibraryPage anime={filtered} mode={mode} setSelected={setSelected} title={view === 'rankings' ? 'Rankings' : 'Library'} />
+          <LibraryPage anime={filtered} mode={mode} setSelected={setSelected} updateAnime={updateAnime} title={view === 'rankings' ? 'Rankings' : 'Library'} />
         )}
         {view === 'universe' && <Universe anime={anime} setQuery={setQuery} setView={setView} />}
         {view === 'assistant' && <Assistant anime={anime} />}

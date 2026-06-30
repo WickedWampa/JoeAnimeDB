@@ -3,14 +3,22 @@ import { AnimeCard } from '../components/AnimeCard';
 import { Poster } from '../components/Poster';
 import { score } from '../utils/animeUtils';
 
-export function LibraryPage({ anime, mode, setSelected, title }) {
+export function LibraryPage({ anime, mode, setSelected, title, updateAnime }) {
+  async function handleFavoriteClick(event, item) {
+    event.stopPropagation();
+    await updateAnime({
+      ...item,
+      favorite: !Boolean(item.favorite)
+    });
+  }
+
   return (
     <>
       <section className="pageHeader">
         <div>
-          <p className="eyebrow">Sprint 1</p>
+          <p className="eyebrow">Sprint 3</p>
           <h1>{title}</h1>
-          <p>{anime.length} titles shown. Search, switch views, and click any title for details.</p>
+          <p>{anime.length} titles shown. Search, switch views, favorite titles, and click any title for details.</p>
         </div>
       </section>
 
@@ -19,6 +27,7 @@ export function LibraryPage({ anime, mode, setSelected, title }) {
           <table>
             <thead>
               <tr>
+                <th>Fav</th>
                 <th>#</th>
                 <th>Anime</th>
                 <th>Score</th>
@@ -31,6 +40,16 @@ export function LibraryPage({ anime, mode, setSelected, title }) {
             <tbody>
               {anime.map((item) => (
                 <tr key={item.id} onClick={() => setSelected(item)}>
+                  <td>
+                    <button
+                      className="favoriteListButton"
+                      type="button"
+                      title={item.favorite ? 'Remove from favorites' : 'Add to favorites'}
+                      onClick={(event) => handleFavoriteClick(event, item)}
+                    >
+                      {item.favorite ? '❤️' : '🤍'}
+                    </button>
+                  </td>
                   <td>{item.finalRank}</td>
                   <td className="titleCell"><Poster anime={item} className="thumb" />{item.title}</td>
                   <td>★ {score(item).toFixed(1)}</td>
@@ -45,7 +64,7 @@ export function LibraryPage({ anime, mode, setSelected, title }) {
         </section>
       ) : (
         <section className="posterGrid">
-          {anime.map((item) => <AnimeCard key={item.id} anime={item} setSelected={setSelected} />)}
+          {anime.map((item) => <AnimeCard key={item.id} anime={item} setSelected={setSelected} updateAnime={updateAnime} />)}
         </section>
       )}
     </>
