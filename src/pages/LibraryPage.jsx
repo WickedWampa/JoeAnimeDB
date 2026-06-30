@@ -3,7 +3,7 @@ import { AnimeCard } from '../components/AnimeCard';
 import { Poster } from '../components/Poster';
 import { score } from '../utils/animeUtils';
 
-export function LibraryPage({ anime, mode, setSelected, title, updateAnime }) {
+export function LibraryPage({ anime, mode, setSelected, title, updateAnime, emptyMessage }) {
   async function handleFavoriteClick(event, item) {
     event.stopPropagation();
     await updateAnime({
@@ -22,7 +22,12 @@ export function LibraryPage({ anime, mode, setSelected, title, updateAnime }) {
         </div>
       </section>
 
-      {mode === 'list' ? (
+      {anime.length === 0 && emptyMessage ? (
+        <section className="emptyState">
+          <h2>Nothing here yet</h2>
+          <p>{emptyMessage}</p>
+        </section>
+      ) : mode === 'list' ? (
         <section className="tablePanel">
           <table>
             <thead>
@@ -56,7 +61,7 @@ export function LibraryPage({ anime, mode, setSelected, title, updateAnime }) {
                   <td>{item.studio}</td>
                   <td>{(item.genres || []).slice(0, 3).join(', ')}</td>
                   <td>{item.episodeCount || '—'}</td>
-                  <td>{item.status}</td>
+                  <td>{item.status || '—'}</td>
                 </tr>
               ))}
             </tbody>

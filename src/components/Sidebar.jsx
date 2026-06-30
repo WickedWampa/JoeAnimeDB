@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, Library, Trophy, BarChart3, Settings, Sparkles, Swords, Network, CalendarDays, RefreshCw } from 'lucide-react';
+import { Home, Library, Trophy, BarChart3, Settings, Sparkles, Swords, Network, CalendarDays, RefreshCw, Heart } from 'lucide-react';
 
 function NavButton({ icon, label, id, view, setView }) {
   return (
@@ -15,12 +15,13 @@ export function Sidebar({ view, setView, syncMetadata }) {
     <aside className="sidebar">
       <div className="brand">
         <strong>JOE<span>ANIME</span>DB</strong>
-        <small>4.2 Foundation</small>
+        <small>Remember Every Anime</small>
       </div>
 
       <nav>
         <NavButton icon={<Home />} label="Dashboard" id="dashboard" view={view} setView={setView} />
         <NavButton icon={<Library />} label="Library" id="library" view={view} setView={setView} />
+        <NavButton icon={<Heart />} label="Favorites" id="favorites" view={view} setView={setView} />
         <NavButton icon={<Trophy />} label="Rankings" id="rankings" view={view} setView={setView} />
         <NavButton icon={<Network />} label="Anime Universe" id="universe" view={view} setView={setView} />
         <NavButton icon={<Sparkles />} label="Assistant" id="assistant" view={view} setView={setView} />

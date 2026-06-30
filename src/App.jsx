@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 
 import { Sidebar } from './components/Sidebar';
 import { SearchBar } from './components/SearchBar';
@@ -15,6 +15,24 @@ export function App() {
 
   const library = useAnimeLibrary();
   const { data, anime, filtered, stats, loading, query, setQuery, syncing, syncText, syncMetadata, updateAnime } = library;
+
+  const favoriteAnime = useMemo(
+    () => filtered.filter((item) => Boolean(item.favorite)),
+    [filtered]
+  );
+
+  async function handleUpdateAnime(updatedAnime) {
+    const saved = await updateAnime(updatedAnime);
+    const savedAnime = saved.anime || [];
+    const refreshed = savedAnime.find((item) => String(item.id) === String(updatedAnime.id));
+
+    setSelected((current) => {
+      if (!current || String(current.id) !== String(updatedAnime.id)) return current;
+      return refreshed || updatedAnime;
+    });
+
+    return saved;
+  }
 
   if (loading) {
     return (
@@ -44,7 +62,10 @@ export function App() {
 
         {view === 'dashboard' && <Dashboard anime={anime} stats={stats} setSelected={setSelected} />}
         {(view === 'library' || view === 'rankings') && (
-          <LibraryPage anime={filtered} mode={mode} setSelected={setSelected} updateAnime={updateAnime} title={view === 'rankings' ? 'Rankings' : 'Library'} />
+          <LibraryPage anime={filtered} mode={mode} setSelected={setSelected} updateAnime={handleUpdateAnime} title={view === 'rankings' ? 'Rankings' : 'Library'} />
+        )}
+        {view === 'favorites' && (
+          <LibraryPage anime={favoriteAnime} mode={mode} setSelected={setSelected} updateAnime={handleUpdateAnime} title="Favorites" emptyMessage="No favorites yet. Click a heart on any anime to add it here." />
         )}
         {view === 'universe' && <Universe anime={anime} setQuery={setQuery} setView={setView} />}
         {view === 'assistant' && <Assistant anime={anime} />}
@@ -54,7 +75,7 @@ export function App() {
         {view === 'settings' && <SettingsPage data={data} syncMetadata={syncMetadata} stats={stats} />}
       </section>
 
-      {selected && <DetailModal anime={selected} onClose={() => setSelected(null)} />}
+      {selected && <DetailModal anime={selected} onClose={() => setSelected(null)} updateAnime={handleUpdateAnime} />}
       {syncing && <div className="syncOverlay"><div><h2>Updating JoeAnimeDB</h2><p>{syncText}</p><div className="loader" /></div></div>}
     </main>
   );
