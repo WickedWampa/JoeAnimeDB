@@ -8,8 +8,10 @@ function registerDatabaseHandlers() {
   ipcMain.handle('db:init', async (_event, seedDatabase) => database.initDatabase(app.getPath('userData'), seedDatabase));
   ipcMain.handle('db:getDatabase', async () => database.getDatabase());
   ipcMain.handle('db:getAll', async () => database.getAll());
+  ipcMain.handle('db:getCatalog', async () => database.getCatalog());
   ipcMain.handle('db:replaceAll', async (_event, anime) => database.replaceAll(anime));
   ipcMain.handle('db:updateAnime', async (_event, anime) => database.upsertAnime(anime));
+  ipcMain.handle('db:importCatalog', async (_event, catalog) => database.importCatalog(catalog));
   ipcMain.handle('db:reset', async (_event, seedDatabase) => database.reset(seedDatabase));
 }
 

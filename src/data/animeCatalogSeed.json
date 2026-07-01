@@ -1,0 +1,782 @@
+[
+  {
+    "id": "catalog-fullmetalalchemistbrotherhood",
+    "title": "Fullmetal Alchemist: Brotherhood"
+  },
+  {
+    "id": "catalog-steinsgate",
+    "title": "Steins;Gate"
+  },
+  {
+    "id": "catalog-attackontitan",
+    "title": "Attack on Titan"
+  },
+  {
+    "id": "catalog-attackontitanseason2",
+    "title": "Attack on Titan Season 2"
+  },
+  {
+    "id": "catalog-attackontitanseason3",
+    "title": "Attack on Titan Season 3"
+  },
+  {
+    "id": "catalog-attackontitanfinalseason",
+    "title": "Attack on Titan Final Season"
+  },
+  {
+    "id": "catalog-frierenbeyondjourneysend",
+    "title": "Frieren: Beyond Journey's End"
+  },
+  {
+    "id": "catalog-hunterxhunter",
+    "title": "Hunter x Hunter"
+  },
+  {
+    "id": "catalog-deathnote",
+    "title": "Death Note"
+  },
+  {
+    "id": "catalog-codegeasslelouchoftherebellion",
+    "title": "Code Geass: Lelouch of the Rebellion"
+  },
+  {
+    "id": "catalog-cowboybebop",
+    "title": "Cowboy Bebop"
+  },
+  {
+    "id": "catalog-samuraichamploo",
+    "title": "Samurai Champloo"
+  },
+  {
+    "id": "catalog-vinlandsaga",
+    "title": "Vinland Saga"
+  },
+  {
+    "id": "catalog-vinlandsagaseason2",
+    "title": "Vinland Saga Season 2"
+  },
+  {
+    "id": "catalog-mobpsycho100",
+    "title": "Mob Psycho 100"
+  },
+  {
+    "id": "catalog-mobpsycho100ii",
+    "title": "Mob Psycho 100 II"
+  },
+  {
+    "id": "catalog-mobpsycho100iii",
+    "title": "Mob Psycho 100 III"
+  },
+  {
+    "id": "catalog-onepunchman",
+    "title": "One Punch Man"
+  },
+  {
+    "id": "catalog-jujutsukaisen",
+    "title": "Jujutsu Kaisen"
+  },
+  {
+    "id": "catalog-jujutsukaisenseason2",
+    "title": "Jujutsu Kaisen Season 2"
+  },
+  {
+    "id": "catalog-demonslayerkimetsunoyaiba",
+    "title": "Demon Slayer: Kimetsu no Yaiba"
+  },
+  {
+    "id": "catalog-demonslayermugentrainarc",
+    "title": "Demon Slayer: Mugen Train Arc"
+  },
+  {
+    "id": "catalog-demonslayerentertainmentdistrictarc",
+    "title": "Demon Slayer: Entertainment District Arc"
+  },
+  {
+    "id": "catalog-demonslayerswordsmithvillagearc",
+    "title": "Demon Slayer: Swordsmith Village Arc"
+  },
+  {
+    "id": "catalog-myheroacademia",
+    "title": "My Hero Academia"
+  },
+  {
+    "id": "catalog-blackclover",
+    "title": "Black Clover"
+  },
+  {
+    "id": "catalog-naruto",
+    "title": "Naruto"
+  },
+  {
+    "id": "catalog-narutoshippuden",
+    "title": "Naruto: Shippuden"
+  },
+  {
+    "id": "catalog-bleach",
+    "title": "Bleach"
+  },
+  {
+    "id": "catalog-bleachthousandyearbloodwar",
+    "title": "Bleach: Thousand-Year Blood War"
+  },
+  {
+    "id": "catalog-onepiece",
+    "title": "One Piece"
+  },
+  {
+    "id": "catalog-dragonballz",
+    "title": "Dragon Ball Z"
+  },
+  {
+    "id": "catalog-dragonballsuper",
+    "title": "Dragon Ball Super"
+  },
+  {
+    "id": "catalog-yuyuhakusho",
+    "title": "Yu Yu Hakusho"
+  },
+  {
+    "id": "catalog-rurounikenshin",
+    "title": "Rurouni Kenshin"
+  },
+  {
+    "id": "catalog-inuyasha",
+    "title": "Inuyasha"
+  },
+  {
+    "id": "catalog-gintama",
+    "title": "Gintama"
+  },
+  {
+    "id": "catalog-chainsawman",
+    "title": "Chainsaw Man"
+  },
+  {
+    "id": "catalog-hellsparadise",
+    "title": "Hell's Paradise"
+  },
+  {
+    "id": "catalog-sololeveling",
+    "title": "Solo Leveling"
+  },
+  {
+    "id": "catalog-kaijuno8",
+    "title": "Kaiju No. 8"
+  },
+  {
+    "id": "catalog-mashlemagicandmuscles",
+    "title": "Mashle: Magic and Muscles"
+  },
+  {
+    "id": "catalog-drstone",
+    "title": "Dr. Stone"
+  },
+  {
+    "id": "catalog-fireforce",
+    "title": "Fire Force"
+  },
+  {
+    "id": "catalog-souleater",
+    "title": "Soul Eater"
+  },
+  {
+    "id": "catalog-blueexorcist",
+    "title": "Blue Exorcist"
+  },
+  {
+    "id": "catalog-noragami",
+    "title": "Noragami"
+  },
+  {
+    "id": "catalog-thesevendeadlysins",
+    "title": "The Seven Deadly Sins"
+  },
+  {
+    "id": "catalog-magithelabyrinthofmagic",
+    "title": "Magi: The Labyrinth of Magic"
+  },
+  {
+    "id": "catalog-magithekingdomofmagic",
+    "title": "Magi: The Kingdom of Magic"
+  },
+  {
+    "id": "catalog-worldtrigger",
+    "title": "World Trigger"
+  },
+  {
+    "id": "catalog-dorohedoro",
+    "title": "Dorohedoro"
+  },
+  {
+    "id": "catalog-berserk",
+    "title": "Berserk"
+  },
+  {
+    "id": "catalog-berserkthegoldenagearc",
+    "title": "Berserk: The Golden Age Arc"
+  },
+  {
+    "id": "catalog-claymore",
+    "title": "Claymore"
+  },
+  {
+    "id": "catalog-hellsingultimate",
+    "title": "Hellsing Ultimate"
+  },
+  {
+    "id": "catalog-parasytethemaxim",
+    "title": "Parasyte: The Maxim"
+  },
+  {
+    "id": "catalog-tokyoghoul",
+    "title": "Tokyo Ghoul"
+  },
+  {
+    "id": "catalog-psychopass",
+    "title": "Psycho-Pass"
+  },
+  {
+    "id": "catalog-ergoproxy",
+    "title": "Ergo Proxy"
+  },
+  {
+    "id": "catalog-monster",
+    "title": "Monster"
+  },
+  {
+    "id": "catalog-pluto",
+    "title": "Pluto"
+  },
+  {
+    "id": "catalog-madeinabyss",
+    "title": "Made in Abyss"
+  },
+  {
+    "id": "catalog-madeinabyssthegoldencityofthescorchingsun",
+    "title": "Made in Abyss: The Golden City of the Scorching Sun"
+  },
+  {
+    "id": "catalog-thepromisedneverland",
+    "title": "The Promised Neverland"
+  },
+  {
+    "id": "catalog-rankingofkings",
+    "title": "Ranking of Kings"
+  },
+  {
+    "id": "catalog-toyoureternity",
+    "title": "To Your Eternity"
+  },
+  {
+    "id": "catalog-violetevergarden",
+    "title": "Violet Evergarden"
+  },
+  {
+    "id": "catalog-asilentvoice",
+    "title": "A Silent Voice"
+  },
+  {
+    "id": "catalog-yourname",
+    "title": "Your Name"
+  },
+  {
+    "id": "catalog-weatheringwithyou",
+    "title": "Weathering With You"
+  },
+  {
+    "id": "catalog-suzume",
+    "title": "Suzume"
+  },
+  {
+    "id": "catalog-spiritedaway",
+    "title": "Spirited Away"
+  },
+  {
+    "id": "catalog-princessmononoke",
+    "title": "Princess Mononoke"
+  },
+  {
+    "id": "catalog-howlsmovingcastle",
+    "title": "Howl's Moving Castle"
+  },
+  {
+    "id": "catalog-myneighbortotoro",
+    "title": "My Neighbor Totoro"
+  },
+  {
+    "id": "catalog-nausicaäofthevalleyofthewind",
+    "title": "Nausicaä of the Valley of the Wind"
+  },
+  {
+    "id": "catalog-akira",
+    "title": "Akira"
+  },
+  {
+    "id": "catalog-ghostintheshell",
+    "title": "Ghost in the Shell"
+  },
+  {
+    "id": "catalog-paprika",
+    "title": "Paprika"
+  },
+  {
+    "id": "catalog-perfectblue",
+    "title": "Perfect Blue"
+  },
+  {
+    "id": "catalog-redline",
+    "title": "Redline"
+  },
+  {
+    "id": "catalog-trigun",
+    "title": "Trigun"
+  },
+  {
+    "id": "catalog-trigunstampede",
+    "title": "Trigun Stampede"
+  },
+  {
+    "id": "catalog-blacklagoon",
+    "title": "Black Lagoon"
+  },
+  {
+    "id": "catalog-baccano",
+    "title": "Baccano!"
+  },
+  {
+    "id": "catalog-durarara",
+    "title": "Durarara!!"
+  },
+  {
+    "id": "catalog-bungostraydogs",
+    "title": "Bungo Stray Dogs"
+  },
+  {
+    "id": "catalog-bloodblockadebattlefront",
+    "title": "Blood Blockade Battlefront"
+  },
+  {
+    "id": "catalog-akudamadrive",
+    "title": "Akudama Drive"
+  },
+  {
+    "id": "catalog-cyberpunkedgerunners",
+    "title": "Cyberpunk: Edgerunners"
+  },
+  {
+    "id": "catalog-gurrenlagann",
+    "title": "Gurren Lagann"
+  },
+  {
+    "id": "catalog-killlakill",
+    "title": "Kill la Kill"
+  },
+  {
+    "id": "catalog-flcl",
+    "title": "FLCL"
+  },
+  {
+    "id": "catalog-neongenesisevangelion",
+    "title": "Neon Genesis Evangelion"
+  },
+  {
+    "id": "catalog-86eightysix",
+    "title": "86 Eighty-Six"
+  },
+  {
+    "id": "catalog-aldnoahzero",
+    "title": "Aldnoah.Zero"
+  },
+  {
+    "id": "catalog-codegeassakitotheexiled",
+    "title": "Code Geass: Akito the Exiled"
+  },
+  {
+    "id": "catalog-gundamwing",
+    "title": "Gundam Wing"
+  },
+  {
+    "id": "catalog-mobilesuitgundamironbloodedorphans",
+    "title": "Mobile Suit Gundam: Iron-Blooded Orphans"
+  },
+  {
+    "id": "catalog-eurekaseven",
+    "title": "Eureka Seven"
+  },
+  {
+    "id": "catalog-darlinginthefranxx",
+    "title": "Darling in the Franxx"
+  },
+  {
+    "id": "catalog-swordartonline",
+    "title": "Sword Art Online"
+  },
+  {
+    "id": "catalog-swordartonlineii",
+    "title": "Sword Art Online II"
+  },
+  {
+    "id": "catalog-swordartonlinealicization",
+    "title": "Sword Art Online: Alicization"
+  },
+  {
+    "id": "catalog-loghorizon",
+    "title": "Log Horizon"
+  },
+  {
+    "id": "catalog-overlord",
+    "title": "Overlord"
+  },
+  {
+    "id": "catalog-thattimeigotreincarnatedasaslime",
+    "title": "That Time I Got Reincarnated as a Slime"
+  },
+  {
+    "id": "catalog-mushokutenseijoblessreincarnation",
+    "title": "Mushoku Tensei: Jobless Reincarnation"
+  },
+  {
+    "id": "catalog-rezerostartinglifeinanotherworld",
+    "title": "Re:ZERO -Starting Life in Another World-"
+  },
+  {
+    "id": "catalog-konosubagodsblessingonthiswonderfulworld",
+    "title": "Konosuba: God's Blessing on This Wonderful World!"
+  },
+  {
+    "id": "catalog-therisingoftheshieldhero",
+    "title": "The Rising of the Shield Hero"
+  },
+  {
+    "id": "catalog-nogamenolife",
+    "title": "No Game No Life"
+  },
+  {
+    "id": "catalog-grimgarashesandillusions",
+    "title": "Grimgar: Ashes and Illusions"
+  },
+  {
+    "id": "catalog-theeminenceinshadow",
+    "title": "The Eminence in Shadow"
+  },
+  {
+    "id": "catalog-danmachi",
+    "title": "DanMachi"
+  },
+  {
+    "id": "catalog-spiceandwolf",
+    "title": "Spice and Wolf"
+  },
+  {
+    "id": "catalog-deliciousindungeon",
+    "title": "Delicious in Dungeon"
+  },
+  {
+    "id": "catalog-theancientmagusbride",
+    "title": "The Ancient Magus' Bride"
+  },
+  {
+    "id": "catalog-fatezero",
+    "title": "Fate/Zero"
+  },
+  {
+    "id": "catalog-fatestaynightunlimitedbladeworks",
+    "title": "Fate/stay night: Unlimited Blade Works"
+  },
+  {
+    "id": "catalog-fatestaynightheavensfeel",
+    "title": "Fate/stay night: Heaven's Feel"
+  },
+  {
+    "id": "catalog-thegardenofsinners",
+    "title": "The Garden of Sinners"
+  },
+  {
+    "id": "catalog-darkerthanblack",
+    "title": "Darker than Black"
+  },
+  {
+    "id": "catalog-elfenlied",
+    "title": "Elfen Lied"
+  },
+  {
+    "id": "catalog-serialexperimentslain",
+    "title": "Serial Experiments Lain"
+  },
+  {
+    "id": "catalog-higurashiwhentheycry",
+    "title": "Higurashi: When They Cry"
+  },
+  {
+    "id": "catalog-another",
+    "title": "Another"
+  },
+  {
+    "id": "catalog-devilmancrybaby",
+    "title": "Devilman Crybaby"
+  },
+  {
+    "id": "catalog-castlevania",
+    "title": "Castlevania"
+  },
+  {
+    "id": "catalog-castlevanianocturne",
+    "title": "Castlevania: Nocturne"
+  },
+  {
+    "id": "catalog-bluelock",
+    "title": "Blue Lock"
+  },
+  {
+    "id": "catalog-haikyu",
+    "title": "Haikyu!!"
+  },
+  {
+    "id": "catalog-kurokosbasketball",
+    "title": "Kuroko's Basketball"
+  },
+  {
+    "id": "catalog-hajimenoippo",
+    "title": "Hajime no Ippo"
+  },
+  {
+    "id": "catalog-initiald",
+    "title": "Initial D"
+  },
+  {
+    "id": "catalog-megalobox",
+    "title": "Megalo Box"
+  },
+  {
+    "id": "catalog-sk8theinfinity",
+    "title": "SK8 the Infinity"
+  },
+  {
+    "id": "catalog-yurionice",
+    "title": "Yuri!!! on Ice"
+  },
+  {
+    "id": "catalog-foodwars",
+    "title": "Food Wars!"
+  },
+  {
+    "id": "catalog-greatteacheronizuka",
+    "title": "Great Teacher Onizuka"
+  },
+  {
+    "id": "catalog-assassinationclassroom",
+    "title": "Assassination Classroom"
+  },
+  {
+    "id": "catalog-spyxfamily",
+    "title": "Spy x Family"
+  },
+  {
+    "id": "catalog-thedisastrouslifeofsaikik",
+    "title": "The Disastrous Life of Saiki K."
+  },
+  {
+    "id": "catalog-nichijou",
+    "title": "Nichijou"
+  },
+  {
+    "id": "catalog-kaguyasamaloveiswar",
+    "title": "Kaguya-sama: Love is War"
+  },
+  {
+    "id": "catalog-toradora",
+    "title": "Toradora!"
+  },
+  {
+    "id": "catalog-yourlieinapril",
+    "title": "Your Lie in April"
+  },
+  {
+    "id": "catalog-clannad",
+    "title": "Clannad"
+  },
+  {
+    "id": "catalog-anohanatheflowerwesawthatday",
+    "title": "Anohana: The Flower We Saw That Day"
+  },
+  {
+    "id": "catalog-marchcomesinlikealion",
+    "title": "March Comes in Like a Lion"
+  },
+  {
+    "id": "catalog-oshinoko",
+    "title": "Oshi no Ko"
+  },
+  {
+    "id": "catalog-horimiya",
+    "title": "Horimiya"
+  },
+  {
+    "id": "catalog-theapothecarydiaries",
+    "title": "The Apothecary Diaries"
+  },
+  {
+    "id": "catalog-oddtaxi",
+    "title": "Odd Taxi"
+  },
+  {
+    "id": "catalog-mushishi",
+    "title": "Mushishi"
+  },
+  {
+    "id": "catalog-natsumesbookoffriends",
+    "title": "Natsume's Book of Friends"
+  },
+  {
+    "id": "catalog-barakamon",
+    "title": "Barakamon"
+  },
+  {
+    "id": "catalog-silverspoon",
+    "title": "Silver Spoon"
+  },
+  {
+    "id": "catalog-spacedandy",
+    "title": "Space Dandy"
+  },
+  {
+    "id": "catalog-thetatamigalaxy",
+    "title": "The Tatami Galaxy"
+  },
+  {
+    "id": "catalog-pingpongtheanimation",
+    "title": "Ping Pong the Animation"
+  },
+  {
+    "id": "catalog-keepyourhandsoffeizouken",
+    "title": "Keep Your Hands Off Eizouken!"
+  },
+  {
+    "id": "catalog-beastars",
+    "title": "Beastars"
+  },
+  {
+    "id": "catalog-landofthelustrous",
+    "title": "Land of the Lustrous"
+  },
+  {
+    "id": "catalog-goldenkamuy",
+    "title": "Golden Kamuy"
+  },
+  {
+    "id": "catalog-kingdom",
+    "title": "Kingdom"
+  },
+  {
+    "id": "catalog-legendofthegalacticheroes",
+    "title": "Legend of the Galactic Heroes"
+  },
+  {
+    "id": "catalog-classroomoftheelite",
+    "title": "Classroom of the Elite"
+  },
+  {
+    "id": "catalog-tomodachigame",
+    "title": "Tomodachi Game"
+  },
+  {
+    "id": "catalog-deathparade",
+    "title": "Death Parade"
+  },
+  {
+    "id": "catalog-angelbeats",
+    "title": "Angel Beats!"
+  },
+  {
+    "id": "catalog-charlotte",
+    "title": "Charlotte"
+  },
+  {
+    "id": "catalog-kabanerioftheironfortress",
+    "title": "Kabaneri of the Iron Fortress"
+  },
+  {
+    "id": "catalog-seraphoftheend",
+    "title": "Seraph of the End"
+  },
+  {
+    "id": "catalog-guiltycrown",
+    "title": "Guilty Crown"
+  },
+  {
+    "id": "catalog-highschoolofthedead",
+    "title": "Highschool of the Dead"
+  },
+  {
+    "id": "catalog-deadmanwonderland",
+    "title": "Deadman Wonderland"
+  },
+  {
+    "id": "catalog-mirainikki",
+    "title": "Mirai Nikki"
+  },
+  {
+    "id": "catalog-terrorinresonance",
+    "title": "Terror in Resonance"
+  },
+  {
+    "id": "catalog-bananafish",
+    "title": "Banana Fish"
+  },
+  {
+    "id": "catalog-91days",
+    "title": "91 Days"
+  },
+  {
+    "id": "catalog-megalobox2nomad",
+    "title": "Megalobox 2: Nomad"
+  },
+  {
+    "id": "catalog-thecasestudyofvanitas",
+    "title": "The Case Study of Vanitas"
+  },
+  {
+    "id": "catalog-dororo",
+    "title": "Dororo"
+  },
+  {
+    "id": "catalog-decadence",
+    "title": "Deca-Dence"
+  },
+  {
+    "id": "catalog-idinvaded",
+    "title": "ID: INVADED"
+  },
+  {
+    "id": "catalog-vivyfluoriteeyessong",
+    "title": "Vivy: Fluorite Eye's Song"
+  },
+  {
+    "id": "catalog-lycorisrecoil",
+    "title": "Lycoris Recoil"
+  },
+  {
+    "id": "catalog-heavenlydelusion",
+    "title": "Heavenly Delusion"
+  },
+  {
+    "id": "catalog-summertimerendering",
+    "title": "Summer Time Rendering"
+  },
+  {
+    "id": "catalog-zom100bucketlistofthedead",
+    "title": "Zom 100: Bucket List of the Dead"
+  },
+  {
+    "id": "catalog-undeadunluck",
+    "title": "Undead Unluck"
+  },
+  {
+    "id": "catalog-sakamotodays",
+    "title": "Sakamoto Days"
+  },
+  {
+    "id": "catalog-gachiakuta",
+    "title": "Gachiakuta"
+  }
+]
