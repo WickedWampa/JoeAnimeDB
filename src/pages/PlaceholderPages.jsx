@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Poster } from '../components/Poster';
 import { score, countBy } from '../utils/animeUtils';
 import { exportBackup, resetData } from '../services/storage';
+import { createAnimeBrain } from '../engine/animeBrain';
 
 export function Universe({ anime, setQuery, setView }) {
   const studios = countBy(anime.map((item) => item.studio)).slice(0, 10);
@@ -30,27 +31,15 @@ export function Universe({ anime, setQuery, setView }) {
 }
 
 export function Assistant({ anime }) {
-  const [log, setLog] = useState([{ who: 'bot', text: 'Ask me what to watch next, your top studio, or for a random pick.' }]);
+  const brain = useMemo(() => createAnimeBrain(anime), [anime]);
+  const [log, setLog] = useState([{ who: 'bot', text: 'Anime DNA is online. Ask me about your top genres, studios, average score, rewatches, recommendations, or a random pick.' }]);
   const [text, setText] = useState('');
 
   function ask() {
     const q = text.trim();
     if (!q) return;
-    const lower = q.toLowerCase();
-    let answer = 'Try asking for a recommendation, top studio, watch time, or random anime.';
-    if (lower.includes('recommend') || lower.includes('next')) {
-      const picks = anime.filter((a) => Number(a.finalRank) > 20 && score(a) >= 8.6).slice(0, 5);
-      answer = `Try ${picks.map((p) => p.title).join(', ')}.`;
-    } else if (lower.includes('studio')) {
-      const top = countBy(anime.map((a) => a.studio))[0];
-      answer = `Your most represented studio is ${top[0]} with ${top[1]} titles.`;
-    } else if (lower.includes('random')) {
-      const pick = anime[Math.floor(Math.random() * anime.length)];
-      answer = `Random pick: ${pick.title}, rank #${pick.finalRank}, Joe score ${score(pick).toFixed(1)}.`;
-    } else if (lower.includes('bleach')) {
-      answer = 'Bleach is GOAT. Shrine status: mandatory.';
-    }
-    setLog([...log, { who: 'user', text: q }, { who: 'bot', text: answer }]);
+    const answer = brain.answer(q);
+    setLog((current) => [...current, { who: 'user', text: q }, { who: 'bot', text: answer }]);
     setText('');
   }
 
@@ -60,7 +49,7 @@ export function Assistant({ anime }) {
         {log.map((m, i) => <div key={i} className={m.who}>{m.text}</div>)}
       </div>
       <div className="chatInput">
-        <input value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && ask()} />
+        <input value={text} placeholder="Ask about your Anime DNA..." onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && ask()} />
         <button onClick={ask}>Ask</button>
       </div>
     </section>
