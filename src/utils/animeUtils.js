@@ -1,7 +1,6 @@
 export function score(anime) {
-  return Number(anime.rating || anime.predictedScore || 0);
+  return Number(anime.joeScore ?? anime.rating ?? anime.predictedScore ?? 0);
 }
-
 export function countBy(items) {
   const map = {};
   items.forEach((item) => {
@@ -38,3 +37,4 @@ export function filterAnime(anime, query) {
     })
     .sort((a, b) => Number(a.finalRank || 9999) - Number(b.finalRank || 9999));
 }
+
