@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, Library, Trophy, BarChart3, Settings, Sparkles, Swords, Network, CalendarDays, RefreshCw, Heart, Palette } from 'lucide-react';
+import { Home, Library, Trophy, BarChart3, Settings, Sparkles, Swords, Network, CalendarDays, RefreshCw, Heart, Palette, Wrench } from 'lucide-react';
 
 const THEMES = [
   { id: 'neon', label: 'Neon' },
@@ -37,7 +37,7 @@ export function Sidebar({ view, setView, syncMetadata, theme, setTheme }) {
         <NavButton icon={<BarChart3 />} label="Analytics" id="analytics" view={view} setView={setView} />
         <NavButton icon={<CalendarDays />} label="Timeline" id="timeline" view={view} setView={setView} />
         <NavButton icon={<Swords />} label="Bleach Shrine" id="bleach" view={view} setView={setView} />
-        <NavButton icon={<Settings />} label="Settings" id="settings" view={view} setView={setView} />
+        <NavButton icon={<Settings />} label="Library Cleanup" id="cleanup" view={view} setView={setView} /> <NavButton icon={<Wrench size={21} />} label="Settings" id="settings" view={view} setView={setView} />
       </nav>
 
       <section className="themePicker" aria-label="Theme picker">

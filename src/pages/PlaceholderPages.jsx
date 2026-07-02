@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Poster } from '../components/Poster';
 import { score, countBy } from '../utils/animeUtils';
 import { exportBackup, resetData } from '../services/storage';
-import { createAnimeBrain } from '../engine/animeBrain'; import { fetchMetadata } from '../services/metadata';
+import { createAnimeBrain } from '../engine/animeBrain'; import { fetchMetadata } from '../services/metadata'; import { importAnimeByTitle, mergeAnimeMetadata } from '../services/animeImporter';
 
 export function Universe({ anime, setQuery, setView }) {
   const studios = countBy(anime.map((item) => item.studio)).slice(0, 10);

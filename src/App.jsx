@@ -1,3 +1,4 @@
+import './styles/add-anime.css';
 import './styles/library-card-fix.css';
 import './styles/joeai-cards.css';
 import './styles/joeai-recommendations.css';
@@ -67,7 +68,7 @@ export function App() {
     syncText,
     syncProgress,
     syncMetadata,
-    updateAnime
+    updateAnime, deleteAnime
   } = library;
 
   const favoriteAnime = useMemo(
@@ -117,10 +118,10 @@ export function App() {
 
         {view === 'dashboard' && <Dashboard anime={anime} stats={stats} setSelected={setSelected} updateAnime={handleUpdateAnime} setView={setView} />}
         {(view === 'library' || view === 'rankings') && (
-          <LibraryPage anime={filtered} mode={mode} setSelected={setSelected} updateAnime={handleUpdateAnime} title={view === 'rankings' ? 'Rankings' : 'Library'} />
+          <LibraryPage anime={filtered} allAnime={anime} mode={mode} setSelected={setSelected} updateAnime={handleUpdateAnime} title={view === 'rankings' ? 'Rankings' : 'Library'} />
         )}
         {view === 'favorites' && (
-          <LibraryPage anime={favoriteAnime} mode={mode} setSelected={setSelected} updateAnime={handleUpdateAnime} title="Favorites" emptyMessage="No favorites yet. Click a heart on any anime to add it here." />
+          <LibraryPage anime={favoriteAnime} allAnime={anime} mode={mode} setSelected={setSelected} updateAnime={handleUpdateAnime} title="Favorites" emptyMessage="No favorites yet. Click a heart on any anime to add it here." />
         )}
         {view === 'universe' && <Universe anime={anime} setQuery={setQuery} setView={setView} />}
         {view === 'assistant' && <Assistant anime={anime} catalog={catalog} updateAnime={handleUpdateAnime} />}
@@ -130,7 +131,7 @@ export function App() {
         {view === 'settings' && <SettingsPage data={data} syncMetadata={syncMetadata} stats={stats} />}
       </section>
 
-      {selected && <DetailModal anime={selected} onClose={() => setSelected(null)} updateAnime={handleUpdateAnime} />}
+      {selected && <DetailModal anime={selected} onClose={() => setSelected(null)} updateAnime={handleUpdateAnime} deleteAnime={deleteAnime} />}
       {syncing && <UpdateProgressOverlay syncText={syncText} syncProgress={syncProgress} />}
     </main>
   );

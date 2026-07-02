@@ -30,7 +30,7 @@ function Stars({ value }) {
   );
 }
 
-export function DetailModal({ anime, onClose, updateAnime }) {
+export function DetailModal({ anime, onClose, updateAnime, deleteAnime }) {
   const currentScore = Number(anime.joeScore ?? score(anime) ?? 0);
   const currentStatus = anime.status || '';
 
@@ -132,6 +132,22 @@ export function DetailModal({ anime, onClose, updateAnime }) {
             <p>{anime.synopsis}</p>
           </section>
           {anime.trailerUrl && <a className="trailer" href={anime.trailerUrl} target="_blank" rel="noreferrer">Watch Trailer</a>}
+
+          <section className="dangerZone">
+            <button
+              className="removeAnimeButton"
+              type="button"
+              onClick={async () => {
+                if (!deleteAnime) return;
+                const ok = window.confirm(`Remove "${anime.title}" from your library?`);
+                if (!ok) return;
+                await deleteAnime(anime.id);
+                onClose();
+              }}
+            >
+              🗑 Remove From Library
+            </button>
+          </section>
         </div>
       </section>
     </div>
