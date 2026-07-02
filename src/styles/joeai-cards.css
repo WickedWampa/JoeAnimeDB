@@ -277,3 +277,244 @@
 .joeaiChatInput textarea::placeholder {
   color: rgba(234, 248, 255, 0.46);
 }
+
+
+/* JoeAI Bulk Result Cards */
+.joeaiBulkResult {
+  max-width: 760px;
+  display: grid;
+  gap: 14px;
+}
+
+.joeaiBulkHeader h2 {
+  margin: 0 0 10px;
+  color: var(--cyan);
+  font-size: 24px;
+}
+
+.joeaiBulkStats {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.joeaiBulkStats span {
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: rgba(0,0,0,.28);
+  border: 1px solid rgba(55,234,255,.22);
+  color: #d9fbff;
+  font-size: 12px;
+  font-weight: 1000;
+}
+
+.joeaiBulkSection {
+  display: grid;
+  gap: 8px;
+}
+
+.joeaiBulkSection h3 {
+  margin: 0;
+  font-size: 15px;
+  color: rgba(234,248,255,.78);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+.joeaiBulkRow {
+  display: grid;
+  grid-template-columns: 30px 1fr;
+  align-items: center;
+  gap: 10px;
+  border-radius: 14px;
+  padding: 9px 11px;
+  border: 1px solid rgba(255,255,255,.09);
+  background: rgba(255,255,255,.045);
+}
+
+.joeaiBulkRow span {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  font-weight: 1000;
+}
+
+.joeaiBulkRow.added span {
+  background: rgba(18,214,111,.14);
+  color: #8dffbe;
+}
+
+.joeaiBulkRow.skipped span {
+  background: rgba(255,201,40,.14);
+  color: var(--gold);
+}
+
+.joeaiBulkRow.failed span {
+  background: rgba(255,92,92,.14);
+  color: #ffb0b0;
+}
+
+.joeaiBulkRow strong {
+  color: var(--text);
+  line-height: 1.35;
+}
+
+
+/* JoeAI Confirmation Cards */
+.joeaiConfirmCard {
+  max-width: 720px;
+  display: grid;
+  gap: 14px;
+}
+
+.joeaiConfirmHeader h2 {
+  margin: 0 0 8px;
+  color: var(--cyan);
+  font-size: 24px;
+}
+
+.joeaiConfirmHeader p {
+  margin: 0;
+  color: rgba(234, 248, 255, .82);
+  line-height: 1.45;
+}
+
+.joeaiConfirmList {
+  display: grid;
+  gap: 8px;
+  border: 1px solid rgba(255,255,255,.09);
+  border-radius: 16px;
+  background: rgba(0,0,0,.18);
+  padding: 12px;
+}
+
+.joeaiConfirmList span {
+  color: var(--text);
+  font-weight: 800;
+}
+
+.joeaiConfirmActions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.joeaiConfirmActions button {
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.07);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 10px 14px;
+  font-weight: 1000;
+  cursor: pointer;
+}
+
+.joeaiConfirmActions button.primary {
+  border-color: rgba(55,234,255,.42);
+  background: rgba(55,234,255,.13);
+  color: var(--cyan);
+}
+
+.joeaiConfirmActions button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 0 20px rgba(55,234,255,.10);
+}
+
+
+/* JoeAI Premium Help Card */
+.joeaiHelpCard {
+  max-width: 920px;
+  display: grid;
+  gap: 16px;
+}
+
+.joeaiHelpHero {
+  border: 1px solid rgba(55,234,255,.20);
+  border-radius: 20px;
+  padding: 18px;
+  background:
+    radial-gradient(circle at top left, rgba(55,234,255,.14), transparent 42%),
+    radial-gradient(circle at bottom right, rgba(255,92,200,.10), transparent 42%),
+    rgba(255,255,255,.035);
+}
+
+.joeaiHelpHero h2 {
+  margin: 0 0 8px;
+  color: var(--cyan);
+  font-size: 28px;
+}
+
+.joeaiHelpHero p {
+  margin: 0;
+  color: rgba(234,248,255,.82);
+  line-height: 1.45;
+}
+
+.joeaiHelpGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.joeaiHelpSection {
+  border: 1px solid rgba(255,255,255,.09);
+  border-radius: 18px;
+  padding: 14px;
+  background: rgba(0,0,0,.20);
+}
+
+.joeaiHelpSection h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  color: var(--text);
+  font-size: 17px;
+}
+
+.joeaiHelpSection h3 span {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  background: rgba(55,234,255,.10);
+  border: 1px solid rgba(55,234,255,.20);
+}
+
+.joeaiHelpSection div {
+  display: grid;
+  gap: 8px;
+}
+
+.joeaiHelpSection button {
+  border: 1px solid rgba(55,234,255,.16);
+  background: rgba(55,234,255,.055);
+  color: rgba(234,248,255,.88);
+  border-radius: 13px;
+  padding: 9px 11px;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  font-weight: 800;
+}
+
+.joeaiHelpSection button:hover {
+  border-color: rgba(55,234,255,.40);
+  background: rgba(55,234,255,.10);
+  color: var(--cyan);
+}
+
+.joeaiHelpFooter {
+  margin: 0;
+  color: rgba(234,248,255,.70);
+  line-height: 1.45;
+}
+
+@media(max-width: 820px) {
+  .joeaiHelpGrid {
+    grid-template-columns: 1fr;
+  }
+}
