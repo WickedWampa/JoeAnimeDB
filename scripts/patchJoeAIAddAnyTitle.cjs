@@ -1,36 +1,31 @@
-import React, { useMemo, useState } from 'react';
-import { Poster } from '../components/Poster';
-import { score, countBy } from '../utils/animeUtils';
-import { exportBackup, resetData } from '../services/storage';
-import { createAnimeBrain } from '../engine/animeBrain'; import { fetchMetadata } from '../services/metadata';
+const fs = require('fs');
 
-export function Universe({ anime, setQuery, setView }) {
-  const studios = countBy(anime.map((item) => item.studio)).slice(0, 10);
-  const genres = countBy(anime.flatMap((item) => item.genres || [])).slice(0, 10);
-  const jump = (term) => {
-    setQuery(term);
-    setView('library');
-  };
+function ensureImport() {
+  const file = 'src/pages/PlaceholderPages.jsx';
+  let text = fs.readFileSync(file, 'utf8');
 
-  return (
-    <section className="grid2">
-      <div className="universeCore">
-        <h1>Joe</h1>
-        <p>{anime.length} anime connected by studios, genres, rankings, and rewatches.</p>
-      </div>
-      <div className="panel">
-        <h2>Studios</h2>
-        {studios.map(([name, count]) => <button className="branch" key={name} onClick={() => jump(name)}>{name}<span>{count}</span></button>)}
-      </div>
-      <div className="panel">
-        <h2>Genres</h2>
-        {genres.map(([name, count]) => <button className="branch" key={name} onClick={() => jump(name)}>{name}<span>{count}</span></button>)}
-      </div>
-    </section>
-  );
+  if (!text.includes("import { fetchMetadata } from '../services/metadata';")) {
+    text = text.replace(
+      "import { createAnimeBrain } from '../engine/animeBrain';",
+      "import { createAnimeBrain } from '../engine/animeBrain'; import { fetchMetadata } from '../services/metadata';"
+    );
+  }
+
+  fs.writeFileSync(file, text);
 }
 
-export function Assistant({ anime, catalog = [], updateAnime }) {
+function replaceAssistantComponent() {
+  const file = 'src/pages/PlaceholderPages.jsx';
+  let text = fs.readFileSync(file, 'utf8');
+
+  const start = text.indexOf('export function Assistant');
+  const end = text.indexOf('export function Analytics');
+
+  if (start === -1 || end === -1 || end <= start) {
+    throw new Error('Could not locate Assistant component boundaries.');
+  }
+
+  const nextAssistant = String.raw`export function Assistant({ anime, catalog = [], updateAnime }) {
   const brain = useMemo(() => createAnimeBrain(anime, catalog), [anime, catalog]);
   const [log, setLog] = useState([
     {
@@ -262,78 +257,37 @@ export function Assistant({ anime, catalog = [], updateAnime }) {
   );
 }
 
-export function Analytics({ anime }) {
-  const studios = countBy(anime.map((item) => item.studio)).slice(0, 12);
-  const genres = countBy(anime.flatMap((item) => item.genres || [])).slice(0, 12);
-  return (
-    <section className="grid2">
-      <BarPanel title="Studios" data={studios} />
-      <BarPanel title="Genres" data={genres} />
-    </section>
-  );
+`;
+
+  text = text.slice(0, start) + nextAssistant + text.slice(end);
+  fs.writeFileSync(file, text);
 }
 
-function BarPanel({ title, data }) {
-  const max = data[0]?.[1] || 1;
-  return (
-    <div className="panel">
-      <h2>{title}</h2>
-      {data.map(([name, count]) => (
-        <div className="barRow" key={name}>
-          <strong>{name}</strong>
-          <div className="bar"><div style={{ width: `${(count / max) * 100}%` }} /></div>
-          <span>{count}</span>
-        </div>
-      ))}
-    </div>
-  );
+function patchApp() {
+  const file = 'src/App.jsx';
+  let text = fs.readFileSync(file, 'utf8');
+
+  if (text.includes('<Assistant anime={anime} catalog={catalog} updateAnime={handleUpdateAnime} />')) {
+    fs.writeFileSync(file, text);
+    return;
+  }
+
+  if (text.includes('<Assistant anime={anime} catalog={catalog} />')) {
+    text = text.replaceAll(
+      '<Assistant anime={anime} catalog={catalog} />',
+      '<Assistant anime={anime} catalog={catalog} updateAnime={handleUpdateAnime} />'
+    );
+  } else if (text.includes('<Assistant anime={anime} />')) {
+    text = text.replaceAll(
+      '<Assistant anime={anime} />',
+      '<Assistant anime={anime} catalog={catalog} updateAnime={handleUpdateAnime} />'
+    );
+  }
+
+  fs.writeFileSync(file, text);
 }
 
-export function Timeline({ anime, setSelected }) {
-  const top = [...anime].sort((a, b) => Number(a.finalRank) - Number(b.finalRank)).slice(0, 18);
-  return (
-    <section className="panel">
-      <h2>Timeline</h2>
-      <div className="timelineCards">
-        {top.map((item) => (
-          <button className="timelineItem" key={item.id} onClick={() => setSelected(item)}>
-            <Poster anime={item} className="thumb" />
-            <strong>{item.title}</strong>
-            <span>#{item.finalRank}</span>
-          </button>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-export function BleachShrine({ anime, setSelected }) {
-  const bleach = anime.find((item) => item.title === 'Bleach');
-  const tybw = anime.find((item) => item.title === 'Bleach TYBW');
-  return (
-    <section className="shrine">
-      <h1>BLEACH</h1>
-      <p>GOAT status. Arcs, captains, openings, fights, and TYBW tracker live here.</p>
-      <div className="shrineStats">
-        <div><strong>#{bleach?.finalRank || 1}</strong><span>All-time</span></div>
-        <div><strong>{bleach?.rewatches || 5}x</strong><span>Rewatches</span></div>
-        <div><strong>{score(tybw || {}).toFixed(1)}</strong><span>TYBW</span></div>
-      </div>
-      <button onClick={() => bleach && setSelected(bleach)}>Open Bleach</button>
-    </section>
-  );
-}
-
-export function SettingsPage({ data, syncMetadata }) {
-  return (
-    <section className="panel">
-      <h2>Settings</h2>
-      <p>Backups, metadata sync, and database tools.</p>
-      <div className="settingsActions">
-        <button onClick={() => exportBackup(data)}>Export Backup</button>
-        <button onClick={syncMetadata}>Update Database</button>
-        <button onClick={resetData}>Reset Local Data</button>
-      </div>
-    </section>
-  );
-}
+ensureImport();
+replaceAssistantComponent();
+patchApp();
+console.log('JoeAI can now add titles to the library and fetch metadata.');

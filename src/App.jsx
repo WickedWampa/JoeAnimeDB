@@ -1,3 +1,6 @@
+import './styles/library-card-fix.css';
+import './styles/joeai-cards.css';
+import './styles/joeai-recommendations.css';
 import './styles/progress-overlay.css';
 import React, { useMemo, useState } from 'react';
 
@@ -120,7 +123,7 @@ export function App() {
           <LibraryPage anime={favoriteAnime} mode={mode} setSelected={setSelected} updateAnime={handleUpdateAnime} title="Favorites" emptyMessage="No favorites yet. Click a heart on any anime to add it here." />
         )}
         {view === 'universe' && <Universe anime={anime} setQuery={setQuery} setView={setView} />}
-        {view === 'assistant' && <Assistant anime={anime} catalog={catalog} />}
+        {view === 'assistant' && <Assistant anime={anime} catalog={catalog} updateAnime={handleUpdateAnime} />}
         {view === 'analytics' && <Analytics anime={anime} />}
         {view === 'timeline' && <Timeline anime={anime} setSelected={setSelected} />}
         {view === 'bleach' && <BleachShrine anime={anime} setSelected={setSelected} />}

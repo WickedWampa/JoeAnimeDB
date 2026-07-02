@@ -17,23 +17,41 @@ function hasUsefulMetadata(item) {
   );
 }
 
-export function buildCatalogQueue({ library = [], catalog = [], seed = catalogSeed, limit = 50 } = {}) {
+function richness(item) {
+  return [
+    item?.cover,
+    item?.synopsis,
+    item?.studio,
+    item?.year,
+    item?.episodes || item?.episodeCount,
+    item?.malScore || item?.communityScore,
+    Array.isArray(item?.genres) && item.genres.length
+  ].filter(Boolean).length;
+}
+
+export function mergeCatalogEntries({ library = [], catalog = [], seed = catalogSeed } = {}) {
   const libraryKeys = new Set(library.map((item) => titleKey(item.title)).filter(Boolean));
-  const seenKeys = new Set();
-  const merged = [];
+  const byKey = new Map();
 
-  for (const item of [...catalog, ...seed]) {
+  for (const item of [...seed, ...catalog]) {
     const key = titleKey(item.title);
-    if (!key || libraryKeys.has(key) || seenKeys.has(key)) continue;
+    if (!key || libraryKeys.has(key)) continue;
 
-    seenKeys.add(key);
-    merged.push({
-      id: item.id || `catalog-${key}`,
-      ...item
-    });
+    const current = byKey.get(key);
+    if (!current || richness(item) >= richness(current)) {
+      byKey.set(key, {
+        id: item.id || current?.id || `catalog-${key}`,
+        ...current,
+        ...item
+      });
+    }
   }
 
-  return merged
+  return [...byKey.values()];
+}
+
+export function buildCatalogQueue({ library = [], catalog = [], seed = catalogSeed, limit = 50 } = {}) {
+  return mergeCatalogEntries({ library, catalog, seed })
     .map((item, index) => ({ item, index }))
     .filter(({ item }) => needsArtworkRepair(item) || !hasUsefulMetadata(item))
     .slice(0, limit);
@@ -46,19 +64,17 @@ export async function updateCatalogMetadata({
   onProgress,
   limit = 50
 } = {}) {
-  const baseCatalog = [...catalog, ...catalogSeed];
-  const queue = buildCatalogQueue({ library, catalog, seed: catalogSeed, limit });
+  let nextCatalog = mergeCatalogEntries({ library, catalog, seed: catalogSeed });
+  const queue = buildCatalogQueue({ library, catalog: nextCatalog, seed: [], limit });
 
   if (!queue.length) {
-    const saved = await repository.importCatalog(baseCatalog);
+    const saved = await repository.importCatalog(nextCatalog);
     return {
       saved,
       updated: 0,
-      total: baseCatalog.length
+      total: nextCatalog.length
     };
   }
-
-  let nextCatalog = [...baseCatalog];
 
   for (let passIndex = 0; passIndex < queue.length; passIndex++) {
     const { item } = queue[passIndex];
@@ -81,7 +97,7 @@ export async function updateCatalogMetadata({
     }
 
     await repository.importCatalog(nextCatalog);
-    await sleep(1400);
+    await sleep(500);
   }
 
   const saved = await repository.importCatalog(nextCatalog);

@@ -333,3 +333,25 @@ button,input{font:inherit}.shell{display:grid;grid-template-columns:260px 1fr;mi
   .recommendationPoster.posterThumb { width: 125px; height: 170px; }
 }
 
+/* ===== Library Poster Metadata ===== */
+.miniMeta{
+    display:flex;
+    flex-wrap:wrap;
+    gap:6px;
+    margin-top:8px;
+    margin-bottom:10px;
+}
+
+.miniMeta span{
+    display:inline-flex;
+    align-items:center;
+    padding:4px 9px;
+    border-radius:999px;
+    background:rgba(0,0,0,.42);
+    border:1px solid rgba(55,234,255,.22);
+    color:#d9fbff;
+    font-size:12px;
+    font-weight:700;
+    line-height:1;
+    white-space:nowrap;
+}

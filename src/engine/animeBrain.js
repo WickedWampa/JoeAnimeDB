@@ -1,6 +1,10 @@
 import { generateAnimeDNA, summarizeAnimeDNA } from './animeDNA';
 import { getScore, normalizeStatus } from './statistics';
-import { formatRecommendationAnswer, recommendAnime } from './recommendationEngine';
+import {
+  formatRecommendationAnswer,
+  getRecommendationDiagnostics,
+  recommendAnime
+} from './recommendationEngine';
 
 function formatList(items = []) {
   const clean = items.filter(Boolean);
@@ -49,8 +53,23 @@ export function createAnimeBrain(library = [], catalog = []) {
     return recommendAnime(anime, animeCatalog, { limit });
   }
 
+  function catalogStatus() {
+    const stats = getRecommendationDiagnostics(anime, animeCatalog);
+    return [
+      'Catalog diagnostics:',
+      `Library titles: ${stats.libraryTotal}`,
+      `Catalog titles loaded: ${stats.catalogTotal}`,
+      `Unseen catalog candidates: ${stats.unseenTotal}`,
+      `Enriched unseen candidates: ${stats.enrichedTotal}`
+    ].join('\n');
+  }
+
   function answer(question = '') {
     const lower = String(question).toLowerCase();
+
+    if (lower.includes('catalog') || lower.includes('diagnostic') || lower.includes('debug')) {
+      return catalogStatus();
+    }
 
     if (lower.includes('dna') || lower.includes('taste')) return summarizeAnimeDNA(dna);
 
@@ -94,15 +113,15 @@ export function createAnimeBrain(library = [], catalog = []) {
 
       const fallback = recommendationSeed();
       if (!fallback.length) {
-        return 'I need catalog entries before I can recommend unseen anime. Hit Update Database to build the recommendation catalog.';
+        return `I need catalog entries before I can recommend unseen anime. Hit Update Database to build the recommendation catalog.\n\n${catalogStatus()}`;
       }
 
-      return `I do not have catalog matches yet, but from your existing library queue try ${formatList(fallback.map((item) => `${item.title} (${getScore(item).toFixed(1)})`))}.`;
+      return `I do not have catalog matches yet, but from your existing library queue try ${formatList(fallback.map((item) => `${item.title} (${getScore(item).toFixed(1)})`))}.\n\n${catalogStatus()}`;
     }
 
     if (lower.includes('bleach')) return 'Bleach is GOAT.\nAnime DNA confirms heavy Soul Reaper energy.';
 
-    return 'Try asking about your Anime DNA, top genres, top studios, top rated anime, average score, rewatches, recommendations, or a random pick.';
+    return 'Try asking about your Anime DNA, top genres, top studios, catalog status, top rated anime, average score, rewatches, recommendations, or a random pick.';
   }
 
   return {
@@ -112,6 +131,7 @@ export function createAnimeBrain(library = [], catalog = []) {
     rewatchPick,
     recommendationSeed,
     recommendations,
+    catalogStatus,
     answer
   };
 }
