@@ -1,4 +1,7 @@
 import { importAnimeByTitle, mergeAnimeMetadata } from '../services/animeImporter';
+import { answerLibraryQuestion } from './libraryIntelligence';
+import { maybeSimilarRecommendation } from './similarityEngine';
+import { maybeKnowledgeFirstRecommendation } from './knowledgeFirstRecommender';
 
 export function makeTextResult(text) {
   return { type: 'text', text };
@@ -138,50 +141,64 @@ export function answerWatchingList({ anime = [] }) {
 }
 
 export function answerHelp() {
-  return {
-    type: 'helpCard',
-    title: '🍜 JoeAI Command Center',
-    subtitle: 'Tell me what you want in plain English. I can manage your library, analyze your Anime DNA, and recommend your next watch.',
-    sections: [
-      {
-        icon: '🎯',
-        title: 'Recommendations',
-        items: [
-          'what should I watch next?',
-          'recommend something dark',
-          'give me a random pick'
-        ]
-      },
-      {
-        icon: '📚',
-        title: 'Manage Library',
-        items: [
-          'add Frieren as completed',
-          'I finished World Trigger',
-          'add as completed Bleach, Naruto, One Piece'
-        ]
-      },
-      {
-        icon: '📊',
-        title: 'Analyze Collection',
-        items: [
-          'explain my Anime DNA',
-          'what are my top genres?',
-          'what studio do I watch most?'
-        ]
-      },
-      {
-        icon: '🤖',
-        title: 'Natural Language',
-        items: [
-          'I am watching Magi',
-          'what am I watching?',
-          'library status'
-        ]
-      }
-    ],
-    footer: 'I use the same importer as the Library, so I fetch metadata, skip duplicates, and update existing entries.'
-  };
+  return makeTextResult([
+    '🍜 Hey — I’m JoeAI.',
+    '',
+    'Think of me as your anime nerd that never forgets your library.',
+    '',
+    'I can recommend shows by vibe, explain why people love an anime, organize your collection, analyze your taste, and help you figure out what to watch next.',
+    '',
+    '🔥 Try asking me:',
+    '',
+    '• I want something like Dorohedoro',
+    '• Recommend an anime like Initial D',
+    '• Recommend something like Bleach',
+    '• Why is Frieren so highly rated?',
+    '• What should I binge this weekend?',
+    '• Analyze my library',
+    '',
+    '✅ Available Today',
+    '',
+    '🎭 Knowledge-First Recommendations',
+    '• I want to watch something like Dorohedoro',
+    '• recommend something like Bleach',
+    '• I want something like Initial D',
+    '',
+    '🧠 Critic / Knowledge Mode',
+    '• explain why people love Dorohedoro',
+    '• what makes Bleach special?',
+    '• why should I watch Made in Abyss?',
+    '',
+    '📚 Library Management',
+    '• add Frieren as completed',
+    '• I finished World Trigger',
+    '• I am watching Magi',
+    '• add as completed Bleach, Naruto, One Piece',
+    '',
+    '📊 Collection Analysis',
+    '• how much anime have I watched?',
+    '• what are my top genres?',
+    '• what studio do I watch most?',
+    '• show me unrated anime',
+    '',
+    '🧪 Current JoeAI Brain',
+    '✓ Library Intelligence',
+    '✓ Anime DNA',
+    '✓ Critic Mode',
+    '✓ Personality Engine',
+    '✓ Knowledge Engine',
+    '✓ Knowledge-First Recommendations',
+    '✓ Franchise Detection',
+    '✓ Automatic Knowledge Enrichment',
+    '',
+    '🧬 Coming Soon: Project Anime Genome',
+    '• recommendations by domain, subdomain, mood, atmosphere, themes, and emotional tone',
+    '• better separation between street racing, soccer, boxing, volleyball, and other domains',
+    '• Core 100 expert knowledge profiles',
+    '• personal taste learning',
+    '',
+    'Translation: I’m getting smarter every sprint. Ask naturally. I’ll figure it out.'
+  ].join('\n'));
 }
 
 
@@ -198,8 +215,24 @@ function topList(items, label) {
   return items.map(([name, count], index) => `${index + 1}. ${name} — ${count}`).join('\n');
 }
 
-function answerConversationalQuestion({ text = '', anime = [], brain }) {
+function answerConversationalQuestion({ text = '', anime = [], catalog = [], brain }) {
   const lower = String(text).toLowerCase();
+
+  const knowledgeFirstAnswer = maybeKnowledgeFirstRecommendation(text, anime, catalog);
+  if (knowledgeFirstAnswer) {
+    return makeTextResult(knowledgeFirstAnswer);
+  }
+
+  const similarAnswer = maybeSimilarRecommendation(text, anime, catalog);
+  if (similarAnswer) {
+    return makeTextResult(similarAnswer);
+  }
+
+  // SPRINT4_SIMILARITY_FIRST_V3
+const intelligenceAnswer = answerLibraryQuestion(text, anime, catalog);
+  if (intelligenceAnswer) {
+    return makeTextResult(intelligenceAnswer);
+  }
 
   if (lower.includes('top genre')) {
     return makeTextResult('Your top genres are:\n\n' + topList(localCountBy(anime.flatMap((item) => item.genres || [])).slice(0, 8), 'genre'));
@@ -265,6 +298,6 @@ export async function executeJoeAICommand({ intent, anime = [], catalog = [], up
 
     case 'question':
     default:
-      return answerConversationalQuestion({ text: intent.text || '', anime, brain });
+      return answerConversationalQuestion({ text: intent.text || '', anime, catalog, brain });
   }
 }

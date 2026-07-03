@@ -78,8 +78,27 @@ export function parseJoeAIIntent(input = '') {
   const lower = raw.toLowerCase();
   const status = normalizeStatus(raw);
 
+  // SPRINT4_SIMILARITY_GUARD_V3
+  if (/\b(like|similar to|something like|anime like|show like|shows like)\b/i.test(raw)) {
+    return { kind: 'question', text: raw };
+  }
+
+  // SPRINT4_SIMILARITY_GUARD
+  // "I want to watch something like Dorohedoro" must route to Anime DNA similarity,
+  // not the older generic recommendation card.
+  if (/\b(like|similar to|something like|anime like|show like|shows like)\b/i.test(raw)) {
+    return { kind: 'question', text: raw };
+  }
+
   if (lower.includes('help') || lower.includes('what can you do')) {
     return { kind: 'help' };
+  }
+
+  const similarityPrompt =
+    /\b(like|similar to|something like|show like|anime like|show me something like)\b/i.test(raw);
+
+  if (similarityPrompt) {
+    return { kind: 'question', text: raw };
   }
 
   if (lower.includes('library status') || lower.includes('stats') || lower.includes('how many')) {

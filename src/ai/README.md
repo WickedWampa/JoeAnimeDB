@@ -1,18 +1,21 @@
-# Rank Badge V3 Premium
+# Sprint 4 Phase 1 — Library Intelligence
 
-Use this instead of V2 if you have not run V2 yet.
+Adds a pure intelligence layer for JoeAI.
 
-Changes:
-- Keeps tall poster card shape.
-- Removes the icon/crown before the rank.
-- Makes the rank badge a solid colored circle.
-- Badge color follows rank tier.
-- Thicker card borders.
-- Inner highlight.
-- Brighter corners.
-- Stronger top-10 gold glow.
+Run:
 
-Run from project root:
-
-node scripts\patchRankBadgeV3Premium.cjs
+node scripts\patchSprint4Phase1LibraryIntelligence.cjs
 npm run dev
+
+Test prompts:
+- analyze my library
+- library intelligence
+- how much anime have I watched?
+- what are my top genres?
+- what studio do I watch most?
+- show me everything from MAPPA
+- show me action anime
+- show me unrated anime
+- show me dropped anime
+- what is my highest rated isekai anime?
+- give me a random pick

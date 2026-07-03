@@ -1,4 +1,5 @@
 import { cleanTitle } from './metadata';
+import { enrichAnimeKnowledge } from '../ai/knowledge/knowledgeRegistry';
 
 const BLOCKED_TYPES = new Set(['Music', 'CM', 'PV', 'Unknown']);
 const SIDE_CONTENT_RE = /picture drama|recap|summary|special|ova|ona|omake|chibi|mini|digest|pv|cm|music|trailer/i;
@@ -189,7 +190,8 @@ export function findDuplicateAnime(library = [], candidate = {}) {
 }
 
 export function mergeAnimeMetadata(existing = {}, incoming = {}, statusOverride) {
-  return {
+  // SPRINT4_AUTO_KNOWLEDGE_MERGE
+  return enrichAnimeKnowledge({
     ...existing,
     ...incoming,
 
@@ -224,17 +226,18 @@ export function mergeAnimeMetadata(existing = {}, incoming = {}, statusOverride)
     titleSynonyms: incoming.titleSynonyms?.length ? incoming.titleSynonyms : existing.titleSynonyms || [],
     trailerUrl: incoming.trailerUrl || existing.trailerUrl || '',
     metadataUpdatedAt: incoming.metadataUpdatedAt || new Date().toISOString()
-  };
+  });
 }
 
 export function normalizeJikanAnime(match, base = {}) {
+  // SPRINT4_AUTO_KNOWLEDGE_NORMALIZE
   const genres = [
     ...(match.genres || []),
     ...(match.themes || []),
     ...(match.demographics || [])
   ].map((item) => item.name);
 
-  return {
+  return enrichAnimeKnowledge({
     ...base,
     id: base.id || `anime-${match.mal_id}`,
     malId: match.mal_id,
@@ -254,7 +257,7 @@ export function normalizeJikanAnime(match, base = {}) {
     studio: match.studios?.length ? match.studios.map((studio) => studio.name).join(' / ') : base.studio || '',
     genres: genres.length ? [...new Set([...(base.genres || []), ...genres])].slice(0, 8) : base.genres || [],
     metadataUpdatedAt: new Date().toISOString()
-  };
+  });
 }
 
 function rankResult(match, query) {
