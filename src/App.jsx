@@ -1,3 +1,10 @@
+import './styles/rank-badge-v3-premium.css';
+import './styles/mmorpg-percent-ranks.css';
+import './styles/mmorpg-rank-borders.css';
+import './styles/rank-badge-tiers.css';
+import './styles/rank-badge-fix.css';
+import './styles/not-rated.css';
+import './styles/new-user-mode.css';
 import './styles/add-anime.css';
 import './styles/library-card-fix.css';
 import './styles/joeai-cards.css';
@@ -68,6 +75,12 @@ export function App() {
     syncText,
     syncProgress,
     syncMetadata,
+
+    newUserMode,
+    enableNewUserMode,
+    exitNewUserMode,
+    resetNewUserMode,
+
     updateAnime, deleteAnime
   } = library;
 
@@ -104,9 +117,18 @@ export function App() {
 
   return (
     <main className={`shell theme-${theme}`}>
-      <Sidebar view={view} setView={setView} syncMetadata={syncMetadata} theme={theme} setTheme={setTheme} />
+      <Sidebar view={view} setView={setView} syncMetadata={syncMetadata} theme={theme} setTheme={setTheme} newUserMode={newUserMode} />
 
       <section className="content">
+        {newUserMode && (
+          <div className="newUserModeBanner">
+            <strong>🧪 New User Mode</strong>
+            <span>Temporary test library — nothing is saved to your real database.</span>
+            <button type="button" onClick={resetNewUserMode}>Reset Demo</button>
+            <button type="button" onClick={exitNewUserMode}>Exit</button>
+          </div>
+        )}
+
         <header className="topbar">
           <SearchBar query={query} setQuery={setQuery} view={view} setView={setView} />
           <div className="viewModes">
@@ -128,7 +150,17 @@ export function App() {
         {view === 'analytics' && <Analytics anime={anime} />}
         {view === 'timeline' && <Timeline anime={anime} setSelected={setSelected} />}
         {view === 'bleach' && <BleachShrine anime={anime} setSelected={setSelected} />}
-        {view === 'settings' && <SettingsPage data={data} syncMetadata={syncMetadata} stats={stats} />}
+        {view === 'settings' && (
+          <SettingsPage
+            data={data}
+            syncMetadata={syncMetadata}
+            stats={stats}
+            newUserMode={newUserMode}
+            enableNewUserMode={enableNewUserMode}
+            exitNewUserMode={exitNewUserMode}
+            resetNewUserMode={resetNewUserMode}
+          />
+        )}
       </section>
 
       {selected && <DetailModal anime={selected} onClose={() => setSelected(null)} updateAnime={handleUpdateAnime} deleteAnime={deleteAnime} />}

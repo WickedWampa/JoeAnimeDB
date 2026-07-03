@@ -184,6 +184,46 @@ export function answerHelp() {
   };
 }
 
+
+function localCountBy(items) {
+  const map = {};
+  items.forEach((item) => {
+    if (item) map[item] = (map[item] || 0) + 1;
+  });
+  return Object.entries(map).sort((a, b) => b[1] - a[1]);
+}
+
+function topList(items, label) {
+  if (!items.length) return `I do not have enough ${label} data yet.`;
+  return items.map(([name, count], index) => `${index + 1}. ${name} — ${count}`).join('\n');
+}
+
+function answerConversationalQuestion({ text = '', anime = [], brain }) {
+  const lower = String(text).toLowerCase();
+
+  if (lower.includes('top genre')) {
+    return makeTextResult('Your top genres are:\n\n' + topList(localCountBy(anime.flatMap((item) => item.genres || [])).slice(0, 8), 'genre'));
+  }
+
+  if (lower.includes('top studio') || lower.includes('studio do i watch')) {
+    return makeTextResult('Your top studios are:\n\n' + topList(localCountBy(anime.map((item) => item.studio)).slice(0, 8), 'studio'));
+  }
+
+  if (lower.includes('random pick')) {
+    if (!anime.length) return makeTextResult('Your library is empty, so I cannot pick from it yet.');
+    const pick = anime[Math.floor(Math.random() * anime.length)];
+    return makeTextResult(`Random pick: ${pick.title}${pick.finalRank ? `, rank #${pick.finalRank}` : ''}.`);
+  }
+
+  if (lower.includes('unrated') || lower.includes('not rated')) {
+    const unrated = anime.filter((item) => item.joeScore === undefined || item.joeScore === null || item.joeScore === '').slice(0, 12);
+    if (!unrated.length) return makeTextResult('Everything in your current library looks rated.');
+    return makeTextResult('Unrated anime:\n\n' + unrated.map((item) => `• ${item.title}`).join('\n'));
+  }
+
+  return makeTextResult(brain?.answer?.(text || '') || 'Ask me what I can do.');
+}
+
 export async function executeJoeAICommand({ intent, anime = [], catalog = [], updateAnime, brain, onProgress }) {
   switch (intent.kind) {
     case 'help':
@@ -225,6 +265,6 @@ export async function executeJoeAICommand({ intent, anime = [], catalog = [], up
 
     case 'question':
     default:
-      return makeTextResult(brain?.answer?.(intent.text || '') || 'Ask me what I can do.');
+      return answerConversationalQuestion({ text: intent.text || '', anime, brain });
   }
 }

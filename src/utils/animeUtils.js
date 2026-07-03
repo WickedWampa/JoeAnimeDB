@@ -1,6 +1,15 @@
+export function hasUserScore(anime = {}) {
+  return anime.joeScore !== undefined && anime.joeScore !== null && anime.joeScore !== '';
+}
+
 export function score(anime) {
   return Number(anime.joeScore ?? anime.rating ?? anime.predictedScore ?? 0);
 }
+
+export function scoreLabel(anime) {
+  return hasUserScore(anime) ? score(anime).toFixed(1) : 'Not Rated';
+}
+
 export function countBy(items) {
   const map = {};
   items.forEach((item) => {
@@ -21,6 +30,7 @@ export function initials(title) {
 
 export function filterAnime(anime, query) {
   const terms = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+
   return [...anime]
     .filter((item) => {
       const haystack = [
@@ -33,8 +43,8 @@ export function filterAnime(anime, query) {
         item.year,
         ...(item.genres || [])
       ].join(' ').toLowerCase();
+
       return !terms.length || terms.every((term) => haystack.includes(term));
     })
     .sort((a, b) => Number(a.finalRank || 9999) - Number(b.finalRank || 9999));
 }
-

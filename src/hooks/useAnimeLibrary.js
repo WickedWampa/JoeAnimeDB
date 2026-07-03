@@ -4,6 +4,7 @@ import { fetchMetadata, isRemoteCover, needsArtworkRepair, sleep } from '../serv
 import { animeRepository } from '../repositories/animeRepository';
 import { updateCatalogMetadata } from '../services/catalogService';
 import seedData from '../data/animeSeed.json';
+import { createNewUserDemoDatabase } from '../services/newUserMode';
 
 const emptyProgress = {
   step: 1,
@@ -22,12 +23,18 @@ export function useAnimeLibrary() {
   const [syncing, setSyncing] = useState(false);
   const [syncText, setSyncText] = useState('');
   const [syncProgress, setSyncProgress] = useState(emptyProgress);
+  const [newUserMode, setNewUserMode] = useState(() => localStorage.getItem('joeanime-new-user-mode') === 'true');
 
   useEffect(() => {
     let alive = true;
 
     async function load() {
       try {
+        if (localStorage.getItem('joeanime-new-user-mode') === 'true') {
+          if (alive) setData(createNewUserDemoDatabase());
+          return;
+        }
+
         const loaded = await animeRepository.getDatabase();
         if (alive) setData(loaded);
       } catch (error) {
@@ -45,20 +52,96 @@ export function useAnimeLibrary() {
   const anime = data.anime || [];
   const catalog = data.catalog || [];
 
+  async function enableNewUserMode() {
+    localStorage.setItem('joeanime-new-user-mode', 'true');
+    setNewUserMode(true);
+    const demo = createNewUserDemoDatabase();
+    setData(demo);
+    return demo;
+  }
+
+  async function exitNewUserMode() {
+    localStorage.removeItem('joeanime-new-user-mode');
+    setNewUserMode(false);
+    setLoading(true);
+
+    try {
+      const loaded = await animeRepository.getDatabase();
+      setData(loaded);
+      return loaded;
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function resetNewUserMode() {
+    const demo = createNewUserDemoDatabase();
+    setData(demo);
+    return demo;
+  }
+
   async function updateData(next) {
     setData(next);
+
+    if (newUserMode) {
+      return next;
+    }
+
     const saved = await animeRepository.saveDatabase(next);
     setData(saved);
     return saved;
   }
 
   async function updateAnime(updatedAnime) {
+    if (newUserMode) {
+      let nextSnapshot = null;
+
+      setData((previousData) => {
+        const currentAnime = previousData.anime || [];
+        const exists = currentAnime.some((item) => String(item.id) === String(updatedAnime.id));
+
+        const nextAnime = exists
+          ? currentAnime.map((item) => String(item.id) === String(updatedAnime.id) ? updatedAnime : item)
+          : [...currentAnime, updatedAnime];
+
+        nextSnapshot = {
+          ...previousData,
+          anime: nextAnime
+        };
+
+        return nextSnapshot;
+      });
+
+      return nextSnapshot || {
+        ...data,
+        anime: [...(data.anime || []), updatedAnime]
+      };
+    }
+
     const saved = await animeRepository.updateAnime(updatedAnime);
     setData(saved);
     return saved;
   }
 
   async function deleteAnime(id) {
+    if (newUserMode) {
+      let nextSnapshot = null;
+
+      setData((previousData) => {
+        nextSnapshot = {
+          ...previousData,
+          anime: (previousData.anime || []).filter((item) => String(item.id) !== String(id))
+        };
+
+        return nextSnapshot;
+      });
+
+      return nextSnapshot || {
+        ...data,
+        anime: (data.anime || []).filter((item) => String(item.id) !== String(id))
+      };
+    }
+
     const next = {
       ...data,
       anime: anime.filter((item) => String(item.id) !== String(id))
@@ -220,6 +303,10 @@ export function useAnimeLibrary() {
     syncing,
     syncText,
     syncProgress,
+    newUserMode,
+    enableNewUserMode,
+    exitNewUserMode,
+    resetNewUserMode,
     updateData,
     updateAnime,
     deleteAnime,

@@ -584,7 +584,7 @@ export function LibraryPage({ anime, allAnime, mode, setSelected, title, updateA
               </tr>
             </thead>
             <tbody>
-              {anime.map((item) => (
+              {anime.map((item, index) => (
                 <tr key={item.id} onClick={() => setSelected(item)}>
                   <td>
                     <button
@@ -596,7 +596,7 @@ export function LibraryPage({ anime, allAnime, mode, setSelected, title, updateA
                       {item.favorite ? '❤️' : '🤍'}
                     </button>
                   </td>
-                  <td>{item.finalRank}</td>
+                  <td>{index + 1}</td>
                   <td className="titleCell"><Poster anime={item} className="thumb" />{item.title}</td>
                   <td>★ {score(item).toFixed(1)}</td>
                   <td>{item.studio}</td>
@@ -610,7 +610,7 @@ export function LibraryPage({ anime, allAnime, mode, setSelected, title, updateA
         </section>
       ) : (
         <section className="posterGrid">
-          {anime.map((item) => <AnimeCard key={item.id} anime={item} setSelected={setSelected} updateAnime={updateAnime} />)}
+          {anime.map((item, index) => <AnimeCard key={item.id} anime={item} displayRank={index + 1} totalCount={anime.length} setSelected={setSelected} updateAnime={updateAnime} />)}
         </section>
       )}
 

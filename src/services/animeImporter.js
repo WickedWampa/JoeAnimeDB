@@ -1,6 +1,9 @@
 import { cleanTitle } from './metadata';
 
 const BLOCKED_TYPES = new Set(['Music', 'CM', 'PV', 'Unknown']);
+const SIDE_CONTENT_RE = /picture drama|recap|summary|special|ova|ona|omake|chibi|mini|digest|pv|cm|music|trailer/i;
+const SEQUEL_RE = /\b(part\s*2|part\s*3|season\s*2|season\s*3|2nd|3rd|second season|third season|ii|iii|final)\b/i;
+const QUERY_SEQUEL_RE = /\b(part|season|2|3|ii|iii|second|third|final)\b/i;
 const EXTRA_STOP_WORDS = new Set([
   'the', 'of', 'and', 'a', 'an', 'season', 'part', 'tv', 'movie', 'ova',
   'special', 'specials', 'second', 'third', 'final'
@@ -121,6 +124,14 @@ function labelWeight(label) {
     case 'Other Franchise': return 90;
     default: return 40;
   }
+}
+
+function extraWordPenalty(match, query) {
+  const queryWords = importantWords(query);
+  const titleWords = importantWords(match.title_english || match.title || '');
+  if (!queryWords.length || !titleWords.length) return 0;
+  const extra = Math.max(0, titleWords.length - queryWords.length);
+  return Math.min(55, extra * 5);
 }
 
 function confidenceFromScore(score, label) {
@@ -255,19 +266,22 @@ function rankResult(match, query) {
   const wantedWords = importantWords(clean);
   const primaryWords = importantWords(match.title_english || match.title || '');
 
-  let score = labelWeight(label);
+  let score = labelWeight(label); const allTitleText = getAllTitles(match).join(' ');
 
   if (allKeys.some((key) => key === wantedKey)) score += 120;
   if (allKeys.some((key) => key.startsWith(wantedKey))) score += 60;
   if (wantedWords.length && wantedWords.every((word) => primaryWords.includes(word))) score += 45;
 
-  if (match.type === 'TV') score += 35;
+  if (match.type === 'TV') score += 85;
   if (match.type === 'Movie') score += 12;
-  if (match.type === 'OVA' || match.type === 'Special') score += 6;
+  if (match.type === 'OVA' || match.type === 'Special' || match.type === 'ONA') score -= 45;
   if (BLOCKED_TYPES.has(match.type)) score -= 500;
+  if (SIDE_CONTENT_RE.test(allTitleText) && !SIDE_CONTENT_RE.test(clean)) score -= 160;
+  if (SEQUEL_RE.test(allTitleText) && !QUERY_SEQUEL_RE.test(clean)) score -= 80;
+  score -= extraWordPenalty(match, clean);
 
   if (match.episodes) score += Math.min(match.episodes, 50) / 8;
-  if (match.score) score += match.score * 1.5;
+  if (match.score) score += match.score * 1.5; if (match.members) score += Math.min(45, Math.log10(match.members + 1) * 7);
 
   if (label === 'Exact Match' || label === 'Best Match') {
     const year = Number(match.year || 9999);

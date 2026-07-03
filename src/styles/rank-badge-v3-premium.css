@@ -1,0 +1,116 @@
+/* MMORPG Rank Badge V3 Premium
+   - Keeps tall poster cards
+   - Solid circular rank badge, no icon
+   - Thicker rarity borders
+   - Brighter corners / inner highlight
+   - Stronger legendary gold glow
+*/
+
+.animeCard {
+  border: 3px solid var(--rank-color) !important;
+  position: relative;
+  overflow: hidden;
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,.08) inset,
+    0 0 0 2px rgba(0,0,0,.45) inset,
+    0 18px 44px rgba(0,0,0,.42),
+    0 0 24px color-mix(in srgb, var(--rank-color) 48%, transparent) !important;
+}
+
+.animeCard::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
+  border-radius: inherit;
+  background:
+    linear-gradient(135deg,
+      color-mix(in srgb, var(--rank-color) 58%, transparent) 0%,
+      transparent 18%,
+      transparent 82%,
+      color-mix(in srgb, var(--rank-color) 42%, transparent) 100%);
+  opacity: .72;
+}
+
+.animeCard::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  pointer-events: none;
+  z-index: 5;
+  border-radius: calc(18px - 4px);
+  border: 1px solid color-mix(in srgb, var(--rank-color) 42%, rgba(255,255,255,.18));
+  opacity: .75;
+}
+
+.animeCard.rank-gold {
+  border-width: 4px !important;
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,.13) inset,
+    0 0 0 2px rgba(0,0,0,.38) inset,
+    0 20px 50px rgba(0,0,0,.48),
+    0 0 22px rgba(255,196,0,.68),
+    0 0 46px rgba(255,196,0,.36) !important;
+}
+
+.rankRibbon {
+  position: absolute !important;
+  left: 14px !important;
+  top: 14px !important;
+  z-index: 12 !important;
+  width: 54px !important;
+  height: 54px !important;
+  min-width: 54px !important;
+  min-height: 54px !important;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 50% !important;
+  background:
+    radial-gradient(circle at 32% 24%,
+      rgba(255,255,255,.55),
+      transparent 22%),
+    linear-gradient(145deg,
+      color-mix(in srgb, var(--rank-color) 92%, white 8%),
+      color-mix(in srgb, var(--rank-color) 64%, black 34%)) !important;
+  color: white !important;
+  border: 3px solid color-mix(in srgb, var(--rank-color) 62%, white 28%) !important;
+  font-size: 18px !important;
+  font-weight: 1000 !important;
+  line-height: 1 !important;
+  text-shadow: 0 2px 3px rgba(0,0,0,.72) !important;
+  box-shadow:
+    0 8px 22px rgba(0,0,0,.45),
+    0 0 20px color-mix(in srgb, var(--rank-color) 76%, transparent) !important;
+}
+
+.rankRibbon::before,
+.rankRibbon::after {
+  display: none !important;
+  content: none !important;
+}
+
+.animeCard.rank-gold .rankRibbon {
+  color: #211500 !important;
+  text-shadow: 0 1px 0 rgba(255,255,255,.48) !important;
+  border-color: rgba(255, 237, 157, .85) !important;
+  box-shadow:
+    0 8px 22px rgba(0,0,0,.45),
+    0 0 20px rgba(255,196,0,.88),
+    0 0 34px rgba(255,196,0,.52) !important;
+}
+
+.scoreBadge {
+  border: 2px solid color-mix(in srgb, var(--rank-color) 46%, transparent) !important;
+  box-shadow:
+    0 8px 20px rgba(0,0,0,.45),
+    0 0 16px color-mix(in srgb, var(--rank-color) 38%, transparent) !important;
+}
+
+.animeCard .metaPills span,
+.animeCard .tags span {
+  border-color: color-mix(in srgb, var(--rank-color) 68%, transparent) !important;
+  box-shadow: 0 0 10px color-mix(in srgb, var(--rank-color) 24%, transparent);
+}

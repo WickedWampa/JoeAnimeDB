@@ -19,7 +19,7 @@ function NavButton({ icon, label, id, view, setView }) {
   );
 }
 
-export function Sidebar({ view, setView, syncMetadata, theme, setTheme }) {
+export function Sidebar({ view, setView, syncMetadata, theme, setTheme, newUserMode }) {
   return (
     <aside className="sidebar">
       <div className="brand">

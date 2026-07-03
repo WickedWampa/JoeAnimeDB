@@ -604,11 +604,40 @@ export function BleachShrine({ anime, setSelected }) {
   );
 }
 
-export function SettingsPage({ data, syncMetadata }) {
+export function SettingsPage({
+  data,
+  syncMetadata,
+  stats,
+  newUserMode,
+  enableNewUserMode,
+  exitNewUserMode,
+  resetNewUserMode
+}) {
   return (
     <section className="panel">
       <h2>Settings</h2>
       <p>Backups, metadata sync, and database tools.</p>
+
+      <section className="newUserModePanel">
+        <div>
+          <p className="eyebrow">Onboarding / Testing</p>
+          <h2>🧪 New User Mode</h2>
+          <p>Try imports, JoeAI commands, bulk add, and recommendations without touching your real SQLite database.</p>
+          <strong>Status: {newUserMode ? 'ON — temporary library active' : 'OFF — real library active'}</strong>
+        </div>
+
+        <div className="newUserModeActions">
+          {!newUserMode ? (
+            <button type="button" onClick={enableNewUserMode}>Enter New User Mode</button>
+          ) : (
+            <>
+              <button type="button" onClick={resetNewUserMode}>Reset Demo Library</button>
+              <button type="button" onClick={exitNewUserMode}>Exit To Real Library</button>
+            </>
+          )}
+        </div>
+      </section>
+
       <div className="settingsActions">
         <button onClick={() => exportBackup(data)}>Export Backup</button>
         <button onClick={syncMetadata}>Update Database</button>

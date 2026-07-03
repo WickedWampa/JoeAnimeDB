@@ -10,15 +10,17 @@ export function normalizeStatus(value = '') {
   return 'Watching';
 }
 
+const STATUS_WORDS = '(completed|complete|watched|finished|done|watching|planned|plan to watch|dropped|on hold|hold|paused)';
+
 function stripCommandWords(value = '') {
   return String(value)
     .trim()
     .replace(/^(please\s+)?/i, '')
     .replace(/^(joeai\s+)?/i, '')
-    .replace(/^(add|import|bulk add|add list|import list|mark|set|put)\s+/i, '')
+    .replace(/^(bulk\s+add|add\s+list|import\s+list|add|import|mark|set|put)\s+/i, '')
     .replace(/^(these|this|the following|list)\s*/i, '')
     .replace(/^(i\s+am|i'm|im)\s+/i, '')
-    .replace(/^(i\s+)?(finished|completed|watched|started)\s+/i, '')
+    .replace(/^(i\s+)?(finished|completed|complete|watched|started)\s+/i, '')
     .replace(/\s+to\s+(my\s+)?library$/i, '')
     .trim();
 }
@@ -26,10 +28,36 @@ function stripCommandWords(value = '') {
 function stripStatusWords(value = '') {
   return String(value)
     .trim()
-    .replace(/^as\s+(completed|complete|watched|finished|watching|planned|plan to watch|dropped|on hold)\s+/i, '')
-    .replace(/\s+as\s+(completed|complete|watched|finished|watching|planned|plan to watch|dropped|on hold)$/i, '')
-    .replace(/\s+(completed|complete|watched|finished|watching|planned|dropped)$/i, '')
+    .replace(new RegExp(`^as\\s+${STATUS_WORDS}\\s+`, 'i'), '')
+    .replace(new RegExp(`^${STATUS_WORDS}\\s+`, 'i'), '')
+    .replace(new RegExp(`\\s+as\\s+${STATUS_WORDS}$`, 'i'), '')
+    .replace(new RegExp(`\\s+${STATUS_WORDS}$`, 'i'), '')
     .trim();
+}
+
+function removeExplicitBulkPrefix(raw = '') {
+  let body = String(raw).trim();
+
+  // Important: only treat a colon as the command separator when it appears
+  // before the first comma/newline. This prevents anime titles like
+  // "Cyberpunk: Edgerunners" and "Fate/stay night: UBW" from deleting
+  // everything before the title colon.
+  const firstColon = body.indexOf(':');
+  const firstComma = body.indexOf(',');
+  const firstNewline = body.search(/\r?\n/);
+  const colonIsCommandSeparator =
+    firstColon !== -1 &&
+    (firstComma === -1 || firstColon < firstComma) &&
+    (firstNewline === -1 || firstColon < firstNewline);
+
+  if (colonIsCommandSeparator) {
+    body = body.slice(firstColon + 1);
+  }
+
+  body = stripCommandWords(body);
+  body = stripStatusWords(body);
+
+  return body;
 }
 
 function parseTitles(value = '') {
@@ -62,15 +90,16 @@ export function parseJoeAIIntent(input = '') {
     return { kind: 'watchingList' };
   }
 
-  const looksLikeImport =
-    /^(add|import|bulk add|add list|import list|mark|set|put|i finished|i completed|i watched|i started|finished|completed|watched|started)\b/i.test(raw) ||
-    raw.includes(',') ||
-    /\r?\n/.test(raw);
+  const explicitBulk =
+    /^(add these|import these|bulk add|add list|import list)\b/i.test(raw);
 
-  if (looksLikeImport) {
-    const colonBody = raw.includes(':') ? raw.slice(raw.indexOf(':') + 1) : raw;
-    let body = stripCommandWords(colonBody);
-    body = stripStatusWords(body);
+  const commandLike =
+    /^(add|import|bulk add|add list|import list|mark|set|put|i finished|i completed|i watched|i started|finished|completed|watched|started)\b/i.test(raw);
+
+  const hasListSeparator = raw.includes(',') || /\r?\n/.test(raw);
+
+  if (explicitBulk || commandLike || hasListSeparator) {
+    let body = removeExplicitBulkPrefix(raw);
 
     const titles = parseTitles(body);
 
@@ -82,7 +111,7 @@ export function parseJoeAIIntent(input = '') {
       };
     }
 
-    if (titles.length === 1) {
+    if (titles.length === 1 && commandLike) {
       return {
         kind: 'singleAdd',
         title: titles[0],
