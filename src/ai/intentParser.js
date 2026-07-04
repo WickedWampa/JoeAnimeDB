@@ -109,6 +109,70 @@ export function parseJoeAIIntent(input = '') {
     return { kind: 'watchingList' };
   }
 
+  // SPRINT6_MOOD_RECOMMENDATION_WORDS
+  // These are recommendation intents even when the user does not say "recommend" or "watch".
+  const moodRecommendationWords = [
+    'funny',
+    'comedy',
+    'hilarious',
+    'make me laugh',
+    'comforting',
+    'comfort',
+    'cozy',
+    'relaxing',
+    'chill',
+    'wholesome',
+    'feel good',
+    'mind games',
+    'psychological',
+    'genius',
+    'manipulation',
+    'strategy',
+    'thriller',
+    'sad',
+    'depressing',
+    'make me cry',
+    'cry',
+    'emotional',
+    'tearjerker',
+    'heartbreaking',
+    'cyberpunk',
+    'sci fi',
+    'sci-fi',
+    'ai',
+    'robots',
+    'dark',
+    'violent',
+    'brutal',
+    'gory',
+    'gritty',
+    'masterpiece',
+    'classic',
+    'peak',
+    'banger',
+    'underrated',
+    'sports',
+    'competition',
+    'mastery',
+    'training',
+    'underdog',
+    'rivalry',
+    'horror',
+    'scary',
+    'creepy',
+    'romcom',
+    'rom/com',
+    'rom com',
+    'rom-com',
+    'slice of life',
+    'sol',
+    'mecha'
+  ];
+
+  if (moodRecommendationWords.some((word) => lower.includes(word))) {
+    return { kind: 'recommendation' };
+  }
+
   const explicitBulk =
     /^(add these|import these|bulk add|add list|import list)\b/i.test(raw);
 

@@ -4,36 +4,63 @@
 
 import * as pack0 from './core25/core25ExpertGenomePack';
 import * as pack1 from './enhanced/battle/pack2BattleShonen';
-import * as pack2 from './enhanced/comedy/pack8ComedySlice';
-import * as pack3 from './enhanced/fantasy/pack1FantasyIsekai';
-import * as pack4 from './enhanced/psychological/pack7PsychologicalMindGames';
-import * as pack5 from './enhanced/romance/pack6RomanceGrowth';
-import * as pack6 from './enhanced/scifi/pack4ScifiMecha';
-import * as pack7 from './enhanced/seinen/pack3SeinenDark';
-import * as pack8 from './enhanced/sports/pack5SportsMastery';
-import * as pack9 from './core100/core100GenomePack';
+import * as pack2 from './enhanced/classics/pack9ClassicsFoundations';
+import * as pack3 from './enhanced/comedy/pack8ComedySlice';
+import * as pack4 from './enhanced/fantasy/pack1FantasyIsekai';
+import * as pack5 from './enhanced/modern/pack10ModernEssentials';
+import * as pack6 from './enhanced/psychological/pack7PsychologicalMindGames';
+import * as pack7 from './enhanced/romance/pack6RomanceGrowth';
+import * as pack8 from './enhanced/scifi/pack4ScifiMecha';
+import * as pack9 from './enhanced/seinen/pack3SeinenDark';
+import * as pack10 from './enhanced/sports/pack5SportsMastery';
+import * as pack11 from './core100/core100GenomePack';
+import * as pack12 from '../modules/comedy/index';
+import * as pack13 from '../modules/horror/index';
+import * as pack14 from '../modules/romance/index';
 
 export const GENOME_REGISTRY_VERSION = '0.2.0';
 
 function normalizePack(value, source) {
   if (!value) return [];
+
   if (Array.isArray(value)) {
-    return value.map((card) => ({ ...card, registrySource: card.registrySource || source }));
+    // SPRINT8_ARRAY_CARD_GUARD
+    // Only arrays of actual cards belong in the registry.
+    return value
+      .filter((card) => card && card.id && (card.titles || card.title || card.signature || card.domain))
+      .map((card) => ({ ...card, registrySource: card.registrySource || source }));
   }
+
+  // Sprint 8 Knowledge Modules expose cards under module.cards.
+  if (value.cards && Array.isArray(value.cards)) {
+    return value.cards.map((card) => ({
+      ...card,
+      moduleId: value.id,
+      moduleName: value.name,
+      registrySource: card.registrySource || source,
+      joeNote: value.joeNotes?.[card.id] || card.joeNote
+    }));
+  }
+
   return [];
 }
 
 const RAW_GENOME_REGISTRY = [
   ...normalizePack(pack0.CORE25_EXPERT_GENOME_CARDS, 'src/ai/genome/core25/core25ExpertGenomePack.js#CORE25_EXPERT_GENOME_CARDS'),
   ...normalizePack(pack1.ENHANCED_BATTLE_PACK_2, 'src/ai/genome/enhanced/battle/pack2BattleShonen.js#ENHANCED_BATTLE_PACK_2'),
-  ...normalizePack(pack2.ENHANCED_COMEDY_PACK_8, 'src/ai/genome/enhanced/comedy/pack8ComedySlice.js#ENHANCED_COMEDY_PACK_8'),
-  ...normalizePack(pack3.ENHANCED_FANTASY_PACK_1, 'src/ai/genome/enhanced/fantasy/pack1FantasyIsekai.js#ENHANCED_FANTASY_PACK_1'),
-  ...normalizePack(pack4.ENHANCED_PSYCHOLOGICAL_PACK_7, 'src/ai/genome/enhanced/psychological/pack7PsychologicalMindGames.js#ENHANCED_PSYCHOLOGICAL_PACK_7'),
-  ...normalizePack(pack5.ENHANCED_ROMANCE_PACK_6, 'src/ai/genome/enhanced/romance/pack6RomanceGrowth.js#ENHANCED_ROMANCE_PACK_6'),
-  ...normalizePack(pack6.ENHANCED_SCIFI_PACK_4, 'src/ai/genome/enhanced/scifi/pack4ScifiMecha.js#ENHANCED_SCIFI_PACK_4'),
-  ...normalizePack(pack7.ENHANCED_SEINEN_PACK_3, 'src/ai/genome/enhanced/seinen/pack3SeinenDark.js#ENHANCED_SEINEN_PACK_3'),
-  ...normalizePack(pack8.ENHANCED_SPORTS_PACK_5, 'src/ai/genome/enhanced/sports/pack5SportsMastery.js#ENHANCED_SPORTS_PACK_5'),
-  ...normalizePack(pack9.CORE100_GENOME_CARDS, 'src/ai/genome/core100/core100GenomePack.js#CORE100_GENOME_CARDS'),
+  ...normalizePack(pack2.ENHANCED_CLASSICS_PACK_9, 'src/ai/genome/enhanced/classics/pack9ClassicsFoundations.js#ENHANCED_CLASSICS_PACK_9'),
+  ...normalizePack(pack3.ENHANCED_COMEDY_PACK_8, 'src/ai/genome/enhanced/comedy/pack8ComedySlice.js#ENHANCED_COMEDY_PACK_8'),
+  ...normalizePack(pack4.ENHANCED_FANTASY_PACK_1, 'src/ai/genome/enhanced/fantasy/pack1FantasyIsekai.js#ENHANCED_FANTASY_PACK_1'),
+  ...normalizePack(pack5.ENHANCED_MODERN_PACK_10, 'src/ai/genome/enhanced/modern/pack10ModernEssentials.js#ENHANCED_MODERN_PACK_10'),
+  ...normalizePack(pack6.ENHANCED_PSYCHOLOGICAL_PACK_7, 'src/ai/genome/enhanced/psychological/pack7PsychologicalMindGames.js#ENHANCED_PSYCHOLOGICAL_PACK_7'),
+  ...normalizePack(pack7.ENHANCED_ROMANCE_PACK_6, 'src/ai/genome/enhanced/romance/pack6RomanceGrowth.js#ENHANCED_ROMANCE_PACK_6'),
+  ...normalizePack(pack8.ENHANCED_SCIFI_PACK_4, 'src/ai/genome/enhanced/scifi/pack4ScifiMecha.js#ENHANCED_SCIFI_PACK_4'),
+  ...normalizePack(pack9.ENHANCED_SEINEN_PACK_3, 'src/ai/genome/enhanced/seinen/pack3SeinenDark.js#ENHANCED_SEINEN_PACK_3'),
+  ...normalizePack(pack10.ENHANCED_SPORTS_PACK_5, 'src/ai/genome/enhanced/sports/pack5SportsMastery.js#ENHANCED_SPORTS_PACK_5'),
+  ...normalizePack(pack11.CORE100_GENOME_CARDS, 'src/ai/genome/core100/core100GenomePack.js#CORE100_GENOME_CARDS'),
+  ...normalizePack(pack12.COMEDY_MODULE, 'src/ai/modules/comedy/index.js#COMEDY_MODULE'),
+  ...normalizePack(pack13.HORROR_MODULE, 'src/ai/modules/horror/index.js#HORROR_MODULE'),
+  ...normalizePack(pack14.ROMANCE_MODULE, 'src/ai/modules/romance/index.js#ROMANCE_MODULE'),
 ];
 
 const seen = new Set();

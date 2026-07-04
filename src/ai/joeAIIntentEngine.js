@@ -1,4 +1,5 @@
 import { ACTIVE_GENOME_REGISTRY } from './genome/genomeRegistry';
+import { maybeTraitMixerRecommendation } from './vibes/traitMixer';
 
 function norm(value = '') {
   return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
@@ -92,19 +93,66 @@ function scoreCardForIntent(card, intent) {
   return { score, reasons };
 }
 
+
+function intentOpening(intent, scored = []) {
+  const top = scored[0]?.card;
+  const topTitle = top?.titles?.[0] || top?.id || 'the top pick';
+
+  const openings = {
+    funny: [
+      'You asked for something funny, so I am ignoring generic action/fantasy matches and looking for actual comedy DNA.',
+      `If you want the safest first pick, I would start with ${topTitle}.`
+    ],
+    comforting: [
+      'You asked for something comforting, so I am looking for warmth, healing, friendship, and low-stress vibes.',
+      `${topTitle} looks like the strongest comfort pick from the Genome.`
+    ],
+    mind_games: [
+      'You asked for mind games, so I am looking for pressure, manipulation, strategy, and psychological tension.',
+      `${topTitle} is the strongest brain-game match.`
+    ],
+    make_me_cry: [
+      'You asked for emotional damage, so I am looking for grief, healing, loss, and stories that leave a mark.',
+      `${topTitle} is where I would start if you want the feelings to hit.`
+    ],
+    cyberpunk: [
+      'You asked for cyberpunk or philosophical sci-fi, so I am looking for identity, AI, surveillance, and future-dread.',
+      `${topTitle} is the strongest match for that sci-fi itch.`
+    ],
+    sports_mastery: [
+      'You asked for competition or mastery, so I am looking for discipline, rivalry, obsession, and earned improvement.',
+      `${topTitle} is the strongest mastery-focused pick.`
+    ],
+    dark: [
+      'You asked for something dark, so I am looking for heavier worlds, moral pressure, violence, and uncomfortable stakes.',
+      `${topTitle} is the strongest dark-vibe match.`
+    ]
+  };
+
+  return openings[intent.id] || [
+    `You asked for ${intent.label.toLowerCase()}, so I matched your request against the Anime Genome.`,
+    `${topTitle} looks like the strongest match.`
+  ];
+}
+
 function formatCard(card, index, scored) {
   const title = card.titles?.[0] || card.id;
   const percent = Math.min(98, Math.max(72, 70 + scored.score * 4));
   const why = card.signature || card.coreFantasy || 'Strong Genome match.';
 
+  const label = index === 0 ? 'Start here' : index === 1 ? 'Strong backup pick' : index === 2 ? 'Also very strong' : 'Worth considering';
+
   return [
     `${index + 1}. ${title} — ${percent}% intent match`,
-    `   • ${why}`,
-    scored.reasons?.length ? `   • Matched on: ${scored.reasons.slice(0, 5).join(', ')}.` : ''
+    `   • ${label}: ${why}`,
+    scored.reasons?.length ? `   • Why it matched: ${scored.reasons.slice(0, 5).join(', ')}.` : ''
   ].filter(Boolean).join('\n');
 }
 
 export function maybeGenomeIntentRecommendation(question = '', { limit = 8 } = {}) {
+  const traitMixAnswer = maybeTraitMixerRecommendation(question, { limit });
+  if (traitMixAnswer) return traitMixAnswer;
+
   const intent = detectIntent(question);
   if (!intent) return null;
 
@@ -116,10 +164,12 @@ export function maybeGenomeIntentRecommendation(question = '', { limit = 8 } = {
 
   if (!scored.length) return null;
 
+  const opening = intentOpening(intent, scored);
+
   return [
     `🧠 JoeAI Intent Mode: ${intent.label}`,
     '',
-    `I heard the vibe, not just a title. Matching your request against the Anime Genome.`,
+    opening.join('\n'),
     '',
     scored.map((entry, index) => formatCard(entry.card, index, entry)).join('\n\n')
   ].join('\n');

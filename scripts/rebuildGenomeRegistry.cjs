@@ -33,7 +33,8 @@ function detectExports(fileText) {
   return matches.map((m) => m[1]).filter((name) =>
     name.includes('CARDS') ||
     name.includes('PACK') ||
-    name.includes('GENOME')
+    name.includes('GENOME') ||
+    name.includes('MODULE')
   );
 }
 
@@ -44,10 +45,16 @@ const registryFile = path.join(genomeDir, 'genomeRegistry.js');
 const sources = [
   path.join(genomeDir, 'core25'),
   path.join(genomeDir, 'enhanced'),
-  path.join(genomeDir, 'core100')
+  path.join(genomeDir, 'core100'),
+  path.join(root, 'src', 'ai', 'modules')
 ];
 
-const packFiles = sources.flatMap(walk).filter((file) => !file.endsWith('genomeRegistry.js'));
+const packFiles = sources
+  .flatMap(walk)
+  .filter((file) => !file.endsWith('genomeRegistry.js'))
+  // SPRINT8_SKIP_MODULE_INDEX
+  // Module index exports an array of modules, not cards. Individual module files expose module.cards.
+  .filter((file) => !file.replaceAll(path.sep, '/').endsWith('src/ai/modules/index.js'));
 
 const imports = [];
 const spreads = [];
@@ -80,9 +87,26 @@ export const GENOME_REGISTRY_VERSION = '0.2.0';
 
 function normalizePack(value, source) {
   if (!value) return [];
+
   if (Array.isArray(value)) {
-    return value.map((card) => ({ ...card, registrySource: card.registrySource || source }));
+    // SPRINT8_ARRAY_CARD_GUARD
+    // Only arrays of actual cards belong in the registry.
+    return value
+      .filter((card) => card && card.id && (card.titles || card.title || card.signature || card.domain))
+      .map((card) => ({ ...card, registrySource: card.registrySource || source }));
   }
+
+  // Sprint 8 Knowledge Modules expose cards under module.cards.
+  if (value.cards && Array.isArray(value.cards)) {
+    return value.cards.map((card) => ({
+      ...card,
+      moduleId: value.id,
+      moduleName: value.name,
+      registrySource: card.registrySource || source,
+      joeNote: value.joeNotes?.[card.id] || card.joeNote
+    }));
+  }
+
   return [];
 }
 

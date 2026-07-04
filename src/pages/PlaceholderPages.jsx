@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Poster } from '../components/Poster';
 import { score, countBy } from '../utils/animeUtils';
 import { exportBackup, resetData } from '../services/storage';
-import { createAnimeBrain } from '../engine/animeBrain'; import { fetchMetadata } from '../services/metadata'; import { parseJoeAIIntent } from '../ai/intentParser'; import { executeJoeAICommand } from '../ai/commandExecutor';
+import { createAnimeBrain } from '../engine/animeBrain'; import { fetchMetadata } from '../services/metadata'; import { maybeKnowledgeFirstRecommendation } from '../ai/knowledgeFirstRecommender'; import { parseJoeAIIntent } from '../ai/intentParser'; import { executeJoeAICommand } from '../ai/commandExecutor'; import { routeJoeAIRecommendation } from '../ai/joeAIRecommendationRouter';
 import { buildTonightsWatch } from '../ai/tonightsWatch'; import { importAnimeByTitle, mergeAnimeMetadata } from '../services/animeImporter';
 
 export function Universe({ anime, setQuery, setView }) {
@@ -257,6 +257,21 @@ export function Assistant({ anime, catalog = [], updateAnime }) {
 
     const intent = parseJoeAIIntent(q);
 
+    if (intent.kind === 'help') {
+      setLog((current) => [...current, { who: 'bot', type: 'text', text: helpAnswer() }]);
+      return;
+    }
+
+    if (intent.kind === 'stats') {
+      setLog((current) => [...current, { who: 'bot', type: 'text', text: libraryStatsAnswer() }]);
+      return;
+    }
+
+    if (intent.kind === 'watchingList') {
+      setLog((current) => [...current, { who: 'bot', type: 'text', text: currentlyWatchingAnswer() }]);
+      return;
+    }
+
     if (intent.kind === 'bulkAdd') {
       const action = { titles: intent.titles, status: intent.status, kind: 'bulkAdd' };
       setPendingAction(action);
@@ -291,15 +306,39 @@ export function Assistant({ anime, catalog = [], updateAnime }) {
       return;
     }
 
-    const result = await executeJoeAICommand({
-      intent,
-      anime,
-      catalog,
-      updateAnime,
-      brain
-    });
+    if (intent.kind === 'recommendation') {
+      const smartAnswer = routeJoeAIRecommendation(q, anime, catalog);
 
-    setLog((current) => [...current, { who: 'bot', ...result }]);
+      if (smartAnswer) {
+        setLog((current) => [...current, { who: 'bot', type: 'text', text: smartAnswer }]);
+        return;
+      }
+
+      const picks = brain.recommendations(5);
+      const answer = picks.length
+        ? {
+            type: 'recommendations',
+            title: '🍜 JoeAI Recommendations',
+            subtitle: 'Based on your Anime DNA, these unseen catalog picks look strongest.',
+            items: picks
+          }
+        : {
+            type: 'text',
+            text: brain.answer(q)
+          };
+
+      setLog((current) => [...current, { who: 'bot', ...answer }]);
+      return;
+    }
+
+    const smartAnswer = routeJoeAIRecommendation(q, anime, catalog);
+    if (smartAnswer) {
+      setLog((current) => [...current, { who: 'bot', type: 'text', text: smartAnswer }]);
+      return;
+    }
+
+    const answer = brain.answer(q);
+    setLog((current) => [...current, { who: 'bot', type: 'text', text: answer }]);
   }
 
   function renderRecommendationCard(item, index) {
