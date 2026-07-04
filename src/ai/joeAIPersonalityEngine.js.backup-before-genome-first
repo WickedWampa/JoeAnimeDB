@@ -1,13 +1,7 @@
-// Sprint 5: JoeAI Personality Engine
-// Genome-first recommendation formatter.
-// Priority:
-// 1. Anime Genome Card
-// 2. Knowledge Base intro
-// 3. Legacy Personality Preset
-// 4. Anime DNA fallback
+// Sprint 4 Phase 5: JoeAI Personality Engine
+// Turns DNA matches into opinionated anime-fan recommendations.
 
 import { buildKnowledgeIntro, buildKnowledgeWarnings, knowledgeOpinionFor } from './animeKnowledgeBase';
-import { findGenomeCardFromRegistry as findGenomeCard } from './genome/genomeRegistry';
 
 const PROFILE_PRESETS = {
   dorohedoro: {
@@ -90,69 +84,17 @@ function meta(item = {}) {
   ].filter(Boolean).join(' · ');
 }
 
-function listLines(items = [], max = 6) {
-  return items.slice(0, max).map((item) => `• ${item}`).join('\n');
-}
-
-function buildGenomeIntro(source = {}) {
-  const card = findGenomeCard(source);
-  if (!card) return null;
-
-  const title = card.titles?.[0] || source.title || source.officialTitle || 'that anime';
-
-  const parts = [
-    `🧬 JoeAI Genome Analysis: ${title}`,
-    '',
-    card.signature || card.note || `${title} has a Genome profile.`
-  ];
-
-  const chasing = card.viewerMotivations || card.chasing || [];
-  if (chasing.length) {
-    parts.push('', 'What you are probably chasing:');
-    parts.push(listLines(chasing, 6));
-  }
-
-  const whyFansLove = card.whyFansLove || [];
-  if (whyFansLove.length) {
-    parts.push('', 'Why fans love it:');
-    parts.push(listLines(whyFansLove, 4));
-  }
-
-  const themes = card.themes || [];
-  if (themes.length) {
-    parts.push('', `Core themes: ${themes.slice(0, 6).join(', ')}.`);
-  }
-
-  if (card.accessibility) {
-    parts.push('', `Accessibility: ${card.accessibility}`);
-  }
-
-  return parts.join('\n');
-}
-
 function opinionFor(sourceProfile, candidate, fallbackReasons = [], score = 0) {
   const key = titleKey(candidate);
-  const source = window.__joeaiCurrentSource || {};
-  const knowledgeOpinion = knowledgeOpinionFor(source, candidate);
+  const knowledgeOpinion = knowledgeOpinionFor(window.__joeaiCurrentSource || {}, candidate);
   if (knowledgeOpinion) return knowledgeOpinion;
 
   const exact = sourceProfile?.strongestMatches?.[key];
+
   if (exact) return exact;
 
   const title = candidate.title || 'This one';
-  const reasons = fallbackReasons.slice(0, 5).join(', ').toLowerCase();
-
-  if (reasons.includes('direct curated') || reasons.includes('curated successor')) {
-    return `${title} is one of the strongest curated follow-ups for this vibe.`;
-  }
-
-  if (reasons.includes('identity') || reasons.includes('consciousness')) {
-    return `${title} fits because it plays in the same identity/philosophy space.`;
-  }
-
-  if (reasons.includes('war') || reasons.includes('military')) {
-    return `${title} fits more through war, systems, and emotional pressure than surface genre.`;
-  }
+  const reasons = fallbackReasons.slice(0, 3).join(', ').toLowerCase();
 
   if (reasons.includes('chaos') || reasons.includes('weird')) {
     return `${title} is worth a look because it carries some of that weird, unpredictable energy.`;
@@ -177,9 +119,8 @@ function formatOpinionEntry(sourceProfile, entry, index, source) {
   const { item, match, reasons } = entry;
   const info = meta(item);
   const stars = starLine(match);
-
   window.__joeaiCurrentSource = source;
-  const opinion = opinionFor(sourceProfile, item, reasons || [], match);
+  const opinion = opinionFor(sourceProfile, item, reasons, match);
 
   return [
     `${index + 1}. ${item.title} — ${stars} ${Math.round(match * 100)}%${info ? ` (${info})` : ''}`,
@@ -190,50 +131,47 @@ function formatOpinionEntry(sourceProfile, entry, index, source) {
 
 export function buildPersonalityRecommendationText({ source, inLibrary = [], discoveries = [] }) {
   const profile = presetFor(source);
-  const title = source.title || source.officialTitle || 'that anime';
+  const title = source.title || 'that anime';
 
-  const genomeIntro = buildGenomeIntro(source);
   const knowledgeIntro = buildKnowledgeIntro(source);
 
-  const intro = genomeIntro
-    ? [genomeIntro]
-    : knowledgeIntro
-      ? [knowledgeIntro]
-      : profile
-        ? [
-            `🎭 JoeAI Opinion Mode: ${title}`,
-            '',
-            profile.hook,
-            '',
-            `Translation: ${profile.chase}.`
-          ]
-        : [
-            `🧬 JoeAI DNA Fallback: ${title}`,
-            '',
-            `I do not have a Genome Card or handcrafted profile for ${title} yet, so I’m using Anime DNA plus your library patterns.`,
-            ''
-          ];
+  const intro = knowledgeIntro
+    ? [knowledgeIntro]
+    : profile
+      ? [
+          `🎭 JoeAI Opinion Mode: ${title}`,
+          '',
+          profile.hook,
+          '',
+          `Translation: ${profile.chase}.`
+        ]
+      : [
+          `🎭 JoeAI Opinion Mode: ${title}`,
+          '',
+          `I do not have a handcrafted opinion profile for ${title} yet, so I’m using Anime DNA plus your library patterns.`,
+          ''
+        ];
 
   const parts = [...intro, ''];
 
   if (inLibrary.length) {
     parts.push('From your library, I would look at:');
     parts.push('');
-    parts.push(inLibrary.map((entry, index) => formatOpinionEntry(profile, entry, index, source)).join('\n\n'));
+    parts.push(inLibrary.map((entry, index) => formatOpinionEntry(profile, entry, index)).join('\n\n'));
     parts.push('');
   }
 
   if (discoveries.length) {
     parts.push('New discoveries I would consider:');
     parts.push('');
-    parts.push(discoveries.map((entry, index) => formatOpinionEntry(profile, entry, index, source)).join('\n\n'));
+    parts.push(discoveries.map((entry, index) => formatOpinionEntry(profile, entry, index)).join('\n\n'));
     parts.push('');
   }
 
   const knowledgeWarnings = buildKnowledgeWarnings(source);
   if (knowledgeWarnings) {
     parts.push(knowledgeWarnings);
-  } else if (profile?.dontRecommend?.length && !genomeIntro) {
+  } else if (profile?.dontRecommend?.length) {
     parts.push('JoeAI warning label:');
     parts.push('');
     parts.push(profile.dontRecommend.map((line) => `• ${line}`).join('\n'));

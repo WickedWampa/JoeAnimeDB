@@ -1,11 +1,13 @@
 // Sprint 5 Phase 1: Anime Genome Cards
 // Identity-first anime matching. Genres are supporting metadata, not the main signal.
 
+import { CORE25_EXPERT_GENOME_CARDS } from './core25/core25ExpertGenomePack';
 import { CORE100_GENOME_CARDS } from './core100/core100GenomePack';
 
 export const GENOME_VERSION = '0.1.0';
 
 export const GENOME_CARDS = [
+  ...CORE25_EXPERT_GENOME_CARDS,
   ...CORE100_GENOME_CARDS,
   {
     id: 'initial-d',
@@ -90,7 +92,7 @@ export function findGenomeCard(animeOrTitle = '') {
     ? norm(animeOrTitle)
     : norm([animeOrTitle.title, animeOrTitle.officialTitle, animeOrTitle.japaneseTitle, ...(animeOrTitle.titleSynonyms || [])].filter(Boolean).join(' '));
 
-  return GENOME_CARDS.find((card) =>
+  return ACTIVE_GENOME_CARDS.find((card) =>
     card.id === text ||
     text.includes(norm(card.id)) ||
     card.titles.some((title) => text.includes(norm(title)) || norm(title).includes(text))
@@ -112,3 +114,16 @@ export function enrichWithGenome(anime = {}) {
     genomeThemes: card.themes
   };
 }
+
+
+// SPRINT5_DEDUPE_GENOME_CARDS
+const seenGenomeIds = new Set();
+export const ACTIVE_GENOME_CARDS = GENOME_CARDS.filter((card) => {
+  if (seenGenomeIds.has(card.id)) return false;
+  seenGenomeIds.add(card.id);
+  return true;
+});
+
+
+// SPRINT5_LEGACY_GENOME_EXPORT
+export const LEGACY_GENOME_CARDS = GENOME_CARDS;

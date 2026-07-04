@@ -1,4 +1,4 @@
-import { findGenomeCard } from './genomeCards';
+import { findGenomeCardFromRegistry as findGenomeCard } from './genomeRegistry';
 import { relationshipFor } from './genomeRelationshipGraph';
 
 function norm(value = '') {

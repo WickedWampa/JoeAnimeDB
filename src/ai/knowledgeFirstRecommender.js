@@ -3,7 +3,8 @@ import { buildPersonalityRecommendationText } from './joeAIPersonalityEngine';
 import { findKnowledgeProfile } from './animeKnowledgeBase';
 import { sameFranchise, enrichAnimeKnowledge } from './knowledge/knowledgeRegistry';
 import { compareGenome } from './genome/genomeEngine';
-import { findGenomeCard } from './genome/genomeCards';
+import { findGenomeCardFromRegistry as findGenomeCard } from './genome/genomeRegistry';
+import { maybeGenomeIntentRecommendation } from './joeAIIntentEngine';
 
 function norm(value = '') {
   return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
@@ -153,7 +154,9 @@ export function recommendKnowledgeFirst({ query = '', anime = [], catalog = [], 
 
 export function maybeKnowledgeFirstRecommendation(question = '', anime = [], catalog = []) {
   const title = extractSimilarityTitle(question);
-  if (!title) return null;
+  if (!title) {
+    return maybeGenomeIntentRecommendation(question);
+  }
 
   return recommendKnowledgeFirst({ query: title, anime, catalog }).text;
 }
