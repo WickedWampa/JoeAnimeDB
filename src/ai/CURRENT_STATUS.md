@@ -22,3 +22,10 @@
 - Recommendation Engine V2
 - Recommendation explanations
 - Ranking polish
+
+
+## Sprint 5 Update
+
+- Added Anime Genome foundation.
+- Added Core 100 starter Genome Pack.
+- Added Genome Relationship Graph for curated direct/thematic/avoid recommendation paths.

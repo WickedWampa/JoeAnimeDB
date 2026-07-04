@@ -2,6 +2,8 @@ import { buildAnimeDNA, dnaSimilarity, topDnaTraits, labelTrait } from './animeD
 import { buildPersonalityRecommendationText } from './joeAIPersonalityEngine';
 import { findKnowledgeProfile } from './animeKnowledgeBase';
 import { sameFranchise, enrichAnimeKnowledge } from './knowledge/knowledgeRegistry';
+import { compareGenome } from './genome/genomeEngine';
+import { findGenomeCard } from './genome/genomeCards';
 
 function norm(value = '') {
   return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
@@ -77,12 +79,20 @@ function explainOverlap(sourceDna, candidateDna) {
 }
 
 function buildCandidate({ source, item, anime, sourceDna }) {
+  // SPRINT5_GENOME_SCORING
   const candidateDna = buildAnimeDNA(item);
   const dnaScore = dnaSimilarity(sourceDna, candidateDna);
+  const sourceGenome = findGenomeCard(source);
+  const candidateGenome = findGenomeCard(item);
+  const genome = sourceGenome && candidateGenome ? compareGenome(sourceGenome, candidateGenome) : null;
   const knowledge = boostForKnowledge(source, item);
-  const match = Math.min(0.99, dnaScore + knowledge.boost);
+  const match = Math.min(0.99, Math.max(dnaScore + knowledge.boost, genome ? genome.score : 0));
   const owned = new Set(anime.map(keyFor)).has(keyFor(item));
   const reasons = explainOverlap(sourceDna, candidateDna);
+
+  if (genome?.reasons?.length) {
+    reasons.unshift(...genome.reasons.slice(0, 3));
+  }
 
   if (knowledge.reason) {
     reasons.unshift('Curated knowledge match');
