@@ -1,172 +1,262 @@
-JoeAnimeDB
-AI-powered anime tracking, recommendations, and Anime Genome analysis.
+# JoeAnimeDB
 
-JoeAnimeDB isn't just another anime tracker.
+> **AI-powered anime tracking, recommendations, and Anime Genome analysis.**
 
-It's an offline-first desktop application that learns your Anime DNA and uses it to make recommendations that become more personal over time.
+JoeAnimeDB is an offline-first desktop application that learns **your Anime DNA**.
 
-Instead of recommending anime based only on genres, JoeAnimeDB understands why you loved a series.
+Instead of simply tracking what you've watched, JoeAnimeDB analyzes **why** you enjoy certain anime and uses that knowledge to deliver smarter recommendations over time.
 
-Features
+---
 
-📚 Personal Anime Library
-Track watched anime
-Ratings
-Status
-Rewatches
-Notes
-Offline SQLite database
-Fast search
+# Why JoeAnimeDB?
 
-🧬 Anime Genome™
+A fair question is:
 
-Every major series is described with a custom Genome Card.
+> **"Why use this instead of just asking ChatGPT?"**
 
-Instead of simple genre tags, Genome Cards capture:
+Because JoeAnimeDB doesn't start from scratch every conversation.
 
-Core Fantasy
-Viewer Motivation
-Emotional Profile
-Atmosphere
-Signature Traits
-Themes
-Accessibility
-Rewatch Value
-Follow-up Recommendations
+JoeAI understands:
+
+- Your watch history
+- Your ratings
+- Your rewatches
+- Your favorite studios
+- Your favorite themes
+- Your Anime Genome
+- Your evolving Anime DNA
+
+The more you use JoeAnimeDB, the smarter its recommendations become.
+
+Think of it as a personal anime curator that grows alongside your library.
+
+---
+
+# Features
+
+## 📚 Personal Anime Library
+
+- Track completed anime
+- Watching / Plan to Watch
+- Ratings
+- Rewatch tracking
+- Notes
+- Fast search
+- Offline SQLite database
+
+---
+
+## 🧬 Anime Genome™
+
+Every anime is described by far more than genres.
+
+Genome Cards describe things like:
+
+- Core Fantasy
+- Emotional Profile
+- Viewer Motivation
+- Atmosphere
+- Signature Traits
+- Themes
+- Accessibility
+- Rewatch Value
+- Ideal Follow-ups
 
 Example:
 
-Monster
+> **Monster**
 
-Core fantasy:
-A slow psychological thriller exploring morality, identity, and the nature of evil.
+Core Fantasy:
 
-🧠 JoeAI Assistant
+*A slow psychological thriller exploring morality, identity, guilt, and the nature of evil.*
 
-Natural language assistant built directly into your library.
+---
+
+## 🤖 JoeAI Assistant
+
+Ask naturally.
 
 Examples:
+
+```text
 
 recommend something funny
 
 recommend something like Monster
 
+recommend something comforting
+
+recommend something like Ghost in the Shell
+
 recommend Space Dandy
+
+I want horror
 
 I want emotional damage
 
 I want cyberpunk
 
-I want horror
+I want mind games
 
-recommend something comforting
-
-I want spicy but wholesome
-
-recommend something like Ghost in the Shell
+I want dark fantasy
+```
 
 JoeAI understands:
 
-Genres
-Vibes
-Emotional intent
-Mixed requests
-Anime Genome Cards
+- Genres
+- Themes
+- Emotional intent
+- Mixed requests
+- Anime Genome Cards
+- Your personal library
 
+---
 
-🎭 Trait Mixer
+## 🎭 Trait Mixer
 
-JoeAI can combine multiple ideas.
+JoeAI can combine multiple ideas into a single recommendation.
 
-Example:
+Examples:
 
+```text
 funny cyberpunk
+
 dark fantasy
-romance comedy
-spicy wholesome romance
+
 comforting mystery
+
+spicy but wholesome
+
+romance comedy
+
+cozy sci-fi
+
+psychological action
+```
 
 Instead of matching genres, JoeAI blends Anime DNA.
 
-🎯 Personalized Recommendations
+---
+
+## 🎯 Personalized Recommendations
 
 Recommendations consider:
 
-Your library
-Your ratings
-Watch history
-Studios
-Themes
-Hidden preferences
-Anime Genome similarities
+- Your library
+- Your ratings
+- Rewatch history
+- Favorite studios
+- Favorite genres
+- Hidden viewing patterns
+- Genome similarity
+- Intent matching
 
-JoeAI recommends based on your taste—not popularity.
+JoeAI recommends anime based on **your taste**, not popularity charts.
 
-⚡ Offline First
+---
 
-Everything important works locally.
+## ⚡ Offline First
 
-SQLite
-Electron
-React
-No cloud account required
-Current Architecture
-Electron
-React
-SQLite
-Anime Genome Engine
-JoeAI Intent Parser
-Trait Mixer
-Recommendation Engine
-Roadmap
+JoeAnimeDB is designed to work locally.
 
-✅ Phase 1
-Library
-Recommendations
-Genome Cards
-Trait Mixer
-Intent Parsing
-Recommendation Engine
+- Electron
+- React
+- SQLite
+- Fast startup
+- No cloud account required
 
-🚧 Phase 2
+---
+
+# Current Architecture
+
+- Electron
+- React
+- SQLite
+- Anime Genome Engine
+- JoeAI Recommendation Engine
+- Intent Parser
+- Trait Mixer
+- Recommendation Engine
+
+---
+
+# Roadmap
+
+## ✅ Current
+
+- Personal Anime Library
+- AI Recommendations
+- Genome Cards
+- Intent Parsing
+- Trait Mixer
+- Recommendation Engine
+
+---
+
+## 🚧 Phase 1
+
 AI Genome Generator
-Automatic Genome draft creation
-Curated Genome review workflow
-Better recommendation weighting
 
-🚧 Phase 3
-Anime DNA Profiles
-Hidden Taste Discovery
-Studio Affinity
-Theme Heatmaps
-Taste evolution over time
+Automatically create first-pass Genome Cards for new anime using:
 
-🚧 Phase 4
+- Jikan metadata
+- AI-assisted analysis
+- Heuristic analysis
+- Human review workflow
 
-Community Features
+Generated cards become curated over time.
 
-Share Anime DNA
-Compare libraries
-Recommendation sharing
-Import/export
-Philosophy
+---
 
-ChatGPT knows anime.
+## 🚧 Phase 2
 
-JoeAnimeDB knows your anime.
+Anime DNA
 
-The goal isn't to replace AI.
+JoeAI begins learning things like:
 
-The goal is to build an assistant that remembers what you've watched, understands why you loved it, and gets smarter every time your library grows.
+- Favorite emotional themes
+- Hidden genre preferences
+- Studio affinity
+- Comfort shows
+- Psychological profile
+- Taste evolution
 
-I would also add a section near the top called "Why JoeAnimeDB?", because that's the question your Discord friend asked.
+---
 
-Something like:
+## 🚧 Phase 3
 
-Why not just ask ChatGPT?
+Advanced Discovery
 
-ChatGPT can recommend anime.
+- Hidden gems
+- "People with your Anime DNA also loved..."
+- Forgotten favorites
+- Rewatch predictions
+- Theme exploration
 
-JoeAnimeDB recommends anime using your personal watch history, ratings, rewatches, studios, Anime Genome profiles, and evolving Anime DNA. The more you use it, the better its recommendations become.
+---
 
-Think of it as having a personal anime curator that grows with your library instead of starting from scratch every conversation.
+## 🚧 Future
+
+Community features
+
+- Share Anime DNA
+- Compare libraries
+- Recommendation sharing
+- Import / Export
+- Cloud sync (optional)
+
+---
+
+# Philosophy
+
+Most anime trackers remember what you've watched.
+
+JoeAnimeDB remembers **why you loved it.**
+
+The goal isn't simply to recommend another action anime.
+
+The goal is to understand your taste well enough to recommend the *right* anime—even when you don't know what you're looking for.
+
+As your library grows...
+
+JoeAI grows with you.
