@@ -8,6 +8,7 @@ It's an offline-first desktop application that learns your Anime DNA and uses it
 Instead of recommending anime based only on genres, JoeAnimeDB understands why you loved a series.
 
 Features
+
 📚 Personal Anime Library
 Track watched anime
 Ratings
@@ -16,6 +17,7 @@ Rewatches
 Notes
 Offline SQLite database
 Fast search
+
 🧬 Anime Genome™
 
 Every major series is described with a custom Genome Card.
@@ -70,6 +72,8 @@ Vibes
 Emotional intent
 Mixed requests
 Anime Genome Cards
+
+
 🎭 Trait Mixer
 
 JoeAI can combine multiple ideas.
@@ -115,6 +119,7 @@ JoeAI Intent Parser
 Trait Mixer
 Recommendation Engine
 Roadmap
+
 ✅ Phase 1
 Library
 Recommendations
@@ -122,17 +127,20 @@ Genome Cards
 Trait Mixer
 Intent Parsing
 Recommendation Engine
+
 🚧 Phase 2
 AI Genome Generator
 Automatic Genome draft creation
 Curated Genome review workflow
 Better recommendation weighting
+
 🚧 Phase 3
 Anime DNA Profiles
 Hidden Taste Discovery
 Studio Affinity
 Theme Heatmaps
 Taste evolution over time
+
 🚧 Phase 4
 
 Community Features
