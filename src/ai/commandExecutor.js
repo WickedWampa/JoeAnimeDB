@@ -283,6 +283,47 @@ export async function executeJoeAICommand({ intent, anime = [], catalog = [], up
         onProgress
       });
 
+
+
+    case 'generateGenome': {
+      const title = intent.title;
+
+      if (typeof window !== 'undefined' && window.JoeAnimeDB?.generateGenome) {
+        const result = await window.JoeAnimeDB.generateGenome(title);
+
+        if (result?.ok) {
+          return makeTextResult([
+            `🧬 Genome generated for "${title}".`,
+            '',
+            'Metadata fetched.',
+            'Generated card saved.',
+            'Genome registry rebuilt.',
+            '',
+            'Try:',
+            `recommend ${title}`,
+            '',
+            'Note: generated cards are marked quality: generated and needsReview: true.'
+          ].join('\n'));
+        }
+
+        return makeTextResult([
+          `I tried to generate a Genome for "${title}", but something failed.`,
+          '',
+          result?.error || 'Unknown error.',
+          result?.stderr || ''
+        ].filter(Boolean).join('\n'));
+      }
+
+      return makeTextResult([
+        `🧬 Ready to generate a Genome for "${title}".`,
+        '',
+        'Run these from your project root:',
+        '',
+        `node scripts\\generateGenomeCardForTitle.cjs "${title}"`,
+        'node scripts\\rebuildGenomeRegistry.cjs'
+      ].join('\n'));
+    }
+
     case 'recommendation': {
       const picks = brain?.recommendations?.(5) || [];
 

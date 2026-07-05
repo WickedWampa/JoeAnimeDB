@@ -143,6 +143,18 @@ function formatTitleGenomeAnswer(card) {
     card.signature || card.note || `${name} has a Genome profile.`
   ];
 
+  if (card.coreFantasy) {
+    lines.push('', 'Core Fantasy:');
+    lines.push(card.coreFantasy);
+  }
+
+  if (card.fantasyPillars?.length || card.rewardLoop?.length || card.viewerType?.length) {
+    lines.push('', 'Viewer Fantasy:');
+    if (card.fantasyPillars?.length) lines.push('• Pillars: ' + card.fantasyPillars.slice(0, 5).join(', '));
+    if (card.rewardLoop?.length) lines.push('• Reward loop: ' + card.rewardLoop.slice(0, 5).join(' → '));
+    if (card.viewerType?.length) lines.push('• Best for: ' + card.viewerType.slice(0, 5).join(', '));
+  }
+
   if (card.viewerMotivations?.length) {
     lines.push('', 'Why someone would pick it:');
     lines.push(card.viewerMotivations.slice(0, 6).map((item) => `• ${item}`).join('\n'));

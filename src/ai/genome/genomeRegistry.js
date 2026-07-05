@@ -14,9 +14,10 @@ import * as pack8 from './enhanced/scifi/pack4ScifiMecha';
 import * as pack9 from './enhanced/seinen/pack3SeinenDark';
 import * as pack10 from './enhanced/sports/pack5SportsMastery';
 import * as pack11 from './core100/core100GenomePack';
-import * as pack12 from '../modules/comedy/index';
-import * as pack13 from '../modules/horror/index';
-import * as pack14 from '../modules/romance/index';
+import * as pack12 from './generated/generatedGenomeCards';
+import * as pack13 from '../modules/comedy/index';
+import * as pack14 from '../modules/horror/index';
+import * as pack15 from '../modules/romance/index';
 
 export const GENOME_REGISTRY_VERSION = '0.2.0';
 
@@ -58,9 +59,10 @@ const RAW_GENOME_REGISTRY = [
   ...normalizePack(pack9.ENHANCED_SEINEN_PACK_3, 'src/ai/genome/enhanced/seinen/pack3SeinenDark.js#ENHANCED_SEINEN_PACK_3'),
   ...normalizePack(pack10.ENHANCED_SPORTS_PACK_5, 'src/ai/genome/enhanced/sports/pack5SportsMastery.js#ENHANCED_SPORTS_PACK_5'),
   ...normalizePack(pack11.CORE100_GENOME_CARDS, 'src/ai/genome/core100/core100GenomePack.js#CORE100_GENOME_CARDS'),
-  ...normalizePack(pack12.COMEDY_MODULE, 'src/ai/modules/comedy/index.js#COMEDY_MODULE'),
-  ...normalizePack(pack13.HORROR_MODULE, 'src/ai/modules/horror/index.js#HORROR_MODULE'),
-  ...normalizePack(pack14.ROMANCE_MODULE, 'src/ai/modules/romance/index.js#ROMANCE_MODULE'),
+  ...normalizePack(pack12.GENERATED_GENOME_CARDS, 'src/ai/genome/generated/generatedGenomeCards.js#GENERATED_GENOME_CARDS'),
+  ...normalizePack(pack13.COMEDY_MODULE, 'src/ai/modules/comedy/index.js#COMEDY_MODULE'),
+  ...normalizePack(pack14.HORROR_MODULE, 'src/ai/modules/horror/index.js#HORROR_MODULE'),
+  ...normalizePack(pack15.ROMANCE_MODULE, 'src/ai/modules/romance/index.js#ROMANCE_MODULE'),
 ];
 
 const seen = new Set();

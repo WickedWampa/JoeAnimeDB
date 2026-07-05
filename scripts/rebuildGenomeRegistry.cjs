@@ -46,6 +46,7 @@ const sources = [
   path.join(genomeDir, 'core25'),
   path.join(genomeDir, 'enhanced'),
   path.join(genomeDir, 'core100'),
+  path.join(genomeDir, 'generated'),
   path.join(root, 'src', 'ai', 'modules')
 ];
 

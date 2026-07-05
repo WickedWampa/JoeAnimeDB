@@ -257,6 +257,19 @@ export function Assistant({ anime, catalog = [], updateAnime }) {
 
     const intent = parseJoeAIIntent(q);
 
+
+    if (intent.kind === 'generateGenome') {
+      const result = await executeJoeAICommand({
+        intent,
+        anime,
+        catalog,
+        updateAnime,
+        brain
+      });
+      setLog((current) => [...current, { who: 'bot', ...result }]);
+      return;
+    }
+
     if (intent.kind === 'help') {
       setLog((current) => [...current, { who: 'bot', type: 'text', text: helpAnswer() }]);
       return;
@@ -652,6 +665,34 @@ export function SettingsPage({
   exitNewUserMode,
   resetNewUserMode
 }) {
+  const [genomeUpdateStatus, setGenomeUpdateStatus] = React.useState('');
+
+  async function updateDatabaseWithGenomes() {
+    setGenomeUpdateStatus('Updating database metadata...');
+
+    try {
+      await syncMetadata?.();
+
+      if (window.JoeAnimeDB?.generateMissingGenomesForLibrary) {
+        setGenomeUpdateStatus('Generating missing Genome cards...');
+
+        const result = await window.JoeAnimeDB.generateMissingGenomesForLibrary(data?.anime || data || [], {
+          limit: 0
+        });
+
+        if (result?.ok) {
+          setGenomeUpdateStatus('Database updated and missing Genome cards generated. Restart/refresh if new cards do not appear immediately.');
+        } else {
+          setGenomeUpdateStatus('Database updated, but Genome generation failed: ' + (result?.error || 'Unknown error'));
+        }
+      } else {
+        setGenomeUpdateStatus('Database updated. Genome bridge is not available yet.');
+      }
+    } catch (error) {
+      setGenomeUpdateStatus('Update failed: ' + (error?.message || String(error)));
+    }
+  }
+
   return (
     <section className="panel">
       <h2>Settings</h2>
@@ -677,9 +718,10 @@ export function SettingsPage({
         </div>
       </section>
 
+      {genomeUpdateStatus && <p className="settingsStatus">{genomeUpdateStatus}</p>}
       <div className="settingsActions">
         <button onClick={() => exportBackup(data)}>Export Backup</button>
-        <button onClick={syncMetadata}>Update Database</button>
+        <button onClick={updateDatabaseWithGenomes}>Update Database + Genomes</button>
         <button onClick={resetData}>Reset Local Data</button>
       </div>
     </section>

@@ -90,6 +90,15 @@ export function parseJoeAIIntent(input = '') {
     return { kind: 'question', text: raw };
   }
 
+
+  const generateGenomeMatch = raw.match(/^(generate|create|make)\s+(?:a\s+)?genome(?:\s+card)?\s+(?:for\s+)?(.+)$/i);
+  if (generateGenomeMatch?.[2]) {
+    return {
+      kind: 'generateGenome',
+      title: generateGenomeMatch[2].trim()
+    };
+  }
+
   if (lower.includes('help') || lower.includes('what can you do')) {
     return { kind: 'help' };
   }

@@ -6,6 +6,46 @@ import { updateCatalogMetadata } from '../services/catalogService';
 import seedData from '../data/animeSeed.json';
 import { createNewUserDemoDatabase } from '../services/newUserMode';
 
+
+function hasGoodMetadata(item = {}) {
+  return Boolean(
+    item.malId ||
+    item.officialTitle ||
+    item.synopsis ||
+    item.description ||
+    item.studio ||
+    item.year ||
+    item.episodeCount ||
+    item.episodes ||
+    (Array.isArray(item.genres) && item.genres.length)
+  );
+}
+
+function metadataIsStale(item = {}) {
+  if (!item.metadataUpdatedAt) return false;
+
+  const updated = new Date(item.metadataUpdatedAt).getTime();
+  if (!Number.isFinite(updated)) return false;
+
+  const thirtyDays = 30 * 24 * 60 * 60 * 1000;
+  return Date.now() - updated > thirtyDays && !hasGoodMetadata(item);
+}
+
+function shouldRefreshMetadata(item = {}) {
+  return needsArtworkRepair(item) || !hasGoodMetadata(item) || metadataIsStale(item) || item.syncStatus?.dirty;
+}
+
+function setItemSyncStatus(item = {}, patch = {}) {
+  return {
+    ...item,
+    syncStatus: {
+      ...(item.syncStatus || {}),
+      ...patch
+    }
+  };
+}
+
+
 const emptyProgress = {
   step: 1,
   stepTotal: 2,
@@ -172,13 +212,13 @@ export function useAnimeLibrary() {
     };
   }, [anime, catalog.length, data.engine, data.path]);
 
-  function setLibraryProgress({ processed, total, title }) {
+  function setLibraryProgress({ processed, total, title, label = 'Refreshing Library Metadata' }) {
     const percent = total ? Math.round((processed / total) * 50) : 0;
 
     setSyncProgress({
       step: 1,
       stepTotal: 2,
-      label: 'Refreshing Library Metadata',
+      label,
       processed,
       total,
       percent,
@@ -201,50 +241,83 @@ export function useAnimeLibrary() {
   }
 
   async function syncMetadata() {
-    const repairQueue = anime
-      .map((item, index) => ({ item, index }))
-      .filter(({ item }) => needsArtworkRepair(item));
+    const auditRows = anime.map((item, index) => ({
+      item,
+      index,
+      needsMetadata: shouldRefreshMetadata(item),
+      needsArtwork: needsArtworkRepair(item)
+    }));
 
-    const message = repairQueue.length
-      ? `Repair ${repairQueue.length} missing poster(s), refresh metadata, and build recommendation catalog? This can take a few minutes.`
-      : 'Refresh library metadata and build recommendation catalog? This can take a few minutes.';
+    const updateQueue = auditRows.filter((row) => row.needsMetadata);
+    const alreadyReady = auditRows.length - updateQueue.length;
+
+    const message = [
+      'Smart database update:',
+      '',
+      `• ${anime.length} titles scanned locally`,
+      `• ${alreadyReady} already have usable metadata/artwork`,
+      `• ${updateQueue.length} need Jikan metadata/artwork repair`,
+      '',
+      updateQueue.length
+        ? 'Only missing/dirty titles will hit Jikan.'
+        : 'No Jikan metadata refresh needed.',
+      '',
+      'Continue and build recommendation catalog / genomes?'
+    ].join('\n');
 
     if (!confirm(message)) return;
 
     setSyncing(true);
-    setSyncText('Starting update...');
-    setSyncProgress(emptyProgress);
+    setSyncText('Scanning local database...');
+    setSyncProgress({
+      ...emptyProgress,
+      label: 'Local Database Audit',
+      processed: alreadyReady,
+      total: anime.length,
+      percent: updateQueue.length ? 1 : 50,
+      current: `${alreadyReady} skipped locally`
+    });
 
     let nextAnime = [...anime];
 
-    const repairIndexes = repairQueue.map(({ index }) => index);
-    const orderedIndexes = [
-      ...repairIndexes,
-      ...anime.map((_, index) => index).filter((index) => !repairIndexes.includes(index))
-    ];
+    if (updateQueue.length) {
+      for (let passIndex = 0; passIndex < updateQueue.length; passIndex++) {
+        const { index } = updateQueue[passIndex];
+        const title = nextAnime[index].title;
+        const isRepair = needsArtworkRepair(nextAnime[index]);
 
-    for (let passIndex = 0; passIndex < orderedIndexes.length; passIndex++) {
-      const index = orderedIndexes[passIndex];
-      const title = nextAnime[index].title;
-      const isRepair = needsArtworkRepair(nextAnime[index]);
+        setLibraryProgress({
+          processed: passIndex + 1,
+          total: updateQueue.length,
+          title,
+          label: isRepair ? 'Repairing Artwork / Metadata' : 'Refreshing Missing Metadata'
+        });
 
-      setLibraryProgress({
-        processed: passIndex + 1,
-        total: orderedIndexes.length,
-        title
-      });
+        setSyncText(`${isRepair ? 'Repairing artwork' : 'Refreshing missing metadata'} ${passIndex + 1}/${updateQueue.length}: ${title}`);
 
-      setSyncText(`${isRepair ? 'Repairing artwork' : 'Refreshing metadata'} ${passIndex + 1}/${orderedIndexes.length}: ${title}`);
+        try {
+          const refreshed = await fetchMetadata(nextAnime[index]);
+          nextAnime[index] = setItemSyncStatus(refreshed, {
+            metadata: true,
+            poster: !needsArtworkRepair(refreshed),
+            dirty: false,
+            lastMetadataSync: new Date().toISOString()
+          });
+        } catch (error) {
+          console.warn('Metadata failed:', title, error);
+          nextAnime[index] = setItemSyncStatus(nextAnime[index], {
+            metadataError: error?.message || String(error),
+            lastMetadataAttempt: new Date().toISOString()
+          });
+        }
 
-      try {
-        nextAnime[index] = await fetchMetadata(nextAnime[index]);
-      } catch (error) {
-        console.warn('Metadata failed:', title, error);
+        const saved = await updateData({ ...data, anime: nextAnime });
+        nextAnime = [...(saved.anime || nextAnime)];
+        await sleep(isRepair ? 1750 : 1250);
       }
-
-      const saved = await updateData({ ...data, anime: nextAnime });
-      nextAnime = [...(saved.anime || nextAnime)];
-      await sleep(isRepair ? 1750 : 1250);
+    } else {
+      setSyncText(`Local scan complete — ${alreadyReady} titles skipped. No metadata calls needed.`);
+      await sleep(500);
     }
 
     const latest = await animeRepository.getDatabase();
@@ -265,9 +338,35 @@ export function useAnimeLibrary() {
       }
     });
 
-    setData(catalogResult.saved);
+    let savedData = catalogResult.saved;
 
-    const missing = nextAnime.filter((item) => needsArtworkRepair(item)).length;
+    if (window.JoeAnimeDB?.generateMissingGenomesForLibrary) {
+      setSyncProgress({
+        step: 2,
+        stepTotal: 2,
+        label: 'Generating Missing Genomes',
+        processed: 0,
+        total: savedData.anime?.length || 0,
+        percent: 95,
+        current: 'Local Genome audit first'
+      });
+
+      setSyncText('Checking local Genome coverage and generating only missing cards...');
+
+      const genomeResult = await window.JoeAnimeDB.generateMissingGenomesForLibrary(savedData.anime || [], {
+        limit: 0,
+        delayMs: 1200
+      });
+
+      if (!genomeResult?.ok) {
+        console.warn('Genome batch failed:', genomeResult);
+        setSyncText('Catalog updated, but Genome generation failed: ' + (genomeResult?.error || 'Unknown error'));
+      }
+    }
+
+    setData(savedData);
+
+    const missing = (savedData.anime || nextAnime).filter((item) => needsArtworkRepair(item)).length;
 
     setSyncProgress({
       step: 2,
@@ -281,11 +380,11 @@ export function useAnimeLibrary() {
 
     setSyncText(
       missing
-        ? `Done — ${missing} poster(s) still need manual art. Catalog updated.`
-        : 'Done — library and recommendation catalog refreshed!'
+        ? `Done — ${alreadyReady} skipped locally, ${updateQueue.length} refreshed, ${missing} poster(s) still need manual art. Catalog/genomes updated.`
+        : `Done — ${alreadyReady} skipped locally, ${updateQueue.length} refreshed. Catalog/genomes updated.`
     );
 
-    await sleep(1600);
+    await sleep(2200);
     setSyncing(false);
     setSyncText('');
     setSyncProgress(emptyProgress);

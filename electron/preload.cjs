@@ -1,6 +1,8 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('JoeAnimeDB', {
+  generateMissingGenomesForLibrary: (animeList, options) => ipcRenderer.invoke('genome:generateMissingForLibrary', animeList, options),
+  generateGenome: (title) => ipcRenderer.invoke('genome:generate', title),
   version: '4.3.1-sqlite',
   desktop: true,
   database: {
