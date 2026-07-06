@@ -18,6 +18,7 @@ import * as pack12 from './generated/generatedGenomeCards';
 import * as pack13 from '../modules/comedy/index';
 import * as pack14 from '../modules/horror/index';
 import * as pack15 from '../modules/romance/index';
+import { GOLD_STANDARD_GENOME_CARDS } from './gold/goldStandardGenomeCards';
 function mergeGenomeCardsByPriority(...groups) {
   const byId = new Map();
 
@@ -31,7 +32,6 @@ function mergeGenomeCardsByPriority(...groups) {
   return [...byId.values()];
 }
 
-import { GOLD_STANDARD_GENOME_CARDS } from './gold/goldStandardGenomeCards';
 import { buildAliasIndex, cardMatchesTitle, canonicalAnimeId, normalizeAnimeTitle } from '../titleAliases';
 
 export const GENOME_REGISTRY_VERSION = '0.2.0';
@@ -62,6 +62,7 @@ function normalizePack(value, source) {
 }
 
 const RAW_GENOME_REGISTRY = [
+  ...normalizePack(GOLD_STANDARD_GENOME_CARDS, 'src/ai/genome/gold/goldStandardGenomeCards.js#GOLD_STANDARD_GENOME_CARDS'),
   ...normalizePack(pack0.CORE25_EXPERT_GENOME_CARDS, 'src/ai/genome/core25/core25ExpertGenomePack.js#CORE25_EXPERT_GENOME_CARDS'),
   ...normalizePack(pack1.ENHANCED_BATTLE_PACK_2, 'src/ai/genome/enhanced/battle/pack2BattleShonen.js#ENHANCED_BATTLE_PACK_2'),
   ...normalizePack(pack2.ENHANCED_CLASSICS_PACK_9, 'src/ai/genome/enhanced/classics/pack9ClassicsFoundations.js#ENHANCED_CLASSICS_PACK_9'),

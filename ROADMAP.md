@@ -1,160 +1,35 @@
-\# 🗺 JoeAnimeDB Roadmap
-
-
-
-\---
-
-
-
-\# Version 3.x
-
-
-
-\## Dashboard
-
-
-
-\- Dashboard polish
-
-\- Better card layouts
-
-\- Animated UI
-
-\- Better statistics
-
-
-
-\---
-
-
-
-\## Library
-
-
-
-\- Improved filtering
-
-\- Better sorting
-
-\- Collection views
-
-\- Bulk editing
-
-
-
-\---
-
-
-
-\## Recommendations
-
-
-
-\- Rule-based recommendation engine
-
-\- Recommendation explanations
-
-\- Similar anime
-
-\- Hidden gems
-
-
-
-\---
-
-
-
-\## Tracking
-
-
-
-\- New Season Alerts
-
-\- Better watch statuses
-
-\- Optional season tracking
-
-\- Rewatch reminders
-
-
-
-\---
-
-
-
-\## Statistics
-
-
-
-\- Favorite studios
-
-\- Favorite genres
-
-\- Viewing history
-
-\- Time watched
-
-\- Anime Passport
-
-
-
-\---
-
-
-
-\# Version 4.0
-
-
-
-\## JoeAI
-
-
-
-Natural language assistant.
-
-
-
-Examples:
-
-
-
-> Recommend something like Bleach.
-
-
-
-> What should I rewatch?
-
-
-
-> What's my most underrated anime?
-
-
-
-> Which shows deserve a second chance?
-
-
-
-JoeAI understands your personal library.
-
-
-
-\---
-
-
-
-\# Future
-
-
-
-\- Cloud Sync
-
-\- Mobile companion
-
-\- Browser extension
-
-\- Discord Rich Presence
-
-\- Friend recommendations
-
-\- Community sharing (optional)
+# Roadmap
+
+## Current Focus
+
+- Expand Gold Genome Library from 20 toward 100 flagship titles.
+- Improve nearby/similar DNA recommendations.
+- Improve Trait Mixer ranking and confidence.
+- Make registry priority explicit and harder to break.
+- Continue metadata confidence improvements.
+
+## Near Term
+
+- Gold Genomes for more major anime.
+- Better recommendation confidence scoring.
+- Better "why this matches you" explanations.
+- UI polish for JoeAI recommendation cards.
+- Metadata resolver improvements for complex franchises.
+
+## Mid Term
+
+- Genome V2 reviewer.
+- Compare generated genomes against Gold standards.
+- Emotional similarity matching.
+- Theme similarity matching.
+- Pacing similarity matching.
+- Character archetype matching.
+- Worldbuilding similarity matching.
+
+## Long Term
+
+- Public release.
+- Optional cloud sync.
+- Community features if useful.
+- Larger curated genome library.
 

@@ -129,6 +129,7 @@ function normalizePack(value, source) {
 }
 
 const RAW_GENOME_REGISTRY = [
+  ...normalizePack(GOLD_STANDARD_GENOME_CARDS, 'src/ai/genome/gold/goldStandardGenomeCards.js#GOLD_STANDARD_GENOME_CARDS'),
 ${spreads.join('\n')}
 ];
 
