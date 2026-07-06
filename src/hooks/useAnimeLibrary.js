@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { countBy, filterAnime, score } from '../utils/animeUtils';
-import { fetchMetadata, isRemoteCover, needsArtworkRepair, sleep } from '../services/metadata';
+import { isRemoteCover, needsArtworkRepair, sleep } from '../services/metadata';
+import { fetchMetadataFromProvider, hasManualMetadataOverride } from '../services/metadataProvider';
 import { animeRepository } from '../repositories/animeRepository';
 import { updateCatalogMetadata } from '../services/catalogService';
 import seedData from '../data/animeSeed.json';
@@ -32,7 +33,7 @@ function metadataIsStale(item = {}) {
 }
 
 function shouldRefreshMetadata(item = {}) {
-  return needsArtworkRepair(item) || !hasGoodMetadata(item) || metadataIsStale(item) || item.syncStatus?.dirty;
+  return hasManualMetadataOverride(item) || needsArtworkRepair(item) || !hasGoodMetadata(item) || metadataIsStale(item) || item.syncStatus?.dirty;
 }
 
 function setItemSyncStatus(item = {}, patch = {}) {
@@ -296,7 +297,7 @@ export function useAnimeLibrary() {
         setSyncText(`${isRepair ? 'Repairing artwork' : 'Refreshing missing metadata'} ${passIndex + 1}/${updateQueue.length}: ${title}`);
 
         try {
-          const refreshed = await fetchMetadata(nextAnime[index]);
+          const refreshed = await fetchMetadataFromProvider(nextAnime[index]);
           nextAnime[index] = setItemSyncStatus(refreshed, {
             metadata: true,
             poster: !needsArtworkRepair(refreshed),

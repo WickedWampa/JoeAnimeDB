@@ -87,7 +87,99 @@ function stripJson(text = '') {
   return body;
 }
 
+
+function loadManualMetadataForGenerator(query) {
+  const overridePath = path.join(root, 'src', 'data', 'manualMetadataOverrides.js');
+
+  if (!fs.existsSync(overridePath)) return null;
+
+  const raw = fs.readFileSync(overridePath, 'utf8');
+  const key = String(query || '')
+    .toLowerCase()
+    .replace(/[:'"’“.!?]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const startToken = key.includes(' ') || key.includes('-')
+    ? '"' + key + '": {'
+    : key + ': {';
+
+  const lower = raw.toLowerCase();
+  let start = lower.indexOf(startToken.toLowerCase());
+
+  if (start === -1 && key === 'castlevania') {
+    start = lower.indexOf('castlevania: {');
+  }
+
+  if (start === -1) return null;
+
+  const blockStart = raw.indexOf('{', start);
+  let depth = 0;
+  let end = -1;
+
+  for (let i = blockStart; i < raw.length; i++) {
+    if (raw[i] === '{') depth++;
+    if (raw[i] === '}') depth--;
+    if (depth === 0) {
+      end = i;
+      break;
+    }
+  }
+
+  if (end === -1) return null;
+
+  const block = raw.slice(blockStart, end + 1);
+
+  function stringField(name) {
+    const match = block.match(new RegExp(name + "\\s*:\\s*[\"']([^\"']*)[\"']", 'i'));
+    return match ? match[1] : '';
+  }
+
+  function arrayField(name) {
+    const match = block.match(new RegExp(name + "\\s*:\\s*\\[([\\s\\S]*?)\\]", 'i'));
+    if (!match) return [];
+
+    return match[1]
+      .split(',')
+      .map((value) => value.trim().replace(/^["']|["']$/g, ''))
+      .filter(Boolean);
+  }
+
+  const title = stringField('title') || query;
+
+  return {
+    malId: null,
+    title,
+    titleEnglish: stringField('officialTitle') || title,
+    titleJapanese: '',
+    titleSynonyms: [],
+    synopsis: stringField('synopsis') || stringField('description'),
+    background: '',
+    year: null,
+    season: '',
+    type: stringField('type') || 'TV',
+    episodes: null,
+    status: stringField('status') || '',
+    score: null,
+    rating: '',
+    source: stringField('sourceMaterial') || 'Manual',
+    studios: [stringField('studio')].filter(Boolean),
+    genres: arrayField('genres'),
+    themes: arrayField('themes'),
+    demographics: [],
+    origin: stringField('origin') || 'manual',
+    metadataSource: 'manual'
+  };
+}
+
+
 async function fetchJikanTitle(query) {
+  const manual = loadManualMetadataForGenerator(query);
+  if (manual) {
+    console.log('Using manual metadata override for:', query);
+    return manual;
+  }
+
   const searchUrl = `https://api.jikan.moe/v4/anime?q=${encodeURIComponent(query)}&limit=1`;
   const search = await fetch(searchUrl).then((r) => r.json());
   const item = search?.data?.[0];

@@ -1,3 +1,4 @@
+import { fetchMetadataFromProvider, getManualMetadataForAnime, applyMetadataToAnime } from './metadataProvider';
 import { cleanTitle } from './metadata';
 import { enrichAnimeKnowledge } from '../ai/knowledge/knowledgeRegistry';
 
@@ -326,6 +327,23 @@ export async function searchAnimeCandidates(title, { limit = 8 } = {}) {
 }
 
 export async function importAnimeByTitle({ title, status = 'Watching', library = [] }) {
+  const manualMetadata = getManualMetadataForAnime(title);
+  if (manualMetadata) {
+    const candidate = applyMetadataToAnime({
+      title,
+      status,
+      addedFrom: 'manual metadata override'
+    }, manualMetadata);
+
+    const duplicate = findDuplicateAnime(library, candidate);
+
+    return {
+      candidate,
+      duplicate,
+      manualOverride: true
+    };
+  }
+
   const results = await searchAnimeCandidates(title, { limit: 5 });
   const candidate = results[0] || {
     id: `anime-${titleKey(title)}`,

@@ -1,6 +1,6 @@
 import { maybeKnowledgeFirstRecommendation } from './knowledgeFirstRecommender';
 import { maybeGenomeIntentRecommendation } from './joeAIIntentEngine';
-import { ACTIVE_GENOME_REGISTRY, findGenomeCardFromRegistry } from './genome/genomeRegistry';
+import { ACTIVE_GENOME_REGISTRY, findGenomeCardFromRegistry, findGenomeCardByTitle } from './genome/genomeRegistry';
 
 function norm(value = '') {
   return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
@@ -37,7 +37,7 @@ function mentionedGenomeCard(question = '') {
   // Avoid accidentally matching tiny titles or general words.
   const candidates = ACTIVE_GENOME_REGISTRY
     .map((card) => {
-      const names = [card.id, ...(card.titles || [])].filter(Boolean);
+      const names = [card.id, ...(card.titles || []), ...(card.aliases || [])].filter(Boolean);
       const best = names
         .map((name) => ({ name, clean: norm(name) }))
         .filter((entry) => entry.clean.length >= 4)
@@ -54,7 +54,7 @@ function mentionedGenomeCard(question = '') {
 
 function cardsFromIds(ids = []) {
   return ids
-    .map((id) => findGenomeCardFromRegistry(id))
+    .map((id) => findGenomeCardByTitle(id))
     .filter(Boolean);
 }
 
@@ -183,18 +183,20 @@ export function routeJoeAIRecommendation(question = '', anime = [], catalog = []
     const smart = maybeKnowledgeFirstRecommendation(question, anime, catalog);
     if (smart && !/^I heard:.+could not find/i.test(smart)) return smart;
 
-    const sourceCard = findGenomeCardFromRegistry(similarTitle);
+    const sourceCard = findGenomeCardByTitle(similarTitle);
     if (sourceCard) return formatSimilarGenomeAnswer(sourceCard);
   }
 
-  // 2. Mood/vibe requests should beat title lookup.
-  // Example: "I want horror" should mean horror recommendations, not title lookup for a fake "horror" card.
+  // 2. Known title lookup should beat mood/vibe routing.
+  // Example: "recommend Blue Eye Samurai" should show that card,
+  // not fall through to generic samurai/cyberpunk recommendations.
+  const card = findGenomeCardByTitle(question) || mentionedGenomeCard(question);
+  if (card) return formatTitleGenomeAnswer(card);
+
+  // 3. Mood/vibe requests only happen after known-title lookup fails.
+  // Example: "I want horror" should still mean horror recommendations.
   const intent = maybeGenomeIntentRecommendation(question);
   if (intent) return intent;
-
-  // 3. Direct title mention: "recommend Space Dandy" / "tell me about Higurashi".
-  const card = mentionedGenomeCard(question);
-  if (card) return formatTitleGenomeAnswer(card);
 
   // 4. Existing Knowledge/Genome pipeline for any remaining recommendation wording.
   const smart = maybeKnowledgeFirstRecommendation(question, anime, catalog);

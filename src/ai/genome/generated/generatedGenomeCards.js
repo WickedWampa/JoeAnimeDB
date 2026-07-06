@@ -1,8 +1,266 @@
 // Auto-generated provisional Genome Cards.
-// This file is maintained by scripts/generateGenomeCardForTitle.cjs
-// Cards here should be reviewed before being promoted to enhanced/expert modules.
+// This file is maintained by JoeAnimeDB tools.
+// Cards here should be reviewed before being promoted to curated modules.
 
 export const GENERATED_GENOME_CARDS = [
+  {
+    "id": "arcane",
+    "titles": [
+      "Arcane"
+    ],
+    "quality": "generated",
+    "generationQuality": "manual-override",
+    "confidence": 0.92,
+    "generated": true,
+    "needsReview": false,
+    "origin": "western-anime-style",
+    "domain": "anime-adjacent tragedy / political fantasy",
+    "subdomain": "class conflict, sisters, technology, trauma, and revolution",
+    "signature": "Arcane is anime-adjacent prestige animation: a tragic sister story wrapped in class conflict, crime, magic-tech, and political collapse.",
+    "coreFantasy": "Watch two sisters become symbols of opposite worlds while a city tears itself apart through trauma, invention, power, and revenge.",
+    "fantasyPillars": [
+      "sister tragedy",
+      "class conflict",
+      "magic technology",
+      "political unrest",
+      "stylized action"
+    ],
+    "rewardLoop": [
+      "character bond",
+      "political pressure",
+      "personal trauma",
+      "visual spectacle",
+      "tragic consequence"
+    ],
+    "viewerType": [
+      "emotional drama fan",
+      "stylish animation fan",
+      "political fantasy fan",
+      "tragic character arc fan"
+    ],
+    "viewerMotivations": [
+      "emotional damage",
+      "sister drama",
+      "class conflict",
+      "stylish action",
+      "political fantasy"
+    ],
+    "themes": [
+      "trauma",
+      "sisters",
+      "class conflict",
+      "technology",
+      "identity",
+      "power"
+    ],
+    "atmosphere": [
+      "industrial",
+      "neon",
+      "violent",
+      "melancholic"
+    ],
+    "vibes": {
+      "action": 8,
+      "emotional": 10,
+      "dark": 8,
+      "sciFi": 7,
+      "drama": 10
+    },
+    "joeNote": "Manual override: anime-adjacent, not Japanese anime, but relevant to JoeAI recommendations.",
+    "aliases": [
+      "Arcane: League of Legends"
+    ]
+  },
+  {
+    "id": "blue-eye-samurai",
+    "titles": [
+      "Blue Eye Samurai"
+    ],
+    "quality": "generated",
+    "generationQuality": "manual-override",
+    "confidence": 0.9,
+    "generated": true,
+    "needsReview": false,
+    "origin": "western-anime-style",
+    "domain": "anime-adjacent revenge samurai drama",
+    "subdomain": "identity, violence, outsider rage, and Edo-period revenge",
+    "signature": "Blue Eye Samurai is a brutal revenge samurai story about identity, obsession, violence, and being treated as a monster by the world.",
+    "coreFantasy": "Cut through an unforgiving world with skill, rage, and secrecy while chasing revenge against the people who made you an outsider.",
+    "fantasyPillars": [
+      "revenge quest",
+      "samurai violence",
+      "outsider identity",
+      "hidden self",
+      "bloody mastery"
+    ],
+    "rewardLoop": [
+      "enemy lead",
+      "disguise tension",
+      "duel",
+      "reveal",
+      "revenge step forward"
+    ],
+    "viewerType": [
+      "samurai fan",
+      "revenge arc fan",
+      "mature animation fan",
+      "identity drama fan"
+    ],
+    "viewerMotivations": [
+      "revenge",
+      "samurai action",
+      "identity drama",
+      "stylish violence",
+      "mature storytelling"
+    ],
+    "themes": [
+      "identity",
+      "revenge",
+      "racism",
+      "violence",
+      "outsider",
+      "survival"
+    ],
+    "atmosphere": [
+      "sharp",
+      "bloody",
+      "period-drama",
+      "melancholic"
+    ],
+    "vibes": {
+      "action": 8,
+      "dark": 8,
+      "drama": 9,
+      "historical": 8,
+      "emotional": 7
+    },
+    "joeNote": "Manual override: anime-adjacent Western animation. Keep distinct from Jikan title collisions.",
+    "aliases": [
+      "blue eye samurai",
+      "blue-eye samurai",
+      "BES"
+    ]
+  },
+  {
+    "id": "castlevania",
+    "titles": [
+      "Castlevania"
+    ],
+    "quality": "generated",
+    "generationQuality": "manual-override",
+    "confidence": 0.9,
+    "generated": true,
+    "needsReview": false,
+    "origin": "western-anime-style",
+    "source": {
+      "metadata": "manual",
+      "generator": "manual-override",
+      "model": null
+    },
+    "domain": "western anime-style dark fantasy",
+    "subdomain": "vampire revenge, gothic horror, monster hunting, and supernatural war",
+    "signature": "Castlevania is anime-adjacent dark fantasy: brutal vampire action, gothic horror, monster hunting, and stylish Powerhouse animation built from Konami’s game world.",
+    "coreFantasy": "Stand against Dracula’s nightmare with hunters, magic, bloodlines, and cursed family drama in a world where humanity and monsters are both terrifying.",
+    "fantasyPillars": [
+      "vampire war",
+      "gothic horror",
+      "monster hunting",
+      "dark fantasy action",
+      "tragic villains"
+    ],
+    "emotionalJourney": [
+      "rage",
+      "grief",
+      "vengeance",
+      "defiance",
+      "grim catharsis"
+    ],
+    "rewardLoop": [
+      "monster threat",
+      "bloody fight",
+      "dark lore reveal",
+      "character trauma",
+      "stylish payoff"
+    ],
+    "dopamineSources": [
+      "vampire violence",
+      "magic battles",
+      "gothic atmosphere",
+      "monster designs",
+      "Alucard/Trevor/Sypha chemistry"
+    ],
+    "viewerType": [
+      "dark fantasy fan",
+      "vampire fan",
+      "action horror fan",
+      "anime-adjacent animation fan"
+    ],
+    "viewerMotivations": [
+      "dark fantasy",
+      "vampires",
+      "stylish action",
+      "gothic horror",
+      "monster hunting",
+      "bloody supernatural drama"
+    ],
+    "themes": [
+      "revenge",
+      "family trauma",
+      "religious corruption",
+      "human cruelty",
+      "monsters",
+      "legacy",
+      "survival"
+    ],
+    "emotionalProfile": [
+      "violent",
+      "grim",
+      "gothic",
+      "angry",
+      "tragic"
+    ],
+    "atmosphere": [
+      "bloody",
+      "dark",
+      "gothic",
+      "hellish",
+      "stylized"
+    ],
+    "vibes": {
+      "action": 9,
+      "dark": 9,
+      "fantasy": 8,
+      "horror": 8,
+      "emotional": 6
+    },
+    "pacing": "high pressure",
+    "complexity": 6,
+    "accessibility": "Easy to get into if you like dark fantasy action. Anime-adjacent rather than Japanese anime.",
+    "idealFollowUps": [
+      "Claymore",
+      "Hellsing Ultimate",
+      "Vampire Hunter D",
+      "Berserk",
+      "Dorohedoro"
+    ],
+    "antiRecommendations": [
+      "Skip if you want traditional school anime or cozy fantasy."
+    ],
+    "recommendationWeight": 0.74,
+    "rewatchValue": "Strong for action scenes, atmosphere, and favorite character moments.",
+    "whyFansLove": [
+      "the fights are brutal and stylish",
+      "the gothic vampire atmosphere works",
+      "Trevor, Sypha, and Alucard have great chemistry",
+      "the villains feel tragic instead of flat"
+    ],
+    "whoShouldWatch": "Viewers who like dark fantasy, vampires, stylish violence, gothic horror, and anime-adjacent animation.",
+    "whoShouldAvoid": "Skip it if you only want Japan-produced anime, low violence, or light fantasy.",
+    "joeNote": "Manual override: not technically Japanese anime, but it belongs in JoeAnimeDB as anime-adjacent dark fantasy for recommendation purposes.",
+    "aliases": [
+      "Netflix Castlevania"
+    ]
+  },
   {
     "id": "made-in-abyss",
     "titles": [
