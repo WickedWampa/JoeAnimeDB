@@ -1,4 +1,3 @@
-import { findGenomeCardByTitle } from './genome/genomeRegistry';
 export function normalizeStatus(value = '') {
   const lower = String(value).toLowerCase();
 
@@ -72,39 +71,6 @@ function parseTitles(value = '') {
   )];
 }
 
-
-
-// PATCH_0038_ONE_BRAIN_ROUTER
-// Known titles should always use the Genome/Gold recommendation path.
-// This prevents bare lookups like "slime" from falling into the older short-answer path
-// while "recommend slime" correctly uses the rich Gold card.
-function cleanKnownTitleQueryForGenome(value = '') {
-  return String(value || '')
-    .trim()
-    .replace(/[?!.,]+$/g, '')
-    .replace(/^s*(pleases+)?(recommend|tell me about|what is|what's|whats|who is|should i watch|why should i watch|is|about)s+/i, '')
-    .replace(/^s*(anime|show|series)s+/i, '')
-    .replace(/s+(anime|show|series)s*$/i, '')
-    .trim();
-}
-
-function isKnownGenomeTitleQuery(value = '') {
-  const raw = String(value || '').trim();
-  if (!raw) return false;
-
-  const cleaned = cleanKnownTitleQueryForGenome(raw);
-  if (!cleaned || cleaned.length < 3) return false;
-
-  // Avoid turning ordinary broad moods into title lookups.
-  const broadWords = new Set([
-    'action', 'adventure', 'fantasy', 'isekai', 'romance', 'comedy', 'horror',
-    'sports', 'mecha', 'sci fi', 'sci-fi', 'dark', 'funny', 'sad', 'new anime'
-  ]);
-  if (broadWords.has(cleaned.toLowerCase())) return false;
-
-  return Boolean(findGenomeCardByTitle(cleaned) || findGenomeCardByTitle(raw));
-}
-
 export function parseJoeAIIntent(input = '') {
   const raw = String(input).trim();
   if (!raw) return { kind: 'empty' };
@@ -114,16 +80,7 @@ export function parseJoeAIIntent(input = '') {
 
   // SPRINT4_SIMILARITY_GUARD_V3
   if (/\b(like|similar to|something like|anime like|show like|shows like)\b/i.test(raw)) {
-  
-  // PATCH_0038_ONE_BRAIN_ROUTER
-  // If the user types a known title directly ("slime", "re zero") or asks a simple
-  // title question ("what is slime"), route it through the same Gold/Genome path as
-  // "recommend slime".
-  if (isKnownGenomeTitleQuery(raw)) {
-    return { kind: 'recommendation' };
-  }
-
-  return { kind: 'question', text: raw };
+    return { kind: 'question', text: raw };
   }
 
   // SPRINT4_SIMILARITY_GUARD

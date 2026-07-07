@@ -95,11 +95,24 @@ export function cardMatchesTitle(card = {}, query = '') {
 export function buildAliasIndex(cards = []) {
   const index = new Map();
 
+  // Registry order is priority order:
+  // Gold packs come first, then Core/Enhanced/Generated packs.
+  // Do not let lower-priority packs overwrite an alias that a Gold card
+  // already claimed. This fixes bare title lookups like "slime" and
+  // "re zero" returning short enhanced/core cards while
+  // "recommend slime" correctly returns the Gold card.
+  function claim(key, card) {
+    if (!key) return;
+    if (!index.has(key)) {
+      index.set(key, card);
+    }
+  }
+
   for (const card of cards) {
     for (const alias of cardAliases(card)) {
       for (const candidate of titleCandidates(alias)) {
-        index.set(normalizeAnimeTitle(candidate), card);
-        index.set(canonicalAnimeId(candidate), card);
+        claim(normalizeAnimeTitle(candidate), card);
+        claim(canonicalAnimeId(candidate), card);
       }
     }
   }
