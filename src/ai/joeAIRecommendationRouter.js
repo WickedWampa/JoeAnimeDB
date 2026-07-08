@@ -58,6 +58,194 @@ function cardsFromIds(ids = []) {
     .filter(Boolean);
 }
 
+function itemKey(item = {}) {
+  return String(item.malId || item.id || item.title || '').toLowerCase();
+}
+
+function textBlob(item = {}) {
+  return norm([
+    item.title,
+    item.officialTitle,
+    item.studio,
+    item.synopsis,
+    item.description,
+    ...(item.genres || []),
+    ...(item.themes || []),
+    ...(item.tags || []),
+    ...(item.viewerMotivations || []),
+    ...(item.fantasyPillars || [])
+  ].filter(Boolean).join(' '));
+}
+
+function extractBroadRecommendationIntent(question = '') {
+  const q = norm(question);
+  const isRecommendation = /\b(recommend|watch|show me|find|give me|suggest|pick)\b/i.test(question);
+  if (!isRecommendation) return null;
+
+  const studioMatch = String(question).match(/\bfrom\s+([A-Za-z0-9 .&'-]+)\s*$/i);
+  const studio = studioMatch?.[1]?.trim();
+
+  if (/hidden gems?|underrated|under rated/.test(q)) {
+    return {
+      mode: 'hiddenGems',
+      label: studio ? `Hidden gems from ${studio}` : 'Hidden gems',
+      studio,
+      keywords: ['underrated', 'hidden gem', 'cult', 'unique', 'original', 'mystery', 'seinen', 'adventure']
+    };
+  }
+
+  const moodProfiles = [
+    {
+      id: 'dark',
+      label: 'Something darker',
+      test: /\b(dark|darker|gritty|violent|brutal|gory|horror|scary|creepy)\b/,
+      keywords: ['dark', 'horror', 'psychological', 'thriller', 'seinen', 'supernatural', 'mystery', 'gore', 'violence', 'demons', 'survival']
+    },
+    {
+      id: 'funny',
+      label: 'Something funny',
+      test: /\b(funny|comedy|hilarious|laugh)\b/,
+      keywords: ['comedy', 'parody', 'absurd', 'funny', 'slice of life', 'gag', 'lighthearted']
+    },
+    {
+      id: 'emotional',
+      label: 'Something emotional',
+      test: /\b(emotional|sad|tearjerker|heartbreaking|cry|drama)\b/,
+      keywords: ['drama', 'emotional', 'tragedy', 'coming of age', 'romance', 'family', 'friendship']
+    },
+    {
+      id: 'cozy',
+      label: 'Something cozy',
+      test: /\b(cozy|comfort|comforting|wholesome|chill|relaxing|feel good|feelgood)\b/,
+      keywords: ['slice of life', 'wholesome', 'comedy', 'iyashikei', 'family', 'food', 'friendship', 'relaxing']
+    },
+    {
+      id: 'strategy',
+      label: 'Something strategic',
+      test: /\b(strategy|politics|political|mind games|psychological|genius|manipulation)\b/,
+      keywords: ['strategy', 'political', 'psychological', 'mind game', 'military', 'tactics', 'thriller']
+    },
+    {
+      id: 'sports',
+      label: 'Sports / competition anime',
+      test: /\b(sports|competition|training|underdog|rivalry|mastery)\b/,
+      keywords: ['sports', 'competition', 'training', 'rivalry', 'team', 'school']
+    },
+    {
+      id: 'short',
+      label: 'A short binge',
+      test: /\b(short|quick|under 24|under twenty four|one cour|12 episodes|twelve episodes)\b/,
+      keywords: ['short', '12 eps', '11 eps', '13 eps']
+    },
+    {
+      id: 'movie',
+      label: 'Anime movies',
+      test: /\b(movie|film)\b/,
+      keywords: ['movie', 'film']
+    }
+  ];
+
+  const profile = moodProfiles.find((entry) => entry.test.test(q));
+  if (!profile && !studio) return null;
+
+  return profile ? { ...profile, studio } : {
+    id: 'studio',
+    label: `Shows from ${studio}`,
+    studio,
+    keywords: []
+  };
+}
+
+function scoreMoodItem(item = {}, intent = {}, owned = false) {
+  const blob = textBlob(item);
+  let score = owned ? 8 : 0;
+
+  if (intent.studio && norm(item.studio).includes(norm(intent.studio))) score += 45;
+  if (intent.id === 'short') {
+    const eps = Number(item.episodeCount || item.episodes || 0);
+    if (eps > 0 && eps <= 13) score += 42;
+    else if (eps > 0 && eps <= 24) score += 20;
+  }
+  if (intent.id === 'movie') {
+    if (/\b(movie|film)\b/i.test(String(item.type || ''))) score += 50;
+    if (Number(item.episodeCount || item.episodes || 0) === 1) score += 25;
+  }
+
+  for (const keyword of intent.keywords || []) {
+    const key = norm(keyword);
+    if (key && blob.includes(key)) score += 18;
+  }
+
+  const mal = Number(item.communityScore || item.malScore || 0);
+  if (mal) score += Math.min(16, Math.max(0, mal - 6) * 5);
+
+  // Hidden gems should not just be the most obvious mega-franchises.
+  if (intent.mode === 'hiddenGems' || intent.id === 'hiddenGems') {
+    const title = norm(item.title || item.officialTitle || '');
+    if (/demon slayer|one piece|naruto|bleach|dragon ball|jujutsu kaisen/.test(title)) score -= 25;
+  }
+
+  return score;
+}
+
+function moodBlurb(item = {}, intent = {}) {
+  const name = item.officialTitle || item.title || 'This pick';
+  if (intent.id === 'dark') return `${name} leans into heavier atmosphere, tension, and sharper stakes — a better fit when you want something darker than the usual comfort pick.`;
+  if (intent.id === 'funny') return `${name} looks like a strong pick when you want comedy first and plot pressure second.`;
+  if (intent.id === 'emotional') return `${name} should hit more on character emotion and dramatic payoff than pure action.`;
+  if (intent.id === 'cozy') return `${name} looks like a lower-stress comfort pick with warmer vibes.`;
+  if (intent.id === 'strategy') return `${name} should scratch the planning, tactics, and mind-game itch.`;
+  if (intent.id === 'sports') return `${name} fits the training, rivalry, and growth-loop side of anime.`;
+  if (intent.mode === 'hiddenGems' || intent.id === 'hiddenGems') return `${name} stands out as a less-obvious pick that may be worth surfacing from the catalog.`;
+  return `${name} matches the request better than a generic recommendation because its metadata overlaps with what you asked for.`;
+}
+
+function formatMoodRecommendationCards(intent, anime = [], catalog = []) {
+  const ownedKeys = new Set(anime.map(itemKey));
+  const pool = [...anime, ...catalog]
+    .filter((item, index, arr) => {
+      const key = itemKey(item);
+      return key && arr.findIndex((other) => itemKey(other) === key) === index;
+    });
+
+  const scored = pool
+    .map((item) => {
+      const owned = ownedKeys.has(itemKey(item));
+      const rawScore = scoreMoodItem(item, intent, owned);
+      const match = Math.max(60, Math.min(98, Math.round(rawScore + 45)));
+      const tags = (intent.keywords || [])
+        .filter((keyword) => textBlob(item).includes(norm(keyword)))
+        .slice(0, 5);
+
+      return {
+        ...item,
+        owned,
+        bucket: owned ? 'library' : 'discovery',
+        match,
+        tags: tags.length ? tags : (item.genres || []).slice(0, 4),
+        blurb: moodBlurb(item, intent),
+        deepDive: [
+          `Mood request: ${intent.label}`,
+          intent.studio ? `Studio filter: ${intent.studio}` : '',
+          `JoeAI matched this using metadata, genres, themes, studio, episode count, and library ownership.`,
+          `This is a broad recommendation mode, not a title-similarity Genome match yet.`
+        ].filter(Boolean).join('\n')
+      };
+    })
+    .filter((item) => item.match >= 68)
+    .sort((a, b) => b.match - a.match)
+    .slice(0, 10);
+
+  if (!scored.length) return null;
+
+  return {
+    type: 'recommendationCards',
+    title: `🍜 ${intent.label}`,
+    subtitle: 'JoeAI treated this as a mood/theme request instead of a title lookup.',
+    items: scored
+  };
+}
+
 function scoreRelatedCards(sourceCard) {
   const preferred = cardsFromIds(sourceCard.idealFollowUps || sourceCard.successors || []);
 
@@ -176,6 +364,10 @@ function formatTitleGenomeAnswer(card) {
 }
 
 export function routeJoeAIRecommendation(question = '', anime = [], catalog = []) {
+  // 0. Broad mood/theme recommendation requests should not fall through to title lookup.
+  // Example: "recommend something darker" should never become "JoeAI Knows: Space Dandy".
+  const broadIntent = extractBroadRecommendationIntent(question);
+
   // 1. Similarity requests need title-aware recommendation first.
   // Example: "recommend something like Higurashi"
   const similarTitle = extractSimilarityTitle(question);
@@ -185,6 +377,12 @@ export function routeJoeAIRecommendation(question = '', anime = [], catalog = []
 
     const sourceCard = findGenomeCardByTitle(similarTitle);
     if (sourceCard) return formatSimilarGenomeAnswer(sourceCard);
+  }
+
+  if (broadIntent) {
+    const moodCards = formatMoodRecommendationCards(broadIntent, anime, catalog);
+    if (moodCards) return moodCards;
+    return null;
   }
 
   // 2. Known title lookup should beat mood/vibe routing.

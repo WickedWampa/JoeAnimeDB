@@ -1,4 +1,4 @@
-import { importAnimeByTitle, mergeAnimeMetadata, findLocalTitleMatches } from '../services/animeImporter';
+import { importAnimeByTitle, mergeAnimeMetadata, findLocalTitleMatches, searchAnimeCandidates } from '../services/animeImporter';
 import { answerLibraryQuestion } from './libraryIntelligence';
 import { maybeSimilarRecommendation } from './similarityEngine';
 import { maybeKnowledgeFirstRecommendation } from './knowledgeFirstRecommender';
@@ -18,18 +18,25 @@ export function makeBulkResult({ added = [], skipped = [], failed = [] }) {
 }
 
 export function makeCandidateSelectionResult({ title, status = 'Watching', candidates = [], source = 'local' }) {
+  const hasRemote = candidates.some((item) => item.candidateSource === 'remote');
+  const hasLocal = candidates.some((item) => item.candidateSource === 'local' || item.isLocal);
+
   return {
     type: 'candidateSelection',
-    title: source === 'remote'
-      ? '🍜 I found a few possible anime'
-      : '🍜 I found multiple local matches',
-    text: source === 'remote'
-      ? `Which “${title}” did you mean? I will add the one you pick as ${status}.`
-      : `Which “${title}” did you mean? I will update the one you pick as ${status}.`,
+    title: hasLocal && hasRemote
+      ? '🍜 I found local and remote matches'
+      : source === 'remote'
+        ? '🍜 I found a few possible anime'
+        : '🍜 I found multiple local matches',
+    text: hasLocal && hasRemote
+      ? `Which “${title}” did you mean? Local titles update instantly; remote titles will be added as ${status}.`
+      : source === 'remote'
+        ? `Which “${title}” did you mean? I will add the one you pick as ${status}.`
+        : `Which “${title}” did you mean? I will update the one you pick as ${status}.`,
     status,
     originalTitle: title,
     source,
-    candidates: candidates.slice(0, 8).map((item) => ({
+    candidates: candidates.slice(0, 12).map((item) => ({
       id: item.id,
       malId: item.malId,
       title: item.title,
@@ -51,6 +58,8 @@ export function makeCandidateSelectionResult({ title, status = 'Watching', candi
       importLabel: item.importLabel,
       importConfidence: item.importConfidence,
       importScore: item.importScore,
+      isLocal: Boolean(item.isLocal || item.candidateSource === 'local'),
+      candidateSource: item.candidateSource || (item.isLocal ? 'local' : source),
       matchScore: item.matchScore || item.importConfidence,
       matchReason: item.matchReason || item.importLabel || 'Possible match'
     }))
@@ -88,6 +97,63 @@ function shouldAskRemoteCandidateSelection(query, results = []) {
   });
 
   return plausible.length > 1;
+}
+
+function candidateIdentity(item = {}) {
+  return String(item.malId || item.id || item.officialTitle || item.title || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '');
+}
+
+function mergeCandidateLists(localCandidates = [], remoteCandidates = []) {
+  const merged = [];
+  const seen = new Set();
+
+  const add = (item, source) => {
+    if (!item) return;
+    const key = candidateIdentity(item);
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+
+    const isLocal = source === 'local';
+    merged.push({
+      ...item,
+      isLocal,
+      candidateSource: source,
+      matchReason: item.matchReason || item.importLabel || (isLocal ? 'In your library' : 'Remote metadata match'),
+      matchScore: item.matchScore || item.importConfidence || (isLocal ? 90 : 60)
+    });
+  };
+
+  localCandidates.forEach((item) => add(item, 'local'));
+  remoteCandidates.forEach((item) => add(item, 'remote'));
+
+  return merged.sort((a, b) => {
+    const aLocal = a.candidateSource === 'local' ? 1 : 0;
+    const bLocal = b.candidateSource === 'local' ? 1 : 0;
+    const aExact = /exact/i.test(a.matchReason || a.importLabel || '') ? 1 : 0;
+    const bExact = /exact/i.test(b.matchReason || b.importLabel || '') ? 1 : 0;
+    const aTv = String(a.type || '').toLowerCase() === 'tv' ? 1 : 0;
+    const bTv = String(b.type || '').toLowerCase() === 'tv' ? 1 : 0;
+
+    return (bLocal - aLocal) ||
+      (bExact - aExact) ||
+      Number(b.matchScore || 0) - Number(a.matchScore || 0) ||
+      (bTv - aTv) ||
+      String(a.officialTitle || a.title || '').localeCompare(String(b.officialTitle || b.title || ''));
+  });
+}
+
+async function buildLocalPlusRemoteCandidates(title, localCandidates = []) {
+  let remoteCandidates = [];
+
+  try {
+    remoteCandidates = await searchAnimeCandidates(title, { limit: 10 });
+  } catch (error) {
+    console.warn('Remote candidate enrichment failed, using local matches only:', title, error);
+  }
+
+  return mergeCandidateLists(localCandidates, remoteCandidates);
 }
 
 
@@ -133,6 +199,26 @@ export async function executeSingleAddCommand({ anime = [], updateAnime, command
   const shorthandMatches = localMatches.shorthand || [];
   const relatedMatches = localMatches.related || [];
 
+  // Exact title is usually safe, but some franchises are ambiguous even when the
+  // base title exists locally. Example: "Dragon Ball" can mean Dragon Ball,
+  // Dragon Ball Z, Dragon Ball Super, etc. If exact + related local matches exist,
+  // ask instead of silently updating the base franchise entry.
+  const franchiseCandidates = [...exactMatches, ...shorthandMatches, ...relatedMatches]
+    .filter((item, index, list) => {
+      const key = item.id || item.malId || normalizeKey(item.officialTitle || item.title || '');
+      return key && list.findIndex((other) => (other.id || other.malId || normalizeKey(other.officialTitle || other.title || '')) === key) === index;
+    });
+
+  if (exactMatches.length === 1 && franchiseCandidates.length > 1) {
+    const candidates = await buildLocalPlusRemoteCandidates(command.title, franchiseCandidates);
+    return makeCandidateSelectionResult({
+      title: command.title,
+      status: command.status || 'Watching',
+      candidates,
+      source: candidates.some((item) => item.candidateSource === 'remote') ? 'mixed' : 'local'
+    });
+  }
+
   if (exactMatches.length === 1) {
     const existing = exactMatches[0];
     const merged = mergeAnimeMetadata(existing, { ...existing, status: command.status || existing.status }, command.status || existing.status);
@@ -141,7 +227,8 @@ export async function executeSingleAddCommand({ anime = [], updateAnime, command
   }
 
   if (exactMatches.length > 1) {
-    return makeCandidateSelectionResult({ title: command.title, status: command.status || 'Watching', candidates: exactMatches });
+    const candidates = await buildLocalPlusRemoteCandidates(command.title, exactMatches);
+    return makeCandidateSelectionResult({ title: command.title, status: command.status || 'Watching', candidates, source: candidates.some((item) => item.candidateSource === 'remote') ? 'mixed' : 'local' });
   }
 
   // Safe shorthand: one-word request like "Frieren" can update one obvious local match.
@@ -156,7 +243,8 @@ export async function executeSingleAddCommand({ anime = [], updateAnime, command
 
   const ambiguousCandidates = [...shorthandMatches, ...relatedMatches];
   if (ambiguousCandidates.length > 1) {
-    return makeCandidateSelectionResult({ title: command.title, status: command.status || 'Watching', candidates: ambiguousCandidates });
+    const candidates = await buildLocalPlusRemoteCandidates(command.title, ambiguousCandidates);
+    return makeCandidateSelectionResult({ title: command.title, status: command.status || 'Watching', candidates, source: candidates.some((item) => item.candidateSource === 'remote') ? 'mixed' : 'local' });
   }
 
   const result = await importAnimeByTitle({

@@ -43,6 +43,7 @@ export function Assistant({ anime, catalog = [], updateAnime }) {
   const [text, setText] = useState('');
   const [addingId, setAddingId] = useState('');
   const [pendingAction, setPendingAction] = useState(null);
+  const [expandedRecommendationIds, setExpandedRecommendationIds] = useState({});
 
   function animeId(item) {
     return String(item?.malId || item?.id || item?.title || '')
@@ -190,6 +191,25 @@ export function Assistant({ anime, catalog = [], updateAnime }) {
     return lower.includes('recommend') || lower.includes('next') || lower.includes('watch') || lower.includes('new anime');
   }
 
+  function appendBotResult(result) {
+    if (!result) return;
+
+    if (typeof result === 'string') {
+      setLog((current) => [...current, { who: 'bot', type: 'text', text: result }]);
+      return;
+    }
+
+    setLog((current) => [...current, { who: 'bot', ...result }]);
+  }
+
+  function toggleRecommendationWhy(id) {
+    setExpandedRecommendationIds((current) => ({
+      ...current,
+      [id]: !current[id]
+    }));
+  }
+
+
   async function addAnimeToLibrary(input) {
     const id = 'anime-' + animeId(input);
     setAddingId(id);
@@ -324,7 +344,7 @@ export function Assistant({ anime, catalog = [], updateAnime }) {
       const smartAnswer = routeJoeAIRecommendation(q, anime, catalog);
 
       if (smartAnswer) {
-        setLog((current) => [...current, { who: 'bot', type: 'text', text: smartAnswer }]);
+        appendBotResult(smartAnswer);
         return;
       }
 
@@ -347,7 +367,7 @@ export function Assistant({ anime, catalog = [], updateAnime }) {
 
     const smartAnswer = routeJoeAIRecommendation(q, anime, catalog);
     if (smartAnswer) {
-      setLog((current) => [...current, { who: 'bot', type: 'text', text: smartAnswer }]);
+      appendBotResult(smartAnswer);
       return;
     }
 
@@ -553,6 +573,9 @@ export function Assistant({ anime, catalog = [], updateAnime }) {
                   <div className="joeaiRecTopline">
                     {item.matchScore && <span className="joeaiMatchBadge">{item.matchScore}%</span>}
                     <span className="joeaiMatchLabel">{item.matchReason || 'Possible match'}</span>
+                    {item.candidateSource && (
+                      <span className="joeaiMatchLabel">{item.candidateSource === 'local' ? 'In Library' : 'Remote'}</span>
+                    )}
                   </div>
                   <h3>{displayTitle}</h3>
                   <div className="joeaiRecMeta">
@@ -561,6 +584,7 @@ export function Assistant({ anime, catalog = [], updateAnime }) {
                     {item.episodeCount && !item.episodes && <span>{item.episodeCount} eps</span>}
                     {item.studio && <span>{item.studio}</span>}
                     {item.status && <span>{item.status}</span>}
+                    {item.candidateSource === 'remote' && <span>not in library yet</span>}
                   </div>
                   <div className="joeaiRecActions">
                     <button
@@ -584,6 +608,226 @@ export function Assistant({ anime, catalog = [], updateAnime }) {
     );
   }
 
+
+  function sourceTitleFromMessage(message = {}) {
+    const titleText = String(message.title || '');
+    const match = titleText.match(/because you like\s+(.+)$/i);
+    return match?.[1]?.trim() || 'that show';
+  }
+
+  function cleanTraitLabel(value = '') {
+    return String(value || '')
+      .replace(/^Curated knowledge match$/i, 'Curated Match')
+      .replace(/gold standard audience-fantasy profile/i, 'Gold Genome Match')
+      .replace(/^same subdomain:\s*/i, '')
+      .replace(/^shared themes:\s*/i, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function traitEmoji(tag = '') {
+    const lower = String(tag).toLowerCase();
+    if (lower.includes('sword') || lower.includes('combat')) return '⚔️';
+    if (lower.includes('demon') || lower.includes('curse') || lower.includes('horror')) return '👹';
+    if (lower.includes('magic') || lower.includes('supernatural')) return '✨';
+    if (lower.includes('kingdom') || lower.includes('leadership') || lower.includes('politic')) return '👑';
+    if (lower.includes('world') || lower.includes('adventure')) return '🌍';
+    if (lower.includes('friend') || lower.includes('family') || lower.includes('community')) return '🤝';
+    if (lower.includes('power') || lower.includes('action')) return '💥';
+    if (lower.includes('comedy') || lower.includes('fun')) return '😂';
+    if (lower.includes('mystery') || lower.includes('identity')) return '🧩';
+    if (lower.includes('emotional') || lower.includes('trauma') || lower.includes('drama')) return '💔';
+    return '✓';
+  }
+
+  function recommendationTags(item = {}) {
+    const raw = [
+      ...(item.tags || []),
+      ...(item.reasons || [])
+    ];
+
+    const seen = new Set();
+    return raw
+      .map(cleanTraitLabel)
+      .filter(Boolean)
+      .filter((tag) => !/^curated match$/i.test(tag) || raw.length <= 2)
+      .filter((tag) => {
+        const key = tag.toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .slice(0, 5);
+  }
+
+  function recommendationSummary(item = {}, sourceTitle = 'that show') {
+    const name = item.officialTitle || item.title || 'this pick';
+    const tags = recommendationTags(item).slice(0, 3);
+
+    if (item.joeAISummary) return item.joeAISummary;
+
+    if (tags.length) {
+      return `If what you liked about ${sourceTitle} was ${tags.map((tag) => tag.toLowerCase()).join(', ')}, ${name} looks like a strong follow-up without feeling like a copy.`;
+    }
+
+    if (item.blurb && !/shares Curated knowledge match/i.test(item.blurb)) {
+      return item.blurb;
+    }
+
+    return `${name} has enough shared DNA with ${sourceTitle} that JoeAI thinks it is worth a serious look.`;
+  }
+
+  function parsePercentFromDeepDive(text = '', label = 'DNA score') {
+    const haystack = String(text || '');
+    const needle = String(label || '').toLowerCase();
+    const line = haystack
+      .split(/\r?\n/)
+      .find((entry) => entry.toLowerCase().includes(needle));
+
+    const match = line?.match(/([0-9]+)%/);
+    return match ? Number(match[1]) : null;
+  }
+
+  function dnaPercent(item = {}) {
+    if (Number.isFinite(Number(item.dnaScore))) return Math.round(Number(item.dnaScore) * 100);
+    if (Number.isFinite(Number(item.dna))) return Math.round(Number(item.dna) * 100);
+    const parsed = parsePercentFromDeepDive(item.deepDive, 'DNA score');
+    if (parsed !== null) return parsed;
+    return Math.max(0, Math.min(100, Number(item.match || 0)));
+  }
+
+  function confidenceLabel(match = 0) {
+    const score = Number(match || 0);
+    if (score >= 95) return 'Very High';
+    if (score >= 88) return 'Strong';
+    if (score >= 78) return 'Good';
+    return 'Exploratory';
+  }
+
+  function renderDnaMeter(percent) {
+    const safePercent = Math.max(0, Math.min(100, Number(percent || 0)));
+    return (
+      <div className="joeaiReasonList">
+        <strong>🧬 DNA Match</strong>
+        <div style={{ width: '100%', height: 10, borderRadius: 999, background: 'rgba(255,255,255,0.12)', overflow: 'hidden' }}>
+          <div style={{ width: `${safePercent}%`, height: '100%', borderRadius: 999, background: 'currentColor' }} />
+        </div>
+        <span>{safePercent}% shared Anime DNA</span>
+      </div>
+    );
+  }
+
+  function renderRecommendationCards(message, index) {
+    const sourceTitle = sourceTitleFromMessage(message);
+
+    return (
+      <div key={index} className="chat bot joeaiRecommendations">
+        <div className="joeaiRecHeader">
+          <h2>{message.title}</h2>
+          {message.subtitle && <p>{message.subtitle}</p>}
+        </div>
+
+        {message.items?.some((item) => item.bucket === 'library') && (
+          <section className="joeaiBulkSection">
+            <h3>Already in your library</h3>
+            <div className="joeaiRecGrid">
+              {message.items.filter((item) => item.bucket === 'library').map((item, itemIndex) => renderCompactRecommendationCard(item, itemIndex, sourceTitle))}
+            </div>
+          </section>
+        )}
+
+        {message.items?.some((item) => item.bucket !== 'library') && (
+          <section className="joeaiBulkSection">
+            <h3>New discoveries</h3>
+            <div className="joeaiRecGrid">
+              {message.items.filter((item) => item.bucket !== 'library').map((item, itemIndex) => renderCompactRecommendationCard(item, itemIndex, sourceTitle))}
+            </div>
+          </section>
+        )}
+
+        {message.fullAnalysis && (
+          <details className="joeaiReasonList">
+            <summary>Full Genome analysis</summary>
+            <pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{message.fullAnalysis}</pre>
+          </details>
+        )}
+      </div>
+    );
+  }
+
+  function renderCompactRecommendationCard(item, index, sourceTitle = 'that show') {
+    const id = String(item.id || item.title || index);
+    const isExpanded = Boolean(expandedRecommendationIds[id]);
+    const isAdding = addingId === 'anime-' + animeId(item);
+    const name = item.officialTitle || item.title;
+    const tags = recommendationTags(item);
+    const dna = dnaPercent(item);
+
+    return (
+      <article className="joeaiRecCard" key={id}>
+        <Poster anime={item} className="joeaiRecPoster" mode="thumb" />
+        <div className="joeaiRecBody">
+          <div className="joeaiRecTopline">
+            <span className="joeaiRecRank">#{index + 1}</span>
+            <span className="joeaiMatchBadge">{item.match}%</span>
+            <span className="joeaiMatchLabel">{confidenceLabel(item.match)} Match</span>
+            <span className="joeaiMatchLabel">{item.owned ? 'In Library' : 'Discovery'}</span>
+          </div>
+
+          <h3>{name}</h3>
+
+          <div className="joeaiRecMeta">
+            {item.year && <span>{item.year}</span>}
+            {item.episodes && <span>{item.episodes} eps</span>}
+            {item.studio && <span>{item.studio}</span>}
+            {item.communityScore && <span>MAL {item.communityScore}</span>}
+          </div>
+
+          <p><strong>🍜 JoeAI says:</strong> {recommendationSummary(item, sourceTitle)}</p>
+
+          {tags.length > 0 && (
+            <div className="joeaiRecMeta" aria-label="Recommendation traits">
+              {tags.map((tag) => <span key={tag}>{traitEmoji(tag)} {tag}</span>)}
+            </div>
+          )}
+
+          {isExpanded && (
+            <div className="joeaiReasonList">
+              <strong>🧠 Why JoeAI picked this</strong>
+              {renderDnaMeter(dna)}
+              <div className="joeaiRecMeta">
+                <span>Confidence: {confidenceLabel(item.match)}</span>
+                {item.owned && <span>Already in your library</span>}
+                {!item.owned && <span>New discovery</span>}
+              </div>
+              {tags.length > 0 && (
+                <div className="joeaiRecMeta">
+                  {tags.map((tag) => <span key={tag + '-why'}>{traitEmoji(tag)} {tag}</span>)}
+                </div>
+              )}
+              <p>Because you asked about <strong>{sourceTitle}</strong>, JoeAI looked for shows with overlapping anime DNA, matching themes, and enough differences to still feel fresh.</p>
+              {item.deepDive && (
+                <details>
+                  <summary>Technical notes</summary>
+                  <pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{item.deepDive}</pre>
+                </details>
+              )}
+            </div>
+          )}
+
+          <div className="joeaiRecActions">
+            <button type="button" onClick={() => toggleRecommendationWhy(id)}>
+              {isExpanded ? 'Hide Why' : 'Why?'}
+            </button>
+            <button type="button" onClick={() => addAnimeToLibrary({ title: name, status: 'Watching', selectedAnime: item })} disabled={isAdding || !updateAnime}>
+              {isAdding ? 'Adding...' : item.owned ? 'Update Status' : '+ Add'}
+            </button>
+          </div>
+        </div>
+      </article>
+    );
+  }
+
   function renderMessage(message, index) {
     if (message.type === 'helpCard') {
       return renderHelpCard(message, index);
@@ -599,6 +843,10 @@ export function Assistant({ anime, catalog = [], updateAnime }) {
 
     if (message.type === 'candidateSelection') {
       return renderCandidateSelection(message, index);
+    }
+
+    if (message.type === 'recommendationCards') {
+      return renderRecommendationCards(message, index);
     }
 
     if (message.type === 'recommendations') {

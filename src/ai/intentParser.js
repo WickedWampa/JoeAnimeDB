@@ -82,9 +82,9 @@ function cleanKnownTitleQueryForGenome(value = '') {
   return String(value || '')
     .trim()
     .replace(/[?!.,]+$/g, '')
-    .replace(/^s*(pleases+)?(recommend|tell me about|what is|what's|whats|who is|should i watch|why should i watch|is|about)s+/i, '')
-    .replace(/^s*(anime|show|series)s+/i, '')
-    .replace(/s+(anime|show|series)s*$/i, '')
+    .replace(/^\s*(please\s+)?(recommend|tell me about|what is|what's|whats|who is|should i watch|why should i watch|is|about)\s+/i, '')
+    .replace(/^\s*(anime|show|series)\s+/i, '')
+    .replace(/\s+(anime|show|series)\s*$/i, '')
     .trim();
 }
 
@@ -112,24 +112,12 @@ export function parseJoeAIIntent(input = '') {
   const lower = raw.toLowerCase();
   const status = normalizeStatus(raw);
 
-  // SPRINT4_SIMILARITY_GUARD_V3
-  if (/\b(like|similar to|something like|anime like|show like|shows like)\b/i.test(raw)) {
-  
-  // PATCH_0038_ONE_BRAIN_ROUTER
-  // If the user types a known title directly ("slime", "re zero") or asks a simple
-  // title question ("what is slime"), route it through the same Gold/Genome path as
-  // "recommend slime".
-  if (isKnownGenomeTitleQuery(raw)) {
-    return { kind: 'recommendation' };
-  }
+  // Similarity/title-like requests are handled by the recommendation router.
+  // Keep them as questions so routeJoeAIRecommendation() can decide whether this is
+  // a "similar to X" request, a known Genome title lookup, or normal fallback.
+  const similarityPrompt = /\b(like|similar to|something like|anime like|show like|shows like|show me something like)\b/i.test(raw);
 
-  return { kind: 'question', text: raw };
-  }
-
-  // SPRINT4_SIMILARITY_GUARD
-  // "I want to watch something like Dorohedoro" must route to Anime DNA similarity,
-  // not the older generic recommendation card.
-  if (/\b(like|similar to|something like|anime like|show like|shows like)\b/i.test(raw)) {
+  if (similarityPrompt) {
     return { kind: 'question', text: raw };
   }
 
@@ -144,13 +132,6 @@ export function parseJoeAIIntent(input = '') {
 
   if (lower.includes('help') || lower.includes('what can you do')) {
     return { kind: 'help' };
-  }
-
-  const similarityPrompt =
-    /\b(like|similar to|something like|show like|anime like|show me something like)\b/i.test(raw);
-
-  if (similarityPrompt) {
-    return { kind: 'question', text: raw };
   }
 
   if (lower.includes('library status') || lower.includes('stats') || lower.includes('how many')) {

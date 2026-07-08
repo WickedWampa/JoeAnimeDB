@@ -152,6 +152,88 @@ export function recommendKnowledgeFirst({ query = '', anime = [], catalog = [], 
   };
 }
 
+
+function metaLabel(item = {}) {
+  return [item.year, item.studio, item.episodeCount ? `${item.episodeCount} eps` : null, item.communityScore ? `MAL ${item.communityScore}` : null]
+    .filter(Boolean)
+    .join(' · ');
+}
+
+function shortRecommendationBlurb(source = {}, item = {}, reasons = []) {
+  const sourceTitle = source.officialTitle || source.title || 'that anime';
+  const itemTitle = item.officialTitle || item.title || 'this pick';
+  const cleanReasons = (reasons || []).filter(Boolean).slice(0, 3);
+
+  if (cleanReasons.length >= 2) {
+    return `${itemTitle} shares ${cleanReasons.slice(0, 2).join(' and ')} with ${sourceTitle}, but brings its own flavor instead of feeling like a copy.`;
+  }
+
+  if (cleanReasons.length === 1) {
+    return `${itemTitle} connects to ${sourceTitle} through ${cleanReasons[0]}, so it should scratch part of the same itch.`;
+  }
+
+  return `${itemTitle} is a strong vibe match for ${sourceTitle}, even if it gets there in a different way.`;
+}
+
+function cardFromEntry(entry, source, bucket = 'discovery', index = 0) {
+  const item = entry.item || entry;
+  const pct = Math.round(Number(entry.match || 0) * 100);
+  const reasons = (entry.reasons || []).filter(Boolean).slice(0, 5);
+  const title = item.officialTitle || item.title || 'Unknown title';
+  const score = Math.max(0, Math.min(99, pct || 0));
+
+  return {
+    id: item.id || item.malId || title,
+    title,
+    officialTitle: item.officialTitle || item.title || title,
+    match: score,
+    rank: index + 1,
+    bucket,
+    owned: Boolean(entry.owned || bucket === 'library'),
+    year: item.year,
+    studio: item.studio,
+    episodes: item.episodes || item.episodeCount,
+    episodeCount: item.episodeCount || item.episodes,
+    communityScore: item.communityScore,
+    malScore: item.malScore,
+    cover: item.cover,
+    genres: item.genres || [],
+    synopsis: item.synopsis || '',
+    trailerUrl: item.trailerUrl || '',
+    reasons,
+    tags: reasons.slice(0, 4),
+    meta: metaLabel(item),
+    blurb: shortRecommendationBlurb(source, item, reasons),
+    deepDive: [
+      `Why JoeAI picked ${title}:`,
+      '',
+      reasons.length ? reasons.map((reason) => `• ${reason}`).join('\n') : '• Strong overall DNA overlap',
+      '',
+      entry.knowledgeReason ? `Curated note: ${entry.knowledgeReason}` : '',
+      entry.dnaScore ? `DNA score: ${Math.round(entry.dnaScore * 100)}%` : '',
+      entry.knowledgeBoost ? `Knowledge boost: +${Math.round(entry.knowledgeBoost * 100)}%` : ''
+    ].filter(Boolean).join('\n')
+  };
+}
+
+export function buildRecommendationCardsResult({ source, inLibrary = [], discoveries = [], text = '' }) {
+  const sourceTitle = source?.officialTitle || source?.title || 'that anime';
+  const libraryCards = (inLibrary || []).map((entry, index) => cardFromEntry(entry, source, 'library', index));
+  const discoveryCards = (discoveries || []).map((entry, index) => cardFromEntry(entry, source, 'discovery', index));
+  const cards = [...libraryCards, ...discoveryCards].slice(0, 10);
+
+  return {
+    type: 'recommendationCards',
+    title: `🍜 Because you like ${sourceTitle}`,
+    subtitle: `Quick picks first. Hit “Why?” when you want the full JoeAI reasoning.`,
+    sourceTitle,
+    source,
+    items: cards,
+    fullAnalysis: text
+  };
+}
+
+
 export function maybeKnowledgeFirstRecommendation(question = '', anime = [], catalog = []) {
   const title = extractSimilarityTitle(question);
   if (!title) {
