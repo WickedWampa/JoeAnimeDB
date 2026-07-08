@@ -15,18 +15,20 @@
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
-    "vite": "latest",
-    "typescript": "latest",
+    "better-sqlite3": "^12.11.1",
+    "concurrently": "latest",
+    "lucide-react": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "concurrently": "latest",
-    "wait-on": "latest",
-    "lucide-react": "latest",
-    "sql.js": "latest"
+    "sql.js": "latest",
+    "typescript": "latest",
+    "vite": "latest",
+    "wait-on": "latest"
   },
   "devDependencies": {
+    "electron": "latest",
     "electron-builder": "latest",
-    "electron": "latest"
+    "electron-rebuild": "^3.2.9"
   },
   "build": {
     "appId": "com.joeanimedb.app",
@@ -45,5 +47,8 @@
         "portable"
       ]
     }
+  },
+  "allowScripts": {
+    "better-sqlite3@12.11.1": true
   }
 }

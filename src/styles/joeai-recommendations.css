@@ -1,0 +1,39 @@
+
+/* JoeAI recommendation response formatting */
+.assistant-page .assistant-log,
+.assistant-log {
+  scroll-behavior: smooth;
+}
+
+.assistant-page .assistant-message,
+.assistant-message,
+.assistant-log .bot,
+.assistant-log [class*="bot"],
+.assistant-log [class*="message"] {
+  white-space: pre-wrap;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.assistant-page .assistant-message.bot,
+.assistant-message.bot,
+.assistant-log .bot {
+  max-width: 860px;
+}
+
+.assistant-page .assistant-message.bot::first-line,
+.assistant-message.bot::first-line {
+  color: var(--accent, #30e5ff);
+  font-weight: 900;
+}
+
+.assistant-page .assistant-message.bot,
+.assistant-message.bot {
+  border: 1px solid rgba(48, 229, 255, 0.26);
+  box-shadow: 0 0 22px rgba(48, 229, 255, 0.08);
+}
+
+.assistant-page .assistant-input input,
+.assistant-input input {
+  font-size: 15px;
+}

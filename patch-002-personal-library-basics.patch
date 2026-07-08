@@ -1,0 +1,218 @@
+--- a/src/components/Sidebar.jsx
++++ b/src/components/Sidebar.jsx
+@@ -1,5 +1,5 @@
+ import React from 'react';
+-import { Home, Library, Trophy, BarChart3, Settings, Sparkles, Swords, Network, CalendarDays, RefreshCw } from 'lucide-react';
++import { Home, Library, Trophy, BarChart3, Settings, Sparkles, Swords, Network, CalendarDays, RefreshCw, Heart } from 'lucide-react';
+ 
+ function NavButton({ icon, label, id, view, setView }) {
+   return (
+@@ -15,12 +15,13 @@
+     <aside className="sidebar">
+       <div className="brand">
+         <strong>JOE<span>ANIME</span>DB</strong>
+-        <small>4.2 Foundation</small>
++        <small>Remember Every Anime</small>
+       </div>
+ 
+       <nav>
+         <NavButton icon={<Home />} label="Dashboard" id="dashboard" view={view} setView={setView} />
+         <NavButton icon={<Library />} label="Library" id="library" view={view} setView={setView} />
++        <NavButton icon={<Heart />} label="Favorites" id="favorites" view={view} setView={setView} />
+         <NavButton icon={<Trophy />} label="Rankings" id="rankings" view={view} setView={setView} />
+         <NavButton icon={<Network />} label="Anime Universe" id="universe" view={view} setView={setView} />
+         <NavButton icon={<Sparkles />} label="Assistant" id="assistant" view={view} setView={setView} />
+--- a/src/components/DetailModal.jsx
++++ b/src/components/DetailModal.jsx
+@@ -2,7 +2,24 @@
+ import { Poster } from './Poster';
+ import { score } from '../utils/animeUtils';
+ 
+-export function DetailModal({ anime, onClose }) {
++const WATCH_STATUSES = [
++  '',
++  'Watching',
++  'Completed',
++  'On Hold',
++  'Dropped',
++  'Plan to Watch'
++];
++
++export function DetailModal({ anime, onClose, updateAnime }) {
++  async function updateField(field, value) {
++    if (!updateAnime) return;
++    await updateAnime({
++      ...anime,
++      [field]: value
++    });
++  }
++
+   return (
+     <div className="modalBackdrop">
+       <section className="detailModal">
+@@ -12,15 +29,75 @@
+           <p className="eyebrow">Rank #{anime.finalRank}</p>
+           <h1>{anime.title}</h1>
+           <p className="muted">{anime.studio} · {anime.type || 'TV'} · {anime.year || ''}</p>
++
+           <div className="detailStats">
+-            <div><strong>{score(anime).toFixed(1)}</strong><span>Joe Score</span></div>
++            <div><strong>{score(anime).toFixed(1)}</strong><span>My Score</span></div>
+             <div><strong>{anime.communityScore || '—'}</strong><span>Community</span></div>
+             <div><strong>{anime.episodeCount || '—'}</strong><span>Episodes</span></div>
+             <div><strong>{anime.rewatches || 0}</strong><span>Rewatches</span></div>
+           </div>
++
++          <section className="personalPanel">
++            <button
++              className={`favoriteToggle ${anime.favorite ? 'active' : ''}`}
++              type="button"
++              onClick={() => updateField('favorite', !Boolean(anime.favorite))}
++            >
++              {anime.favorite ? '❤️ Favorite' : '🤍 Add Favorite'}
++            </button>
++
++            <label>
++              <span>My Score</span>
++              <input
++                type="number"
++                min="0"
++                max="10"
++                step="0.1"
++                value={anime.joeScore ?? ''}
++                placeholder="0-10"
++                onChange={(event) => {
++                  const value = event.target.value;
++                  updateField('joeScore', value === '' ? null : Number(value));
++                }}
++              />
++            </label>
++
++            <label>
++              <span>Status</span>
++              <select
++                value={anime.status || ''}
++                onChange={(event) => updateField('status', event.target.value)}
++              >
++                {WATCH_STATUSES.map((status) => (
++                  <option key={status || 'none'} value={status}>{status || 'Not Set'}</option>
++                ))}
++              </select>
++            </label>
++
++            <label>
++              <span>Rewatches</span>
++              <input
++                type="number"
++                min="0"
++                step="1"
++                value={anime.rewatches ?? 0}
++                onChange={(event) => updateField('rewatches', Number(event.target.value || 0))}
++              />
++            </label>
++
++            <label className="notesField">
++              <span>Notes</span>
++              <textarea
++                value={anime.notes || ''}
++                placeholder="What did this anime mean to you?"
++                onChange={(event) => updateField('notes', event.target.value)}
++              />
++            </label>
++          </section>
++
+           <div className="tags">{(anime.genres || []).map((g) => <span key={g}>{g}</span>)}</div>
+           <p>{anime.synopsis}</p>
+-          {anime.trailerUrl && <a className="trailer" href={anime.trailerUrl} target="_blank">Watch Trailer</a>}
++          {anime.trailerUrl && <a className="trailer" href={anime.trailerUrl} target="_blank" rel="noreferrer">Watch Trailer</a>}
+         </div>
+       </section>
+     </div>
+--- a/src/App.jsx
++++ b/src/App.jsx
+@@ -1,4 +1,4 @@
+-import React, { useState } from 'react';
++import React, { useMemo, useState } from 'react';
+ 
+ import { Sidebar } from './components/Sidebar';
+ import { SearchBar } from './components/SearchBar';
+@@ -15,6 +15,24 @@
+ 
+   const library = useAnimeLibrary();
+   const { data, anime, filtered, stats, loading, query, setQuery, syncing, syncText, syncMetadata, updateAnime } = library;
++
++  const favoriteAnime = useMemo(
++    () => filtered.filter((item) => Boolean(item.favorite)),
++    [filtered]
++  );
++
++  async function handleUpdateAnime(updatedAnime) {
++    const saved = await updateAnime(updatedAnime);
++    const savedAnime = saved.anime || [];
++    const refreshed = savedAnime.find((item) => String(item.id) === String(updatedAnime.id));
++
++    setSelected((current) => {
++      if (!current || String(current.id) !== String(updatedAnime.id)) return current;
++      return refreshed || updatedAnime;
++    });
++
++    return saved;
++  }
+ 
+   if (loading) {
+     return (
+@@ -44,7 +62,10 @@
+ 
+         {view === 'dashboard' && <Dashboard anime={anime} stats={stats} setSelected={setSelected} />}
+         {(view === 'library' || view === 'rankings') && (
+-          <LibraryPage anime={filtered} mode={mode} setSelected={setSelected} updateAnime={updateAnime} title={view === 'rankings' ? 'Rankings' : 'Library'} />
++          <LibraryPage anime={filtered} mode={mode} setSelected={setSelected} updateAnime={handleUpdateAnime} title={view === 'rankings' ? 'Rankings' : 'Library'} />
++        )}
++        {view === 'favorites' && (
++          <LibraryPage anime={favoriteAnime} mode={mode} setSelected={setSelected} updateAnime={handleUpdateAnime} title="Favorites" emptyMessage="No favorites yet. Click a heart on any anime to add it here." />
+         )}
+         {view === 'universe' && <Universe anime={anime} setQuery={setQuery} setView={setView} />}
+         {view === 'assistant' && <Assistant anime={anime} />}
+@@ -54,7 +75,7 @@
+         {view === 'settings' && <SettingsPage data={data} syncMetadata={syncMetadata} stats={stats} />}
+       </section>
+ 
+-      {selected && <DetailModal anime={selected} onClose={() => setSelected(null)} />}
++      {selected && <DetailModal anime={selected} onClose={() => setSelected(null)} updateAnime={handleUpdateAnime} />}
+       {syncing && <div className="syncOverlay"><div><h2>Updating JoeAnimeDB</h2><p>{syncText}</p><div className="loader" /></div></div>}
+     </main>
+   );
+--- a/src/pages/LibraryPage.jsx
++++ b/src/pages/LibraryPage.jsx
+@@ -3,7 +3,7 @@
+ import { Poster } from '../components/Poster';
+ import { score } from '../utils/animeUtils';
+ 
+-export function LibraryPage({ anime, mode, setSelected, title, updateAnime }) {
++export function LibraryPage({ anime, mode, setSelected, title, updateAnime, emptyMessage }) {
+   async function handleFavoriteClick(event, item) {
+     event.stopPropagation();
+     await updateAnime({
+@@ -22,7 +22,12 @@
+         </div>
+       </section>
+ 
+-      {mode === 'list' ? (
++      {anime.length === 0 && emptyMessage ? (
++        <section className="emptyState">
++          <h2>Nothing here yet</h2>
++          <p>{emptyMessage}</p>
++        </section>
++      ) : mode === 'list' ? (
+         <section className="tablePanel">
+           <table>
+             <thead>
+@@ -56,7 +61,7 @@
+                   <td>{item.studio}</td>
+                   <td>{(item.genres || []).slice(0, 3).join(', ')}</td>
+                   <td>{item.episodeCount || '—'}</td>
+-                  <td>{item.status}</td>
++                  <td>{item.status || '—'}</td>
+                 </tr>
+               ))}
+             </tbody>

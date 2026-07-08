@@ -1,3 +1,5 @@
+import { shouldPreferManualMetadata, manualMetadataToAnime } from './metadataResolver';
+import { getManualMetadata } from '../data/manualMetadataOverrides';
 const SEARCH_FIXES = {
   "Bleach TYBW": "Bleach Sennen Kessen-hen",
   "Slime S2": "Tensei shitara Slime Datta Ken 2nd Season",

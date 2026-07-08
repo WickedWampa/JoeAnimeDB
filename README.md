@@ -79,7 +79,6 @@ Ask naturally.
 Examples:
 
 ```text
-
 recommend something funny
 
 recommend something like Monster

@@ -1,0 +1,27 @@
+/* Library poster-card metadata spacing fix */
+.animeCard .cardMetaRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 8px 0 10px;
+}
+
+.animeCard .cardMetaPill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(3, 10, 22, 0.72);
+  border: 1px solid rgba(48, 229, 255, 0.18);
+  color: rgba(239, 250, 255, 0.88);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.animeCard .cardSubline {
+  margin-bottom: 0;
+}

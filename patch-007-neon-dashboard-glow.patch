@@ -1,0 +1,241 @@
+--- a/src/styles/app.css
++++ b/src/styles/app.css
+@@ -999,3 +999,178 @@
++
++
++/* Patch 007: Neon Dashboard Glow-Up */
++.homeHero {
++  border-color: rgba(55, 234, 255, .38);
++  box-shadow:
++    0 0 0 1px rgba(255, 92, 200, .18),
++    0 0 42px rgba(55, 234, 255, .12),
++    inset 0 0 60px rgba(55, 234, 255, .035);
++}
++
++.homeHeroText h1 {
++  text-shadow: 0 0 30px rgba(55, 234, 255, .08);
++}
++
++.heroActions button:first-child {
++  background: linear-gradient(135deg, var(--cyan), #0fb7ff);
++  color: #001018;
++  border-color: rgba(55, 234, 255, .75);
++  box-shadow: 0 0 28px rgba(55, 234, 255, .2);
++}
++
++.heroActions button:first-child:hover {
++  transform: translateY(-1px);
++  box-shadow: 0 0 36px rgba(55, 234, 255, .34);
++}
++
++.spotlightCard {
++  grid-template-columns: 180px minmax(0, 1fr);
++  align-items: center;
++  min-height: 245px;
++  border-color: rgba(255, 92, 200, .25);
++  background:
++    radial-gradient(circle at 85% 20%, rgba(255, 92, 200, .14), transparent 38%),
++    rgba(0, 0, 0, .18);
++}
++
++.spotlightCard .dailyPoster.poster {
++  width: 180px;
++  height: 210px;
++  border-radius: 18px;
++  box-shadow: 0 16px 34px rgba(0, 0, 0, .34);
++}
++
++.spotlightCard span,
++.recommendationCard small,
++.miniAnimeRow small {
++  color: #b8d0e8;
++}
++
++.spotlightCard span {
++  display: block;
++  color: var(--cyan);
++  font-weight: 950;
++  margin-bottom: 8px;
++}
++
++.spotlightCard strong {
++  font-size: 30px;
++  line-height: 1;
++}
++
++.homeStats {
++  background: rgba(5, 10, 18, .76);
++  box-shadow: inset 0 0 40px rgba(55, 234, 255, .025);
++}
++
++.homeStats div {
++  position: relative;
++  display: grid;
++  grid-template-columns: 46px 1fr;
++  column-gap: 12px;
++  align-items: center;
++}
++
++.homeStats div::before {
++  content: "";
++  grid-row: 1 / span 2;
++  width: 42px;
++  height: 42px;
++  border-radius: 999px;
++  display: grid;
++  place-items: center;
++  border: 1px solid rgba(255, 255, 255, .12);
++  background: rgba(255, 255, 255, .04);
++  box-shadow: 0 0 22px rgba(55, 234, 255, .08);
++}
++
++.homeStats div:nth-child(1)::before { background: radial-gradient(circle, rgba(185,132,255,.38), rgba(185,132,255,.08)); box-shadow: 0 0 26px rgba(185,132,255,.18); }
++.homeStats div:nth-child(2)::before { background: radial-gradient(circle, rgba(255,92,200,.38), rgba(255,92,200,.08)); box-shadow: 0 0 26px rgba(255,92,200,.18); }
++.homeStats div:nth-child(3)::before { background: radial-gradient(circle, rgba(55,234,255,.34), rgba(55,234,255,.08)); box-shadow: 0 0 26px rgba(55,234,255,.18); }
++.homeStats div:nth-child(4)::before { background: radial-gradient(circle, rgba(18,214,111,.34), rgba(18,214,111,.08)); box-shadow: 0 0 26px rgba(18,214,111,.16); }
++.homeStats div:nth-child(5)::before { background: radial-gradient(circle, rgba(255,201,40,.38), rgba(255,201,40,.08)); box-shadow: 0 0 26px rgba(255,201,40,.18); }
++
++.homeStats strong {
++  line-height: 1;
++}
++
++.homePanel {
++  background:
++    radial-gradient(circle at 12% 0%, rgba(55, 234, 255, .08), transparent 34%),
++    rgba(8, 14, 24, .82);
++}
++
++.miniList {
++  gap: 8px;
++}
++
++.miniAnimeRow {
++  grid-template-columns: 82px minmax(0, 1fr) 24px;
++  min-height: 76px;
++  padding: 8px;
++  overflow: hidden;
++  transition: transform .15s ease, border-color .15s ease, background .15s ease, box-shadow .15s ease;
++}
++
++.miniAnimeRow::after {
++  content: "›";
++  justify-self: center;
++  color: rgba(255, 255, 255, .7);
++  font-size: 28px;
++  line-height: 1;
++}
++
++.miniAnimeRow:hover {
++  box-shadow: 0 0 26px rgba(55, 234, 255, .08);
++}
++
++.miniPoster.poster {
++  width: 82px;
++  height: 58px;
++  border-radius: 11px;
++  font-size: 18px;
++  box-shadow: 0 10px 22px rgba(0, 0, 0, .28);
++}
++
++.recommendationCard {
++  grid-template-columns: 220px minmax(0, 1fr) 28px;
++  align-items: center;
++  min-height: 270px;
++  padding: 16px;
++  background:
++    radial-gradient(circle at 20% 0%, rgba(55, 234, 255, .08), transparent 34%),
++    radial-gradient(circle at 80% 80%, rgba(255, 92, 200, .08), transparent 34%),
++    rgba(5, 10, 18, .66);
++}
++
++.recommendationCard::after {
++  content: "›";
++  color: rgba(255, 255, 255, .75);
++  font-size: 34px;
++}
++
++.recommendationPoster.poster {
++  width: 220px;
++  height: 230px;
++  border-radius: 16px;
++  box-shadow: 0 16px 34px rgba(0, 0, 0, .36);
++}
++
++.recommendationPoster.poster img,
++.miniPoster.poster img,
++.dailyPoster.poster img {
++  object-fit: cover;
++  object-position: center;
++}
++
++.themePicker {
++  border-color: rgba(55, 234, 255, .14);
++  background: rgba(255, 255, 255, .035);
++  box-shadow: inset 0 0 26px rgba(55, 234, 255, .025);
++}
++
++.themeButtons {
++  grid-template-columns: 1fr 1fr;
++  gap: 8px;
++}
++
++.themeButtons button {
++  position: relative;
++  justify-content: flex-start;
++  gap: 8px;
++  padding: 9px 10px 9px 38px;
++  min-height: 42px;
++  overflow: hidden;
++}
++
++.themeButtons button::before {
++  content: "";
++  position: absolute;
++  left: 10px;
++  width: 20px;
++  height: 20px;
++  border-radius: 999px;
++  border: 1px solid currentColor;
++  box-shadow: 0 0 18px currentColor;
++}
++
++.themeButtons button:nth-child(1) { color: #37eaff; }
++.themeButtons button:nth-child(1)::before { background: radial-gradient(circle, #37eaff, #003f55); }
++.themeButtons button:nth-child(2) { color: #ff7abf; }
++.themeButtons button:nth-child(2)::before { background: radial-gradient(circle, #ff7abf, #592044); }
++.themeButtons button:nth-child(3) { color: #b984ff; }
++.themeButtons button:nth-child(3)::before { background: radial-gradient(circle, #b984ff, #38156d); }
++.themeButtons button:nth-child(4) { color: #ffbe0b; }
++.themeButtons button:nth-child(4)::before { background: radial-gradient(circle, #ffbe0b, #6b3600); }
++.themeButtons button:nth-child(5) { color: #ff4d4d; }
++.themeButtons button:nth-child(5)::before { background: radial-gradient(circle, #ff4d4d, #6e0909); }
++.themeButtons button:nth-child(6) { color: #a855f7; }
++.themeButtons button:nth-child(6)::before { background: radial-gradient(circle, #2d0b4f, #000); }
++
++.themeButtons button.active {
++  color: var(--text);
++  border-color: currentColor;
++  background: rgba(255, 255, 255, .06);
++  box-shadow: 0 0 20px rgba(55, 234, 255, .08);
++}
++
++@media(max-width:1050px){
++  .spotlightCard {
++    grid-template-columns: 110px minmax(0, 1fr);
++  }
++
++  .spotlightCard .dailyPoster.poster {
++    width: 110px;
++    height: 155px;
++  }
++
++  .recommendationCard {
++    grid-template-columns: 120px minmax(0, 1fr) 24px;
++    min-height: 190px;
++  }
++
++  .recommendationPoster.poster {
++    width: 120px;
++    height: 160px;
++  }
++}

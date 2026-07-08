@@ -1,0 +1,69 @@
+
+.syncOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  background: rgba(2, 8, 18, 0.72);
+  backdrop-filter: blur(10px);
+}
+
+.syncCard {
+  width: min(560px, calc(100vw - 48px));
+  border: 1px solid rgba(48, 229, 255, 0.35);
+  border-radius: 28px;
+  padding: 28px;
+  background:
+    radial-gradient(circle at top left, rgba(48, 229, 255, 0.16), transparent 36%),
+    radial-gradient(circle at bottom right, rgba(255, 84, 190, 0.12), transparent 40%),
+    rgba(8, 14, 28, 0.96);
+  box-shadow: 0 24px 90px rgba(0, 0, 0, 0.55), 0 0 34px rgba(48, 229, 255, 0.18);
+}
+
+.syncCard h2 {
+  margin: 0 0 10px;
+  font-size: 28px;
+}
+
+.syncCard h3 {
+  margin: 8px 0 18px;
+  color: var(--accent, #30e5ff);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.syncStep,
+.syncMeta,
+.syncCurrent,
+.syncCard p {
+  color: rgba(229, 246, 255, 0.78);
+}
+
+.syncBar {
+  height: 18px;
+  overflow: hidden;
+  border-radius: 999px;
+  border: 1px solid rgba(48, 229, 255, 0.28);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.syncBarFill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #30e5ff, #ff54be);
+  box-shadow: 0 0 22px rgba(48, 229, 255, 0.55);
+  transition: width 240ms ease;
+}
+
+.syncMeta {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+  font-weight: 800;
+}
+
+.syncCurrent {
+  margin-top: 12px;
+  font-size: 14px;
+}

@@ -1,0 +1,211 @@
+--- a/src/App.jsx
++++ b/src/App.jsx
+@@ -9,7 +9,7 @@
+ import { useAnimeLibrary } from './hooks/useAnimeLibrary';
+ 
+ export function App() {
+-  const [view, setView] = useState('library');
++  const [view, setView] = useState('dashboard');
+   const [selected, setSelected] = useState(null);
+   const [mode, setMode] = useState('poster');
+   const [theme, setTheme] = useState('neon');
+@@ -61,7 +61,7 @@
+           </div>
+         </header>
+ 
+-        {view === 'dashboard' && <Dashboard anime={anime} stats={stats} setSelected={setSelected} />}
++        {view === 'dashboard' && <Dashboard anime={anime} stats={stats} setSelected={setSelected} updateAnime={handleUpdateAnime} setView={setView} />}
+         {(view === 'library' || view === 'rankings') && (
+           <LibraryPage anime={filtered} mode={mode} setSelected={setSelected} updateAnime={handleUpdateAnime} title={view === 'rankings' ? 'Rankings' : 'Library'} />
+         )}
+--- a/src/pages/Dashboard.jsx
++++ b/src/pages/Dashboard.jsx
+@@ -3,48 +3,157 @@
+ import { Poster } from '../components/Poster';
+ import { score } from '../utils/animeUtils';
+ 
+-export function StatStrip({ stats }) {
++function normalizeStatus(status = '') {
++  return String(status).toLowerCase().replace(/\s+/g, '');
++}
++
++function statusCount(anime, status) {
++  return anime.filter((item) => normalizeStatus(item.status) === normalizeStatus(status)).length;
++}
++
++export function StatStrip({ stats, anime }) {
++  const favorites = anime.filter((item) => Boolean(item.favorite)).length;
++  const watching = statusCount(anime, 'Watching');
++  const completed = statusCount(anime, 'Completed');
++
+   return (
+-    <section className="stats">
++    <section className="stats homeStats">
+       <div><strong>{stats.total}</strong><span>Total Anime</span></div>
+-      <div><strong>{stats.avg}</strong><span>Avg Joe Score</span></div>
+-      <div><strong>{stats.posters}</strong><span>Posters Synced</span></div>
+-      <div><strong>{stats.topGenre}</strong><span>Top Genre</span></div>
+-      <div><strong>{stats.rewatches}</strong><span>Rewatches</span></div>
++      <div><strong>{favorites}</strong><span>Favorites</span></div>
++      <div><strong>{watching}</strong><span>Watching</span></div>
++      <div><strong>{completed}</strong><span>Completed</span></div>
++      <div><strong>{stats.avg}</strong><span>Avg My Score</span></div>
+     </section>
+   );
+ }
+ 
+-export function Dashboard({ anime, stats, setSelected }) {
+-  const top = [...anime].sort((a, b) => Number(a.finalRank) - Number(b.finalRank)).slice(0, 6);
+-  const daily = top[0];
++function MiniAnimeRow({ anime, setSelected }) {
++  return (
++    <button className="miniAnimeRow" type="button" onClick={() => setSelected(anime)}>
++      <Poster anime={anime} className="miniPoster" />
++      <span>
++        <strong>{anime.title}</strong>
++        <small>#{anime.finalRank || '—'} · ★ {score(anime).toFixed(1)}</small>
++      </span>
++    </button>
++  );
++}
++
++function EmptyHomeCard({ title, text, action, onClick }) {
++  return (
++    <div className="homeEmptyCard">
++      <strong>{title}</strong>
++      <p>{text}</p>
++      {action && <button type="button" onClick={onClick}>{action}</button>}
++    </div>
++  );
++}
++
++export function Dashboard({ anime, stats, setSelected, updateAnime, setView }) {
++  const favorites = anime.filter((item) => Boolean(item.favorite));
++  const watching = anime.filter((item) => normalizeStatus(item.status) === 'watching');
++  const topRated = [...anime]
++    .filter((item) => Number(item.joeScore || 0) > 0)
++    .sort((a, b) => Number(b.joeScore || 0) - Number(a.joeScore || 0))
++    .slice(0, 6);
++
++  const rankedFallback = [...anime]
++    .sort((a, b) => Number(a.finalRank || 9999) - Number(b.finalRank || 9999));
++
++  const recommendation = rankedFallback.find((item) => !item.favorite && normalizeStatus(item.status) !== 'completed') || rankedFallback[0];
++  const daily = watching[0] || favorites[0] || rankedFallback[0];
+ 
+   return (
+     <>
+-      <section className="hero">
+-        <div>
+-          <p className="eyebrow">Welcome back, Joe</p>
+-          <h1>Anime command center.</h1>
+-          <p>Real 108-title database, metadata, posters, rankings, analytics, and the sacred Bleach Shrine.</p>
++      <section className="homeHero">
++        <div className="homeHeroText">
++          <p className="eyebrow">Welcome back</p>
++          <h1>Remember Every Anime.</h1>
++          <p>Your personal anime command center: watch status, favorites, scores, notes, rewatches, and recommendations built around your taste.</p>
++          <div className="heroActions">
++            <button type="button" onClick={() => setView('library')}>Open Library</button>
++            <button type="button" onClick={() => setView('favorites')}>View Favorites</button>
++          </div>
+         </div>
+         {daily && (
+-          <button className="daily" onClick={() => setSelected(daily)}>
++          <button className="daily spotlightCard" onClick={() => setSelected(daily)}>
+             <Poster anime={daily} className="dailyPoster" />
+             <div>
+-              <span>Daily GOAT</span>
++              <span>{watching[0] ? 'Continue Watching' : 'Today\'s Pick'}</span>
+               <strong>{daily.title}</strong>
+-              <small>#{daily.finalRank} · ★ {score(daily).toFixed(1)}</small>
++              <small>{daily.status || 'Ready when you are'} · ★ {score(daily).toFixed(1)}</small>
+             </div>
+           </button>
+         )}
+       </section>
+ 
+-      <StatStrip stats={stats} />
++      <StatStrip stats={stats} anime={anime} />
++
++      <section className="homeGrid">
++        <div className="panel homePanel continuePanel">
++          <div className="panelHeader">
++            <div>
++              <p className="eyebrow">Up Next</p>
++              <h2>Continue Watching</h2>
++            </div>
++            <button type="button" onClick={() => setView('library')}>Browse</button>
++          </div>
++          {watching.length ? (
++            <div className="miniList">
++              {watching.slice(0, 5).map((item) => <MiniAnimeRow key={item.id} anime={item} setSelected={setSelected} />)}
++            </div>
++          ) : (
++            <EmptyHomeCard title="Nothing marked Watching yet" text="Set a title to Watching from the detail modal and it will appear here." action="Open Library" onClick={() => setView('library')} />
++          )}
++        </div>
++
++        <div className="panel homePanel recommendationPanel">
++          <div className="panelHeader">
++            <div>
++              <p className="eyebrow">Because You Loved...</p>
++              <h2>Recommendation Seed</h2>
++            </div>
++          </div>
++          {recommendation ? (
++            <button className="recommendationCard" type="button" onClick={() => setSelected(recommendation)}>
++              <Poster anime={recommendation} className="recommendationPoster" />
++              <span>
++                <strong>{recommendation.title}</strong>
++                <small>Early match based on your rankings and scores.</small>
++              </span>
++            </button>
++          ) : (
++            <EmptyHomeCard title="Recommendations coming soon" text="Rate a few more shows and JoeAnimeDB will start learning your taste." />
++          )}
++        </div>
++      </section>
+ 
+       <section className="panel">
+-        <h2>Top 6</h2>
++        <div className="panelHeader">
++          <div>
++            <p className="eyebrow">Personal Shelf</p>
++            <h2>Favorites</h2>
++          </div>
++          <button type="button" onClick={() => setView('favorites')}>See All</button>
++        </div>
++        {favorites.length ? (
++          <div className="posterGrid small">
++            {favorites.slice(0, 6).map((item) => <AnimeCard key={item.id} anime={item} setSelected={setSelected} updateAnime={updateAnime} />)}
++          </div>
++        ) : (
++          <EmptyHomeCard title="No favorites yet" text="Click a heart on any anime and your favorites will show up here." action="Open Library" onClick={() => setView('library')} />
++        )}
++      </section>
++
++      <section className="panel">
++        <div className="panelHeader">
++          <div>
++            <p className="eyebrow">Your Taste</p>
++            <h2>Top Rated</h2>
++          </div>
++        </div>
+         <div className="posterGrid small">
+-          {top.map((item) => <AnimeCard key={item.id} anime={item} setSelected={setSelected} />)}
++          {(topRated.length ? topRated : rankedFallback.slice(0, 6)).slice(0, 6).map((item) => <AnimeCard key={item.id} anime={item} setSelected={setSelected} updateAnime={updateAnime} />)}
+         </div>
+       </section>
+     </>
+--- a/src/styles/app.css
++++ b/src/styles/app.css
+@@ -66,3 +66,8 @@
+ .synopsisBlock{border-top:1px solid rgba(255,255,255,.08);margin-top:16px;padding-top:12px}.synopsisBlock h2{margin:0 0 8px;color:var(--cyan);font-size:18px}.synopsisBlock p{line-height:1.45}.emptyState{border:1px solid var(--line);background:var(--panel);border-radius:22px;padding:34px;text-align:center;color:var(--muted)}.emptyState h2{color:var(--text);margin-top:0}.bootSubline{margin-top:-6px!important;color:var(--cyan)!important;font-weight:800}
+ 
+ @media(max-width:1050px){.upgradedModal{grid-template-columns:1fr}.glowPanel{grid-template-columns:1fr}.detailArtRail{max-width:320px}}
++
++
++/* Sprint 4: Home Dashboard */
++.homeHero{border:1px solid var(--line);border-radius:28px;background:radial-gradient(circle at top left,rgba(55,234,255,.16),transparent 34%),radial-gradient(circle at bottom right,rgba(255,92,200,.12),transparent 36%),var(--panel);padding:28px;display:grid;grid-template-columns:1.25fr .75fr;gap:24px;margin-bottom:18px;overflow:hidden}.homeHeroText h1{font-size:66px;line-height:.9;margin:0 0 14px}.homeHeroText p{max-width:760px;color:var(--muted);font-size:17px;line-height:1.45}.heroActions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}.heroActions button,.panelHeader button,.homeEmptyCard button{border:1px solid rgba(255,255,255,.12);background:rgba(10,17,27,.72);color:var(--text);border-radius:13px;padding:11px 14px;cursor:pointer;font-weight:900}.heroActions button:first-child,.panelHeader button:hover,.homeEmptyCard button:hover{color:var(--cyan);border-color:rgba(55,234,255,.4);box-shadow:0 0 22px rgba(55,234,255,.1)}.spotlightCard{height:100%;min-height:230px;align-items:end;transition:.16s}.spotlightCard:hover{transform:translateY(-3px);border-color:rgba(55,234,255,.4);box-shadow:0 18px 48px rgba(0,0,0,.28),0 0 34px rgba(55,234,255,.12)}.homeStats strong{font-size:30px}.homeGrid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}.homePanel{min-height:310px}.panelHeader{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:14px}.panelHeader h2{margin:0;font-size:26px}.panelHeader .eyebrow{margin:0 0 4px}.miniList{display:grid;gap:10px}.miniAnimeRow{display:grid;grid-template-columns:56px 1fr;gap:12px;align-items:center;text-align:left;width:100%;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.045);border-radius:16px;padding:9px;color:var(--text);cursor:pointer}.miniAnimeRow:hover{border-color:rgba(55,234,255,.32);background:rgba(55,234,255,.07);transform:translateY(-1px)}.miniAnimeRow strong,.recommendationCard strong{display:block}.miniAnimeRow small,.recommendationCard small{display:block;color:var(--muted);margin-top:4px}.miniPoster{width:56px;height:76px;border-radius:12px;overflow:hidden;background:linear-gradient(135deg,rgba(55,234,255,.18),rgba(255,92,200,.14));display:grid;place-items:center}.homeEmptyCard{border:1px dashed rgba(255,255,255,.16);background:rgba(0,0,0,.18);border-radius:18px;padding:22px;color:var(--muted);min-height:160px;display:flex;flex-direction:column;justify-content:center}.homeEmptyCard strong{color:var(--text);font-size:20px}.homeEmptyCard p{line-height:1.45}.recommendationCard{display:grid;grid-template-columns:150px 1fr;gap:16px;align-items:end;width:100%;border:1px solid rgba(255,255,255,.1);background:linear-gradient(135deg,rgba(255,201,40,.1),rgba(255,92,200,.08));border-radius:22px;padding:14px;color:var(--text);text-align:left;cursor:pointer;min-height:225px}.recommendationCard:hover{border-color:rgba(255,201,40,.36);box-shadow:0 0 30px rgba(255,201,40,.1)}.recommendationPoster{width:150px;height:215px;border-radius:16px;overflow:hidden;background:linear-gradient(135deg,rgba(55,234,255,.18),rgba(255,92,200,.14));display:grid;place-items:center}.recommendationCard strong{font-size:28px;line-height:1.05}
++@media(max-width:1050px){.homeHero,.homeGrid{grid-template-columns:1fr}.homeHeroText h1{font-size:46px}.recommendationCard{grid-template-columns:110px 1fr}.recommendationPoster{width:110px;height:155px}}
