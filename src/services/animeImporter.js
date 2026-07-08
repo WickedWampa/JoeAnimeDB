@@ -176,18 +176,68 @@ export function findDuplicateAnime(library = [], candidate = {}) {
     const itemKeys = allCandidateTitleKeys(item);
     if (itemKeys.some((key) => candidateKeys.has(key))) return true;
 
-    // Short-hand upgrade support:
-    // "Frieren" should match "Frieren: Beyond Journey's End",
-    // but only when the shorter key is distinctive enough.
-    for (const itemKey of itemKeys) {
-      for (const candidateKey of candidateKeys) {
-        const shortEnough = Math.min(itemKey.length, candidateKey.length) >= 6;
-        if (shortEnough && (candidateKey.startsWith(itemKey) || itemKey.startsWith(candidateKey))) return true;
-      }
-    }
+    // Do not collapse franchise entries by prefix here.
+    // Example: "Trigun Stampede" must not silently update "Trigun".
+    // Fuzzy / shorthand decisions are handled by findLocalTitleMatches() so the UI can ask the user.
 
     return false;
   });
+}
+
+
+export function findLocalTitleMatches(library = [], title = '') {
+  const queryKey = titleKey(title);
+  const queryWords = importantWords(title);
+
+  if (!queryKey) {
+    return { exact: [], shorthand: [], related: [], all: [] };
+  }
+
+  const scored = library
+    .map((item) => {
+      const titles = getCandidateTitles(item);
+      const keys = titles.map(titleKey).filter(Boolean);
+      const titleTexts = titles.join(' | ');
+      const itemWords = importantWords(item.officialTitle || item.title || '');
+      const exact = keys.some((key) => key === queryKey);
+      const startsEitherWay = keys.some((key) => {
+        if (!key || key === queryKey) return false;
+        return key.startsWith(queryKey) || queryKey.startsWith(key);
+      });
+      const wordOverlap = queryWords.length && queryWords.every((word) => itemWords.includes(word));
+
+      let score = 0;
+      let reason = '';
+
+      if (exact) {
+        score = 100;
+        reason = 'Exact local title match';
+      } else if (wordOverlap) {
+        score = 88;
+        reason = 'All title words matched';
+      } else if (startsEitherWay) {
+        score = 70;
+        reason = 'Same franchise / shorthand match';
+      }
+
+      if (!score) return null;
+
+      return {
+        ...item,
+        matchScore: score,
+        matchReason: reason,
+        matchTitles: titleTexts
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => Number(b.matchScore || 0) - Number(a.matchScore || 0));
+
+  return {
+    exact: scored.filter((item) => item.matchScore >= 100),
+    shorthand: scored.filter((item) => item.matchScore >= 88 && item.matchScore < 100),
+    related: scored.filter((item) => item.matchScore >= 70 && item.matchScore < 88),
+    all: scored
+  };
 }
 
 export function mergeAnimeMetadata(existing = {}, incoming = {}, statusOverride) {

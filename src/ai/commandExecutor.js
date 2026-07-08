@@ -1,4 +1,4 @@
-import { importAnimeByTitle, mergeAnimeMetadata } from '../services/animeImporter';
+import { importAnimeByTitle, mergeAnimeMetadata, findLocalTitleMatches } from '../services/animeImporter';
 import { answerLibraryQuestion } from './libraryIntelligence';
 import { maybeSimilarRecommendation } from './similarityEngine';
 import { maybeKnowledgeFirstRecommendation } from './knowledgeFirstRecommender';
@@ -17,9 +17,146 @@ export function makeBulkResult({ added = [], skipped = [], failed = [] }) {
   };
 }
 
+export function makeCandidateSelectionResult({ title, status = 'Watching', candidates = [], source = 'local' }) {
+  return {
+    type: 'candidateSelection',
+    title: source === 'remote'
+      ? '🍜 I found a few possible anime'
+      : '🍜 I found multiple local matches',
+    text: source === 'remote'
+      ? `Which “${title}” did you mean? I will add the one you pick as ${status}.`
+      : `Which “${title}” did you mean? I will update the one you pick as ${status}.`,
+    status,
+    originalTitle: title,
+    source,
+    candidates: candidates.slice(0, 8).map((item) => ({
+      id: item.id,
+      malId: item.malId,
+      title: item.title,
+      officialTitle: item.officialTitle,
+      year: item.year,
+      type: item.type,
+      studio: item.studio,
+      episodeCount: item.episodeCount,
+      episodes: item.episodes,
+      cover: item.cover,
+      status: item.status,
+      genres: item.genres,
+      synopsis: item.synopsis,
+      trailerUrl: item.trailerUrl,
+      japaneseTitle: item.japaneseTitle,
+      titleSynonyms: item.titleSynonyms,
+      communityScore: item.communityScore,
+      malScore: item.malScore,
+      importLabel: item.importLabel,
+      importConfidence: item.importConfidence,
+      importScore: item.importScore,
+      matchScore: item.matchScore || item.importConfidence,
+      matchReason: item.matchReason || item.importLabel || 'Possible match'
+    }))
+  };
+}
+
+function normalizeKey(value = '') {
+  return String(value).toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+function candidateKeys(candidate = {}) {
+  return [
+    candidate.title,
+    candidate.officialTitle,
+    candidate.japaneseTitle,
+    ...(candidate.titleSynonyms || [])
+  ].filter(Boolean).map(normalizeKey).filter(Boolean);
+}
+
+function shouldAskRemoteCandidateSelection(query, results = []) {
+  if (!results || results.length < 2) return false;
+
+  const queryKey = normalizeKey(query);
+  const top = results[0];
+  const topKeys = candidateKeys(top);
+  const topIsExact = topKeys.includes(queryKey) || top.importLabel === 'Exact Match';
+
+  // If Jikan found one obvious exact match, let the import proceed normally.
+  if (topIsExact && Number(top.importConfidence || 0) >= 96) return false;
+
+  // Otherwise, if there are several plausible matches, ask the user instead of guessing.
+  const plausible = results.filter((item) => {
+    const confidence = Number(item.importConfidence || item.matchScore || 0);
+    return confidence >= 60 || ['Exact Match', 'Best Match', 'Sequel', 'Spinoff', 'Related'].includes(item.importLabel);
+  });
+
+  return plausible.length > 1;
+}
+
+
 export async function executeSingleAddCommand({ anime = [], updateAnime, command }) {
   if (!updateAnime || !command?.title) {
     return makeTextResult('I could not update your library because the save path is not ready.');
+  }
+
+  if (command.selectedAnime) {
+    const selected = command.selectedAnime;
+    const existing = anime.find((item) =>
+      (selected.id && item.id === selected.id) ||
+      (selected.malId && item.malId && String(item.malId) === String(selected.malId)) ||
+      String(item.title || '').toLowerCase() === String(selected.title || '').toLowerCase()
+    );
+
+    if (existing) {
+      const merged = mergeAnimeMetadata(existing, { ...existing, status: command.status || existing.status }, command.status || existing.status);
+      await updateAnime(merged);
+      return makeTextResult(`Updated selected entry: ${existing.title} → ${merged.status}. No duplicate added.`);
+    }
+
+    const selectedAnime = {
+      ...selected,
+      id: selected.id || `anime-${normalizeKey(selected.officialTitle || selected.title || command.title)}`,
+      title: selected.officialTitle || selected.title || command.title,
+      officialTitle: selected.officialTitle || selected.title || command.title,
+      status: command.status || 'Watching',
+      favorite: false,
+      rewatches: 0,
+      notes: selected.notes || 'Added from JoeAI candidate picker.',
+      addedFrom: 'JoeAI candidate picker',
+      metadataNeedsRefresh: false,
+      finalRank: anime.length + 1
+    };
+
+    await updateAnime(selectedAnime);
+    return makeTextResult(`Added ${selectedAnime.officialTitle || selectedAnime.title} as ${selectedAnime.status}.`);
+  }
+
+  const localMatches = findLocalTitleMatches(anime, command.title);
+  const exactMatches = localMatches.exact || [];
+  const shorthandMatches = localMatches.shorthand || [];
+  const relatedMatches = localMatches.related || [];
+
+  if (exactMatches.length === 1) {
+    const existing = exactMatches[0];
+    const merged = mergeAnimeMetadata(existing, { ...existing, status: command.status || existing.status }, command.status || existing.status);
+    await updateAnime(merged);
+    return makeTextResult(`Updated existing entry: ${existing.title} → ${merged.status}. No duplicate added.`);
+  }
+
+  if (exactMatches.length > 1) {
+    return makeCandidateSelectionResult({ title: command.title, status: command.status || 'Watching', candidates: exactMatches });
+  }
+
+  // Safe shorthand: one-word request like "Frieren" can update one obvious local match.
+  // Multi-word requests like "Trigun Stampede" should not silently update "Trigun".
+  const requestedWords = String(command.title || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').split(/\s+/).filter(Boolean);
+  if (requestedWords.length === 1 && shorthandMatches.length === 1 && !relatedMatches.length) {
+    const existing = shorthandMatches[0];
+    const merged = mergeAnimeMetadata(existing, { ...existing, status: command.status || existing.status }, command.status || existing.status);
+    await updateAnime(merged);
+    return makeTextResult(`Updated existing entry: ${existing.title} → ${merged.status}. No duplicate added.`);
+  }
+
+  const ambiguousCandidates = [...shorthandMatches, ...relatedMatches];
+  if (ambiguousCandidates.length > 1) {
+    return makeCandidateSelectionResult({ title: command.title, status: command.status || 'Watching', candidates: ambiguousCandidates });
   }
 
   const result = await importAnimeByTitle({
@@ -27,6 +164,15 @@ export async function executeSingleAddCommand({ anime = [], updateAnime, command
     status: command.status || 'Watching',
     library: anime
   });
+
+  if (!result.duplicate && shouldAskRemoteCandidateSelection(command.title, result.results || [])) {
+    return makeCandidateSelectionResult({
+      title: command.title,
+      status: command.status || 'Watching',
+      candidates: result.results,
+      source: 'remote'
+    });
+  }
 
   if (result.duplicate) {
     const merged = mergeAnimeMetadata(

@@ -199,7 +199,8 @@ export function Assistant({ anime, catalog = [], updateAnime }) {
         intent: {
           kind: 'singleAdd',
           title: input.title,
-          status: input.status || 'Watching'
+          status: input.status || 'Watching',
+          selectedAnime: input.selectedAnime
         },
         anime,
         catalog,
@@ -294,7 +295,7 @@ export function Assistant({ anime, catalog = [], updateAnime }) {
           who: 'bot',
           type: 'confirmAction',
           title: '🍜 Ready to bulk import',
-          text: `I found ${intent.titles.length} title(s). I will add them as ${intent.status}, skip duplicates, and fetch metadata. Import these?`,
+          text: `I found ${intent.titles.length} title(s). I will add them as ${intent.status}, skip duplicates, and fetch metadata only when needed. Import these?`,
           confirmLabel: 'Import Titles',
           action
         }
@@ -311,7 +312,7 @@ export function Assistant({ anime, catalog = [], updateAnime }) {
           who: 'bot',
           type: 'confirmAction',
           title: '🍜 Ready to update your library',
-          text: `I will add or update “${intent.title}” as ${intent.status} and fetch metadata. Continue?`,
+          text: `I will add or update “${intent.title}” as ${intent.status}. Metadata will only be fetched if needed. Continue?`,
           confirmLabel: 'Do It',
           action
         }
@@ -535,6 +536,54 @@ export function Assistant({ anime, catalog = [], updateAnime }) {
     );
   }
 
+  function renderCandidateSelection(message, index) {
+    return (
+      <div key={index} className="chat bot joeaiRecommendations">
+        <div className="joeaiRecHeader">
+          <h2>{message.title}</h2>
+          <p>{message.text}</p>
+        </div>
+        <div className="joeaiRecGrid">
+          {(message.candidates || []).map((item) => {
+            const displayTitle = item.officialTitle || item.title;
+            return (
+              <article className="joeaiRecCard" key={item.id || displayTitle}>
+                <Poster anime={item} className="joeaiRecPoster" mode="thumb" />
+                <div className="joeaiRecBody">
+                  <div className="joeaiRecTopline">
+                    {item.matchScore && <span className="joeaiMatchBadge">{item.matchScore}%</span>}
+                    <span className="joeaiMatchLabel">{item.matchReason || 'Possible match'}</span>
+                  </div>
+                  <h3>{displayTitle}</h3>
+                  <div className="joeaiRecMeta">
+                    {item.year && <span>{item.year}</span>}
+                    {item.episodes && <span>{item.episodes} eps</span>}
+                    {item.episodeCount && !item.episodes && <span>{item.episodeCount} eps</span>}
+                    {item.studio && <span>{item.studio}</span>}
+                    {item.status && <span>{item.status}</span>}
+                  </div>
+                  <div className="joeaiRecActions">
+                    <button
+                      type="button"
+                      onClick={() => addAnimeToLibrary({
+                        title: displayTitle,
+                        status: message.status || 'Watching',
+                        selectedAnime: item
+                      })}
+                      disabled={addingId === 'anime-' + animeId(item) || !updateAnime}
+                    >
+                      Use This One
+                    </button>
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
   function renderMessage(message, index) {
     if (message.type === 'helpCard') {
       return renderHelpCard(message, index);
@@ -546,6 +595,10 @@ export function Assistant({ anime, catalog = [], updateAnime }) {
 
     if (message.type === 'bulkResult') {
       return renderBulkResult(message, index);
+    }
+
+    if (message.type === 'candidateSelection') {
+      return renderCandidateSelection(message, index);
     }
 
     if (message.type === 'recommendations') {
