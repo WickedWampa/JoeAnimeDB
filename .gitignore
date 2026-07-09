@@ -6,3 +6,8 @@ out/
 JoeAnime.db
 *.zip
 *.db
+# Electron builds
+dist-desktop/
+
+# Temporary genome files
+.tmp*
