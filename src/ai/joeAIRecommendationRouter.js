@@ -291,36 +291,114 @@ function scoreRelatedCards(sourceCard) {
     .slice(0, 8);
 }
 
-function formatSimilarGenomeAnswer(sourceCard) {
+function findLibraryItemForCard(card = {}, anime = []) {
+  const cardNames = [card.id, card.title, ...(card.titles || []), ...(card.aliases || [])]
+    .filter(Boolean)
+    .map(norm);
+
+  return (anime || []).find((item) => {
+    const itemNames = [item.title, item.officialTitle, item.japaneseTitle, ...(item.titleSynonyms || [])]
+      .filter(Boolean)
+      .map(norm);
+    return itemNames.some((name) => cardNames.includes(name));
+  }) || null;
+}
+
+function sharedGenomeTags(sourceCard = {}, targetCard = {}) {
+  const source = new Set([
+    sourceCard.domain,
+    sourceCard.subdomain,
+    ...(sourceCard.viewerMotivations || []),
+    ...(sourceCard.themes || []),
+    ...(sourceCard.atmosphere || []),
+    ...(sourceCard.emotionalProfile || []),
+    ...(sourceCard.fantasyPillars || [])
+  ].filter(Boolean).map(norm));
+
+  const target = [
+    targetCard.domain,
+    targetCard.subdomain,
+    ...(targetCard.viewerMotivations || []),
+    ...(targetCard.themes || []),
+    ...(targetCard.atmosphere || []),
+    ...(targetCard.emotionalProfile || []),
+    ...(targetCard.fantasyPillars || [])
+  ].filter(Boolean);
+
+  const shared = target.filter((item) => source.has(norm(item)));
+  return [...new Set(shared)].slice(0, 5);
+}
+
+function genomeCardToRecommendationItem(card = {}, index = 0, sourceCard = {}, anime = []) {
+  const local = findLibraryItemForCard(card, anime);
+  const name = title(card);
+  const shared = sharedGenomeTags(sourceCard, card);
+  const preferredIds = sourceCard.idealFollowUps || sourceCard.successors || [];
+  const isPreferred = preferredIds.some((id) => norm(id) === norm(card.id) || norm(id) === norm(name));
+  const baseMatch = isPreferred ? 98 : Math.max(82, 96 - index * 3);
+
+  return {
+    ...(local || {}),
+    id: local?.id || card.id || name,
+    title: local?.title || name,
+    officialTitle: local?.officialTitle || name,
+    year: local?.year || card.year,
+    episodes: local?.episodes || local?.episodeCount || card.episodes,
+    studio: local?.studio || card.studio,
+    cover: local?.cover || card.cover || card.image,
+    communityScore: local?.communityScore || local?.malScore || card.communityScore || card.malScore,
+    owned: Boolean(local),
+    bucket: local ? 'library' : 'discovery',
+    match: Math.min(99, Math.max(72, baseMatch)),
+    matchLabel: isPreferred ? 'Genome Follow-up' : 'Genome Neighbor',
+    tags: shared.length ? shared : [card.domain, card.subdomain, ...(card.viewerMotivations || [])].filter(Boolean).slice(0, 5),
+    reasons: shared.length ? shared : [card.signature || card.coreFantasy || 'Shared Anime DNA'].filter(Boolean),
+    blurb: card.signature || card.coreFantasy || `${name} shares enough Anime DNA to be worth comparing.`,
+    joeAISummary: `${name} looks like a strong follow-up because it overlaps with the ${title(sourceCard)} Genome instead of only matching a surface genre.`,
+    deepDive: [
+      `Source Genome: ${title(sourceCard)}`,
+      `Candidate Genome: ${name}`,
+      shared.length ? `Shared traits: ${shared.join(', ')}` : 'Shared traits: broader Genome neighborhood match',
+      isPreferred ? 'Priority: listed as an ideal follow-up/successor.' : 'Priority: inferred from overlapping domain, mood, themes, and viewer motivations.'
+    ].join('\n')
+  };
+}
+
+function formatSimilarGenomeCards(sourceCard, anime = []) {
   const sourceTitle = title(sourceCard);
   const related = scoreRelatedCards(sourceCard);
 
-  const lines = [
-    `🧬 JoeAI Genome Match: ${sourceTitle}`,
-    '',
-    sourceCard.signature || sourceCard.note || `${sourceTitle} has a Genome profile.`,
-    ''
-  ];
-
-  if (sourceCard.viewerMotivations?.length) {
-    lines.push('What you are probably chasing:');
-    lines.push(sourceCard.viewerMotivations.slice(0, 6).map((item) => `• ${item}`).join('\n'));
-    lines.push('');
-  }
-
   if (!related.length) {
-    lines.push('I have the source Genome Card, but I do not have enough related cards yet. Add more module cards or catalog entries and I will get smarter.');
-    return lines.join('\n');
+    return {
+      type: 'text',
+      text: [
+        `🧬 JoeAI Genome Match: ${sourceTitle}`,
+        '',
+        sourceCard.signature || sourceCard.note || `${sourceTitle} has a Genome profile.`,
+        '',
+        'I have the source Genome Card, but I do not have enough related cards yet. Add more module cards or catalog entries and I will get smarter.'
+      ].join('\n')
+    };
   }
 
-  lines.push('Closest Genome follow-ups:');
-  lines.push('');
-  lines.push(related.map((card, index) => {
-    const why = card.signature || card.coreFantasy || 'Strong Genome neighbor.';
-    return `${index + 1}. ${title(card)}\n   • ${why}`;
-  }).join('\n\n'));
+  const chasing = (sourceCard.viewerMotivations || []).slice(0, 4);
+  const subtitle = chasing.length
+    ? `I think you are chasing ${chasing.join(', ')} — so I turned that into card-based follow-ups.`
+    : 'JoeAI turned the source Genome into card-based follow-ups instead of a wall of text.';
 
-  return lines.join('\n');
+  return {
+    type: 'recommendationCards',
+    title: `🍜 Because you like ${sourceTitle}`,
+    subtitle,
+    sourceAnime: sourceTitle,
+    fullAnalysis: [
+      `Source: ${sourceTitle}`,
+      sourceCard.signature || sourceCard.note || '',
+      chasing.length ? `Likely chase: ${chasing.join(', ')}` : '',
+      'Cards are ranked from ideal follow-ups plus inferred Genome neighbors.'
+    ].filter(Boolean).join('\\n'),
+    items: related.map((card, index) => genomeCardToRecommendationItem(card, index, sourceCard, anime))
+  };
 }
 
 function formatTitleGenomeAnswer(card) {
@@ -372,11 +450,13 @@ export function routeJoeAIRecommendation(question = '', anime = [], catalog = []
   // Example: "recommend something like Higurashi"
   const similarTitle = extractSimilarityTitle(question);
   if (similarTitle) {
+    const sourceCard = findGenomeCardByTitle(similarTitle);
+    if (sourceCard) return formatSimilarGenomeCards(sourceCard, anime);
+
+    // Only fall back to the older knowledge-first text path when there is no
+    // Genome source card to build structured recommendation cards from.
     const smart = maybeKnowledgeFirstRecommendation(question, anime, catalog);
     if (smart && !/^I heard:.+could not find/i.test(smart)) return smart;
-
-    const sourceCard = findGenomeCardByTitle(similarTitle);
-    if (sourceCard) return formatSimilarGenomeAnswer(sourceCard);
   }
 
   if (broadIntent) {

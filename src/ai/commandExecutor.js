@@ -2,6 +2,7 @@ import { importAnimeByTitle, mergeAnimeMetadata, findLocalTitleMatches, searchAn
 import { answerLibraryQuestion } from './libraryIntelligence';
 import { maybeSimilarRecommendation } from './similarityEngine';
 import { maybeKnowledgeFirstRecommendation } from './knowledgeFirstRecommender';
+import { routeJoeAIConversation } from './conversation/conversationEngine';
 
 export function makeTextResult(text) {
   return { type: 'text', text };
@@ -451,6 +452,11 @@ function topList(items, label) {
 
 function answerConversationalQuestion({ text = '', anime = [], catalog = [], brain }) {
   const lower = String(text).toLowerCase();
+
+  const conversationAnswer = routeJoeAIConversation({ text, anime, catalog });
+  if (conversationAnswer) {
+    return conversationAnswer;
+  }
 
   const knowledgeFirstAnswer = maybeKnowledgeFirstRecommendation(text, anime, catalog);
   if (knowledgeFirstAnswer) {

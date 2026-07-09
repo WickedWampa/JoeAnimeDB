@@ -112,6 +112,24 @@ export function parseJoeAIIntent(input = '') {
   const lower = raw.toLowerCase();
   const status = normalizeStatus(raw);
 
+  const memoryPrompt =
+    /\b(what do you know about me|analyze my taste|analyse my taste|taste profile|joeai memory|anime taste|my taste|taste memory|what have you learned about me)\b/i.test(raw);
+
+  if (memoryPrompt) {
+    return { kind: 'memory', text: raw };
+  }
+
+  // Highest-priority reasoning requests must NOT fall through to title/genome lookup.
+  // Examples: "why do I like Bleach", "why did you recommend Kingdom",
+  // "explain worldbuilding". These belong to the conversation/reasoning engine.
+  const reasoningPrompt =
+    /^(why|explain|reason|reasons|how did you decide|how do you know|why did you recommend|why do i like|why should i watch)\b/i.test(raw) ||
+    /\b(why did you recommend|why do i like|why do you think|explain my|explain the|explain worldbuilding|reasoning|match breakdown)\b/i.test(raw);
+
+  if (reasoningPrompt) {
+    return { kind: 'question', text: raw, priority: 'reasoning' };
+  }
+
   // Similarity/title-like requests are handled by the recommendation router.
   // Keep them as questions so routeJoeAIRecommendation() can decide whether this is
   // a "similar to X" request, a known Genome title lookup, or normal fallback.

@@ -1,7 +1,13 @@
 import { MEMORY_PROFILE_VERSION } from './memoryTypes';
 import { buildTasteProfile } from './tasteProfile';
 import { buildMemoryJournal } from './journalEngine';
-import { saveMemoryProfile, loadMemoryProfile, appendMemoryJournal, loadMemoryJournal } from './memoryStorage';
+import {
+  saveMemoryProfile,
+  loadMemoryProfile,
+  appendMemoryJournal,
+  loadMemoryJournal,
+  loadMemoryEvents
+} from './memoryStorage';
 
 export function buildJoeAIMemory(library = [], options = {}) {
   const previousProfile = options.previousProfile || loadMemoryProfile();
@@ -12,6 +18,7 @@ export function buildJoeAIMemory(library = [], options = {}) {
     createdAt: previousProfile?.createdAt || new Date().toISOString(),
     lastUpdated: new Date().toISOString(),
     confidence: taste.confidence,
+    viewerClass: taste.viewerClass,
     stats: taste.stats,
     dimensions: taste.dimensions,
     strongest: taste.strongest,
@@ -28,14 +35,18 @@ export function buildJoeAIMemory(library = [], options = {}) {
   return {
     profile,
     journalEntry,
-    journal: options.persist ? loadMemoryJournal() : [journalEntry]
+    reflections: (journalEntry.events || []).filter((event) => ['daily_thought', 'self_reflection', 'uncertainty', 'prediction_ready'].includes(event.type)),
+    events: journalEntry.events || [],
+    journal: options.persist ? loadMemoryJournal() : [journalEntry],
+    eventFeed: options.persist ? loadMemoryEvents() : (journalEntry.events || [])
   };
 }
 
 export function getStoredJoeAIMemory() {
   return {
     profile: loadMemoryProfile(),
-    journal: loadMemoryJournal()
+    journal: loadMemoryJournal(),
+    events: loadMemoryEvents()
   };
 }
 
@@ -45,6 +56,7 @@ export function summarizeJoeAIMemory(profile) {
   const lines = [
     '🧠 JoeAI Memory',
     '',
+    `Viewer Class: ${profile.viewerClass || 'Anime Explorer'}`,
     `Confidence: ${profile.confidence || 0}%`,
     `Based on ${profile.stats?.total || 0} library entries, ${profile.stats?.completed || 0} completed anime, and ${profile.stats?.rewatches || 0} rewatches.`,
     '',
