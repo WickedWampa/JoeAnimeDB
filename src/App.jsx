@@ -56,12 +56,44 @@ function UpdateProgressOverlay({ syncText, syncProgress }) {
   );
 }
 
+
+function UpdateConfirmModal({ onCancel, onConfirm, disabled }) {
+  return (
+    <div className="updateConfirmOverlay" role="dialog" aria-modal="true" aria-labelledby="updateConfirmTitle">
+      <div className="updateConfirmCard">
+        <div className="updateConfirmGlow" aria-hidden="true" />
+        <p className="updateConfirmEyebrow">Smart Database Update</p>
+        <h2 id="updateConfirmTitle">🍜 Update JoeAnimeDB?</h2>
+        <p>
+          JoeAI will scan your local library first, skip titles that already look good,
+          refresh missing metadata/artwork, and rebuild the recommendation catalog.
+        </p>
+
+        <div className="updateConfirmList">
+          <span>✓ Local audit first</span>
+          <span>✓ Only missing/dirty titles hit Jikan</span>
+          <span>✓ Catalog refresh after metadata</span>
+          <span>✓ No native browser popup</span>
+        </div>
+
+        <div className="updateConfirmActions">
+          <button type="button" onClick={onCancel} disabled={disabled}>Cancel</button>
+          <button type="button" className="primary" onClick={onConfirm} disabled={disabled}>
+            {disabled ? 'Starting...' : 'Update Database'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function App() {
   const [view, setView] = useState('dashboard');
   const [selected, setSelected] = useState(null);
   const [mode, setMode] = useState('poster');
   const [theme, setTheme] = useState('neon');
-
+  const [updateConfirmOpen, setUpdateConfirmOpen] = useState(false);
+  const [updateConfirmStarting, setUpdateConfirmStarting] = useState(false);
   const library = useAnimeLibrary();
   const {
     data,
@@ -84,6 +116,25 @@ export function App() {
 
     updateAnime, deleteAnime
   } = library;
+
+
+  function requestDatabaseUpdate() {
+    if (syncing || updateConfirmStarting) return;
+    setUpdateConfirmOpen(true);
+  }
+
+  async function confirmDatabaseUpdate() {
+    if (syncing || updateConfirmStarting) return;
+    setUpdateConfirmStarting(true);
+
+    try {
+      setUpdateConfirmOpen(false);
+      await syncMetadata();
+    } finally {
+      setUpdateConfirmStarting(false);
+    }
+  }
+
 
   const favoriteAnime = useMemo(
     () => filtered.filter((item) => Boolean(item.favorite)),
@@ -118,7 +169,7 @@ export function App() {
 
   return (
     <main className={`shell theme-${theme}`}>
-      <Sidebar view={view} setView={setView} syncMetadata={syncMetadata} theme={theme} setTheme={setTheme} newUserMode={newUserMode} />
+      <Sidebar view={view} setView={setView} syncMetadata={requestDatabaseUpdate} theme={theme} setTheme={setTheme} newUserMode={newUserMode} />
 
       <section className="content">
         {newUserMode && (
@@ -130,14 +181,19 @@ export function App() {
           </div>
         )}
 
-        <header className="topbar">
-          <SearchBar query={query} setQuery={setQuery} view={view} setView={setView} />
-          <div className="viewModes">
-            <button className={mode === 'poster' ? 'active' : ''} onClick={() => setMode('poster')}>Poster</button>
-            <button className={mode === 'list' ? 'active' : ''} onClick={() => setMode('list')}>List</button>
-            <button onClick={syncMetadata}>Update Database</button>
-          </div>
-        </header>
+        {view !== 'dashboard' && (
+          <header className="topbar">
+            {['library', 'favorites', 'rankings'].includes(view) && (
+              <SearchBar query={query} setQuery={setQuery} view={view} setView={setView} />
+            )}
+
+            <div className="viewModes">
+              <button className={mode === 'poster' ? 'active' : ''} onClick={() => setMode('poster')}>Poster</button>
+              <button className={mode === 'list' ? 'active' : ''} onClick={() => setMode('list')}>List</button>
+              <button onClick={requestDatabaseUpdate}>Update Database</button>
+            </div>
+          </header>
+        )}
 
         {view === 'dashboard' && <Dashboard anime={anime} stats={stats} setSelected={setSelected} updateAnime={handleUpdateAnime} setView={setView} />}
         {(view === 'library' || view === 'rankings') && (
@@ -154,7 +210,7 @@ export function App() {
         {view === 'settings' && (
           <SettingsPage
             data={data}
-            syncMetadata={syncMetadata}
+            syncMetadata={requestDatabaseUpdate}
             stats={stats}
             newUserMode={newUserMode}
             enableNewUserMode={enableNewUserMode}
@@ -163,6 +219,14 @@ export function App() {
           />
         )}
       </section>
+
+      {updateConfirmOpen && (
+        <UpdateConfirmModal
+          disabled={updateConfirmStarting}
+          onCancel={() => setUpdateConfirmOpen(false)}
+          onConfirm={confirmDatabaseUpdate}
+        />
+      )}
 
       {selected && <DetailModal anime={selected} onClose={() => setSelected(null)} updateAnime={handleUpdateAnime} deleteAnime={deleteAnime} />}
       {syncing && <UpdateProgressOverlay syncText={syncText} syncProgress={syncProgress} />}

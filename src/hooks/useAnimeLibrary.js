@@ -266,8 +266,11 @@ export function useAnimeLibrary() {
       'Continue and build recommendation catalog / genomes?'
     ].join('\n');
 
-    if (!confirm(message)) return;
+    // Native browser confirm() can steal caret/focus in Electron after long async updates.
+    // Run the updater directly and keep confirmation in the visible UI later if needed.
+    console.info(message);
 
+    document.body.style.cursor = 'default';
     setSyncing(true);
     setSyncText('Scanning local database...');
     setSyncProgress({
@@ -386,6 +389,7 @@ export function useAnimeLibrary() {
     );
 
     await sleep(2200);
+    document.body.style.cursor = 'default';
     setSyncing(false);
     setSyncText('');
     setSyncProgress(emptyProgress);

@@ -763,3 +763,33 @@ button,input{font:inherit}.shell{display:grid;grid-template-columns:260px 1fr;mi
   font-size: 12px;
   font-weight: 900;
 }
+
+
+/* PATCH: Electron caret repaint/focus visibility after database sync */
+input,
+textarea,
+.search input,
+.joeaiChatInput textarea {
+  caret-color: var(--cyan, #37eaff) !important;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+input:focus,
+textarea:focus,
+.search input:focus,
+.joeaiChatInput textarea:focus {
+  caret-color: var(--cyan, #37eaff) !important;
+}
+
+body.joeCaretRepaint input,
+body.joeCaretRepaint textarea {
+  transform: translateZ(0);
+  animation: joeCaretRepaintNudge 180ms linear 1;
+}
+
+@keyframes joeCaretRepaintNudge {
+  0% { opacity: .995; }
+  50% { opacity: 1; }
+  100% { opacity: .995; }
+}
