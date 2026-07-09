@@ -10,6 +10,7 @@ import './styles/library-card-fix.css';
 import './styles/joeai-cards.css';
 import './styles/joeai-recommendations.css';
 import './styles/progress-overlay.css';
+import './styles/joeanime-home-v2.css';
 import React, { useMemo, useState } from 'react';
 
 import { Sidebar } from './components/Sidebar';

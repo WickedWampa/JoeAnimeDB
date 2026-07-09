@@ -1,165 +1,270 @@
 import React from 'react';
-import { AnimeCard } from '../components/AnimeCard';
+import '../styles/joeai-home-v3.css';
 import { Poster } from '../components/Poster';
+import { countBy } from '../utils/animeUtils';
 
 function normalizeStatus(status = '') {
-  return String(status).toLowerCase().replace(/\s+/g, '');
+  return String(status || '').toLowerCase().replace(/\s+/g, '');
 }
 
-function statusCount(anime, status) {
-  return anime.filter((item) => normalizeStatus(item.status) === normalizeStatus(status)).length;
+function titleOf(item = {}) {
+  return item.officialTitle || item.title || 'Unknown title';
 }
 
-function myScore(anime) {
-  const value = Number(anime?.joeScore ?? 0);
-  return Number.isFinite(value) ? value.toFixed(1) : '0.0';
+function myScore(item = {}) {
+  const value = Number(item.joeScore ?? item.score ?? item.finalScore ?? item.rating ?? 0);
+  return Number.isFinite(value) && value > 0 ? value.toFixed(1) : '—';
 }
 
-export function StatStrip({ stats, anime }) {
-  const favorites = anime.filter((item) => Boolean(item.favorite)).length;
-  const watching = statusCount(anime, 'Watching');
-  const completed = statusCount(anime, 'Completed');
+function initials(title = '') {
+  return String(title || 'AN')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase();
+}
 
+function pct(value = 0, max = 1) {
+  if (!max) return 0;
+  return Math.max(4, Math.min(100, Math.round((Number(value || 0) / Number(max || 1)) * 100)));
+}
+
+function MiniPoster({ anime, className = '' }) {
+  if (!anime) return <div className={`homeV3Poster ${className}`}>?</div>;
   return (
-    <section className="stats homeStats">
-      <div><strong>{stats.total}</strong><span>Total Anime</span></div>
-      <div><strong>{favorites}</strong><span>Favorites</span></div>
-      <div><strong>{watching}</strong><span>Watching</span></div>
-      <div><strong>{completed}</strong><span>Completed</span></div>
-      <div><strong>{stats.avg}</strong><span>Avg My Score</span></div>
+    <div className={`homeV3Poster ${className}`}>
+      <Poster anime={anime} mode="thumb" />
+      <span>{initials(titleOf(anime))}</span>
+    </div>
+  );
+}
+
+function StatPill({ icon, value, label }) {
+  return (
+    <div className="homeV3StatPill">
+      <span className="homeV3StatIcon">{icon}</span>
+      <strong>{value}</strong>
+      <small>{label}</small>
+    </div>
+  );
+}
+
+function Panel({ className = '', icon, title, action, onAction, children }) {
+  return (
+    <section className={`homeV3Panel ${className}`}>
+      <div className="homeV3PanelHeader">
+        <h2>{icon && <span>{icon}</span>}{title}</h2>
+        {action && <button type="button" onClick={onAction}>{action}</button>}
+      </div>
+      {children}
     </section>
+  );
+}
+
+function SignalRow({ label, value, max }) {
+  return (
+    <button type="button" className="homeV3SignalRow">
+      <span>{label}</span>
+      <div className="homeV3SignalBar"><i style={{ width: `${pct(value, max)}%` }} /></div>
+      <strong>{value}</strong>
+    </button>
   );
 }
 
 function MiniAnimeRow({ anime, setSelected }) {
   return (
-    <button className="miniAnimeRow" type="button" onClick={() => setSelected(anime)}>
-      <Poster anime={anime} className="miniPoster" mode="thumb" />
+    <button className="homeV3MiniAnime" type="button" onClick={() => setSelected?.(anime)}>
+      <MiniPoster anime={anime} />
       <span>
-        <strong>{anime.title}</strong>
-        <small>#{anime.finalRank || '—'} · ★ {myScore(anime)}</small>
+        <strong>{titleOf(anime)}</strong>
+        <small>{anime.status || 'Ready'} · ★ {myScore(anime)}</small>
       </span>
     </button>
   );
 }
 
-function EmptyHomeCard({ title, text, action, onClick }) {
+function AnchorCard({ anime, setSelected }) {
   return (
-    <div className="homeEmptyCard">
-      <strong>{title}</strong>
-      <p>{text}</p>
-      {action && <button type="button" onClick={onClick}>{action}</button>}
-    </div>
+    <button className="homeV3Anchor" type="button" onClick={() => setSelected?.(anime)}>
+      <MiniPoster anime={anime} />
+      <span>
+        <strong>{titleOf(anime)}</strong>
+        <small>{Number(anime.rewatches || 0) > 0 ? `${anime.rewatches}x rewatch` : 'favorite'}</small>
+      </span>
+    </button>
   );
 }
 
-export function Dashboard({ anime, stats, setSelected, updateAnime, setView }) {
-  const favorites = anime.filter((item) => Boolean(item.favorite));
-  const watching = anime.filter((item) => normalizeStatus(item.status) === 'watching');
-  const topRated = [...anime]
-    .filter((item) => Number(item.joeScore || 0) > 0)
-    .sort((a, b) => Number(b.joeScore || 0) - Number(a.joeScore || 0))
-    .slice(0, 6);
+function PromptButton({ text, setView }) {
+  return (
+    <button className="homeV3Prompt" type="button" onClick={() => setView?.('assistant')}>
+      <span>{text}</span>
+      <b>›</b>
+    </button>
+  );
+}
 
-  const rankedFallback = [...anime]
-    .sort((a, b) => Number(a.finalRank || 9999) - Number(b.finalRank || 9999));
-
-  const recommendation = rankedFallback.find((item) => !item.favorite && normalizeStatus(item.status) !== 'completed') || rankedFallback[0];
-  const daily = watching[0] || favorites[0] || rankedFallback[0];
+export function StatStrip({ stats, anime }) {
+  const completed = anime.filter((item) => normalizeStatus(item.status) === 'completed').length;
+  const watching = anime.filter((item) => normalizeStatus(item.status) === 'watching').length;
+  const rewatches = anime.reduce((sum, item) => sum + Number(item.rewatches || 0), 0);
 
   return (
-    <>
-      <section className="homeHero">
-        <div className="homeHeroText">
-          <p className="eyebrow">Welcome back</p>
-          <h1>Remember Every Anime.</h1>
-          <p>Your personal anime command center: watch status, favorites, scores, notes, rewatches, and recommendations built around your taste.</p>
-          <div className="heroActions">
-            <button type="button" onClick={() => setView('library')}>Open Library</button>
-            <button type="button" onClick={() => setView('favorites')}>View Favorites</button>
+    <section className="homeV3StatsInline">
+      <StatPill icon="▤" value={stats?.total ?? anime.length} label="Anime" />
+      <StatPill icon="✓" value={completed} label="Completed" />
+      <StatPill icon="↻" value={rewatches} label="Rewatches" />
+      <StatPill icon="★" value={stats?.avg ?? '—'} label="Average" />
+      <StatPill icon="▶" value={watching} label="Watching" />
+    </section>
+  );
+}
+
+export function Dashboard({ anime = [], stats = {}, setSelected, updateAnime, setView }) {
+  const completed = anime.filter((item) => normalizeStatus(item.status) === 'completed').length;
+  const watching = anime.filter((item) => normalizeStatus(item.status) === 'watching');
+  const rewatches = anime.reduce((sum, item) => sum + Number(item.rewatches || 0), 0);
+  const favorites = anime.filter((item) => Boolean(item.favorite));
+  const anchors = [...anime]
+    .filter((item) => Number(item.rewatches || 0) > 0 || item.favorite)
+    .sort((a, b) => Number(b.rewatches || 0) - Number(a.rewatches || 0) || Number(b.joeScore || 0) - Number(a.joeScore || 0))
+    .slice(0, 4);
+
+  const ranked = [...anime]
+    .sort((a, b) => Number(a.finalRank || 99999) - Number(b.finalRank || 99999));
+
+  const tonight = watching[0] || ranked.find((item) => normalizeStatus(item.status) !== 'completed') || ranked[0];
+  const topSignalRows = countBy(anime.flatMap((item) => item.genres || [])).slice(0, 5);
+  const studioRows = countBy(anime.map((item) => item.studio)).slice(0, 4);
+  const topMax = topSignalRows[0]?.[1] || 1;
+  const studioMax = studioRows[0]?.[1] || 1;
+  const topSignal = topSignalRows[0]?.[0] || 'Worldbuilding';
+
+  const statAvg = stats?.avg ?? (() => {
+    const rated = anime.filter((item) => Number(item.joeScore || item.score || item.finalScore || item.rating || 0) > 0);
+    if (!rated.length) return '—';
+    return (rated.reduce((sum, item) => sum + Number(item.joeScore || item.score || item.finalScore || item.rating || 0), 0) / rated.length).toFixed(2);
+  })();
+
+  return (
+    <section className="homeV3">
+      <section className="homeV3Hero">
+        <div className="homeV3HeroShade" />
+        <div className="homeV3HeroFx" aria-hidden="true">
+          <span className="fx fx1" />
+          <span className="fx fx2" />
+          <span className="fx fx3" />
+          <span className="fx fx4" />
+          <span className="fx fx5" />
+          <span className="fx fx6" />
+        </div>
+        <div className="homeV3HeroCopy">
+          <p className="homeV3Eyebrow">Welcome back,</p>
+          <h1>Joe.</h1>
+          <p className="homeV3Lead">
+            JoeAI analyzed your library and found new recommendation patterns.
+          </p>
+          <div className="homeV3HeroActions">
+            <button type="button" className="primary" onClick={() => setView?.('assistant')}>🧠 Ask JoeAI</button>
+            <button type="button" onClick={() => setView?.('library')}>📖 Open Library</button>
           </div>
         </div>
-        {daily && (
-          <button className="daily spotlightCard" onClick={() => setSelected(daily)}>
-            <Poster anime={daily} className="dailyPoster" mode="thumb" />
+
+        <div className="homeV3HeroStats">
+          <StatPill icon="▤" value={stats?.total ?? anime.length} label="Anime" />
+          <StatPill icon="✓" value={completed} label="Completed" />
+          <StatPill icon="↻" value={rewatches} label="Rewatches" />
+          <StatPill icon="★" value={statAvg} label="Average" />
+        </div>
+      </section>
+
+      <section className="homeV3Grid">
+        <Panel className="homeV3Thought" icon="🧠" title="JoeAI Thought" action="Ask" onAction={() => setView?.('assistant')}>
+          <div className="homeV3ThoughtInner">
             <div>
-              <span>{watching[0] ? 'Continue Watching' : 'Today\'s Pick'}</span>
-              <strong>{daily.title}</strong>
-              <small>{daily.status || 'Ready when you are'} · ★ {myScore(daily)}</small>
+              <p><strong>{topSignal}</strong> is leading your Anime DNA today.</p>
+              <p className="homeV3ThoughtSub">Ask JoeAI to explain the full pattern.</p>
             </div>
-          </button>
-        )}
-      </section>
+            <div className="homeV3BrainPulse" aria-hidden="true">🧠</div>
+          </div>
+        </Panel>
 
-      <StatStrip stats={stats} anime={anime} />
+        <Panel className="homeV3QuickAsk" icon="⚡" title="Quick Ask" action="Open" onAction={() => setView?.('assistant')}>
+          <div className="homeV3PromptList">
+            <PromptButton text="recommend something like Slime" setView={setView} />
+            <PromptButton text="what should I watch next?" setView={setView} />
+            <PromptButton text="why do I like Bleach?" setView={setView} />
+            <PromptButton text="what changed recently?" setView={setView} />
+          </div>
+        </Panel>
 
-      <section className="homeGrid">
-        <div className="panel homePanel continuePanel">
-          <div className="panelHeader">
-            <div>
-              <p className="eyebrow">Up Next</p>
-              <h2>Continue Watching</h2>
+        <Panel className="homeV3DNA" icon="🧬" title="Anime DNA" action="Stats" onAction={() => setView?.('analytics')}>
+          <div className="homeV3SignalRows">
+            {topSignalRows.length ? topSignalRows.map(([name, count]) => (
+              <SignalRow key={name} label={name} value={count} max={topMax} />
+            )) : <p className="homeV3Empty">Add more anime to build your Anime DNA.</p>}
+          </div>
+        </Panel>
+
+        <Panel className="homeV3Comfort" icon="❤️" title="Comfort Anchors" action="Favorites" onAction={() => setView?.('favorites')}>
+          <div className="homeV3AnchorGrid">
+            {(anchors.length ? anchors : favorites.slice(0, 4)).map((item) => (
+              <AnchorCard key={item.id || item.title} anime={item} setSelected={setSelected} />
+            ))}
+            {!anchors.length && !favorites.length && <p className="homeV3Empty">Mark favorites or rewatches to teach JoeAI your comfort core.</p>}
+          </div>
+        </Panel>
+
+        <Panel className="homeV3Studio" icon="🎬" title="Studio DNA" action="Explore" onAction={() => setView?.('analytics')}>
+          <div className="homeV3StudioRows">
+            {studioRows.length ? studioRows.map(([name, count]) => (
+              <button key={name} type="button" className="homeV3StudioRow">
+                <span>{name}</span>
+                <strong>{count}</strong>
+                <i style={{ width: `${pct(count, studioMax)}%` }} />
+              </button>
+            )) : <p className="homeV3Empty">Studio patterns will appear after metadata sync.</p>}
+          </div>
+        </Panel>
+
+        <Panel className="homeV3Seed" icon="⭐" title="Tonight's Recommendation" action="Get Rec" onAction={() => setView?.('assistant')}>
+          {tonight ? (
+            <div className="homeV3SeedCard">
+              <MiniPoster anime={tonight} className="large" />
+              <div>
+                <h3>{titleOf(tonight)}</h3>
+                <p><strong>78% Match</strong></p>
+                <div className="homeV3SeedTags">
+                  {(tonight.genres || ['Action', 'Adventure']).slice(0, 4).map((tag) => <span key={tag}>{tag}</span>)}
+                </div>
+                <small>You loved the journey, the momentum, and the emotional payoff. This one should hit nearby notes.</small>
+              </div>
+              <div className="homeV3SeedActions">
+                <button type="button" onClick={() => setView?.('assistant')}>Why this?</button>
+                <button type="button" className="primary" onClick={() => setSelected?.(tonight)}>Open</button>
+              </div>
             </div>
-            <button type="button" onClick={() => setView('library')}>Browse</button>
-          </div>
-          {watching.length ? (
-            <div className="miniList">
-              {watching.slice(0, 5).map((item) => <MiniAnimeRow key={item.id} anime={item} setSelected={setSelected} />)}
-            </div>
-          ) : (
-            <EmptyHomeCard title="Nothing marked Watching yet" text="Set a title to Watching from the detail modal and it will appear here." action="Open Library" onClick={() => setView('library')} />
-          )}
-        </div>
+          ) : <p className="homeV3Empty">Add a few titles and JoeAI will pick something for tonight.</p>}
+        </Panel>
 
-        <div className="panel homePanel recommendationPanel">
-          <div className="panelHeader">
-            <div>
-              <p className="eyebrow">Because You Loved...</p>
-              <h2>Recommendation Seed</h2>
-            </div>
+        <Panel className="homeV3Continue" icon="▶" title="Continue Watching" action="Library" onAction={() => setView?.('library')}>
+          <div className="homeV3MiniList">
+            {watching.slice(0, 3).map((item) => <MiniAnimeRow key={item.id || item.title} anime={item} setSelected={setSelected} />)}
+            {!watching.length && <p className="homeV3Empty">Nothing marked Watching yet.</p>}
           </div>
-          {recommendation ? (
-            <button className="recommendationCard" type="button" onClick={() => setSelected(recommendation)}>
-              <Poster anime={recommendation} className="recommendationPoster" mode="thumb" />
-              <span>
-                <strong>{recommendation.title}</strong>
-                <small>Early match based on your rankings and scores.</small>
-              </span>
-            </button>
-          ) : (
-            <EmptyHomeCard title="Recommendations coming soon" text="Rate a few more shows and JoeAnimeDB will start learning your taste." />
-          )}
-        </div>
-      </section>
+        </Panel>
 
-      <section className="panel">
-        <div className="panelHeader">
-          <div>
-            <p className="eyebrow">Personal Shelf</p>
-            <h2>Favorites</h2>
+        <Panel className="homeV3Learning" icon="📈" title="Recently Learned" action="View All" onAction={() => setView?.('assistant')}>
+          <div className="homeV3LearningGrid">
+            <div><span>↗</span><strong>{topSignal}</strong><small>strongest current signal</small></div>
+            <div><span>↻</span><strong>{rewatches}</strong><small>rewatches reinforcing comfort</small></div>
+            <div><span>▣</span><strong>{studioRows[0]?.[0] || 'Studio DNA'}</strong><small>top studio pattern</small></div>
+            <div><span>✓</span><strong>{completed}</strong><small>completed anime analyzed</small></div>
           </div>
-          <button type="button" onClick={() => setView('favorites')}>See All</button>
-        </div>
-        {favorites.length ? (
-          <div className="posterGrid small">
-            {favorites.slice(0, 6).map((item) => <AnimeCard key={item.id} anime={item} setSelected={setSelected} updateAnime={updateAnime} />)}
-          </div>
-        ) : (
-          <EmptyHomeCard title="No favorites yet" text="Click a heart on any anime and your favorites will show up here." action="Open Library" onClick={() => setView('library')} />
-        )}
+        </Panel>
       </section>
-
-      <section className="panel">
-        <div className="panelHeader">
-          <div>
-            <p className="eyebrow">Your Taste</p>
-            <h2>Top Rated</h2>
-          </div>
-        </div>
-        <div className="posterGrid small">
-          {(topRated.length ? topRated : rankedFallback.slice(0, 6)).slice(0, 6).map((item) => <AnimeCard key={item.id} anime={item} setSelected={setSelected} updateAnime={updateAnime} />)}
-        </div>
-      </section>
-    </>
+    </section>
   );
 }

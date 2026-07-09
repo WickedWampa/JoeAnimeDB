@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, Library, Trophy, BarChart3, Settings, Sparkles, Swords, Network, CalendarDays, RefreshCw, Heart, Palette, Wrench } from 'lucide-react';
+import { Home, Library, Trophy, BarChart3, Settings, Sparkles, CalendarDays, RefreshCw, Heart, Palette } from 'lucide-react';
 
 const THEMES = [
   { id: 'neon', label: 'Neon' },
@@ -24,20 +24,21 @@ export function Sidebar({ view, setView, syncMetadata, theme, setTheme, newUserM
     <aside className="sidebar">
       <div className="brand">
         <strong>JOE<span>ANIME</span>DB</strong>
-        <small>Remember Every Anime</small>
+        <small>Powered by JoeAI</small>
       </div>
 
       <nav>
-        <NavButton icon={<Home />} label="Dashboard" id="dashboard" view={view} setView={setView} />
+        <NavButton icon={<Home />} label="Home" id="dashboard" view={view} setView={setView} />
+        <NavButton icon={<Sparkles />} label="JoeAI" id="assistant" view={view} setView={setView} />
+
         <NavButton icon={<Library />} label="Library" id="library" view={view} setView={setView} />
         <NavButton icon={<Heart />} label="Favorites" id="favorites" view={view} setView={setView} />
         <NavButton icon={<Trophy />} label="Rankings" id="rankings" view={view} setView={setView} />
-        <NavButton icon={<Network />} label="Anime Universe" id="universe" view={view} setView={setView} />
-        <NavButton icon={<Sparkles />} label="Assistant" id="assistant" view={view} setView={setView} />
+
         <NavButton icon={<BarChart3 />} label="Analytics" id="analytics" view={view} setView={setView} />
         <NavButton icon={<CalendarDays />} label="Timeline" id="timeline" view={view} setView={setView} />
-        <NavButton icon={<Swords />} label="Bleach Shrine" id="bleach" view={view} setView={setView} />
-        <NavButton icon={<Settings />} label="Library Cleanup" id="cleanup" view={view} setView={setView} /> <NavButton icon={<Wrench size={21} />} label="Settings" id="settings" view={view} setView={setView} />
+
+        <NavButton icon={<Settings />} label="Settings" id="settings" view={view} setView={setView} />
       </nav>
 
       <section className="themePicker" aria-label="Theme picker">

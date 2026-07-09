@@ -1,33 +1,152 @@
 import React, { useMemo, useState } from 'react';
+import '../styles/joeanime-splash.css';
+import joeAnimeSplashHero from '../assets/joeanime-splash-hero.png';
 import { Poster } from '../components/Poster';
 import { score, countBy } from '../utils/animeUtils';
 import { exportBackup, resetData } from '../services/storage';
 import { createAnimeBrain } from '../engine/animeBrain'; import { fetchMetadata } from '../services/metadata'; import { maybeKnowledgeFirstRecommendation } from '../ai/knowledgeFirstRecommender'; import { parseJoeAIIntent } from '../ai/intentParser'; import { executeJoeAICommand } from '../ai/commandExecutor'; import { routeJoeAIRecommendation } from '../ai/joeAIRecommendationRouter';
 import { buildTonightsWatch } from '../ai/tonightsWatch'; import { importAnimeByTitle, mergeAnimeMetadata } from '../services/animeImporter';
-import { routeJoeAI } from '../ai/router/router';
 
 export function Universe({ anime, setQuery, setView }) {
-  const studios = countBy(anime.map((item) => item.studio)).slice(0, 10);
-  const genres = countBy(anime.flatMap((item) => item.genres || [])).slice(0, 10);
+  const total = anime.length;
+  const completed = anime.filter((item) => String(item.status || '').toLowerCase() === 'completed').length;
+  const watching = anime.filter((item) => String(item.status || '').toLowerCase() === 'watching').length;
+  const rewatches = anime.reduce((sum, item) => sum + Number(item.rewatches || 0), 0);
+  const rated = anime.filter((item) => Number(item.joeScore || item.score || item.finalScore || item.rating || 0) > 0);
+  const averageScore = rated.length
+    ? (rated.reduce((sum, item) => sum + Number(item.joeScore || item.score || item.finalScore || item.rating || 0), 0) / rated.length).toFixed(2)
+    : '—';
+
+  const studios = countBy(anime.map((item) => item.studio)).slice(0, 5);
+  const genres = countBy(anime.flatMap((item) => item.genres || [])).slice(0, 5);
+  const favorites = anime.filter((item) => item.favorite).slice(0, 4);
+  const anchors = [...anime]
+    .filter((item) => Number(item.rewatches || 0) > 0 || item.favorite)
+    .sort((a, b) => Number(b.rewatches || 0) - Number(a.rewatches || 0))
+    .slice(0, 4);
+
   const jump = (term) => {
-    setQuery(term);
-    setView('library');
+    setQuery?.(term);
+    setView?.('library');
   };
 
+  const go = (view) => setView?.(view);
+
   return (
-    <section className="grid2">
-      <div className="universeCore">
-        <h1>Joe</h1>
-        <p>{anime.length} anime connected by studios, genres, rankings, and rewatches.</p>
-      </div>
-      <div className="panel">
-        <h2>Studios</h2>
-        {studios.map(([name, count]) => <button className="branch" key={name} onClick={() => jump(name)}>{name}<span>{count}</span></button>)}
-      </div>
-      <div className="panel">
-        <h2>Genres</h2>
-        {genres.map(([name, count]) => <button className="branch" key={name} onClick={() => jump(name)}>{name}<span>{count}</span></button>)}
-      </div>
+    <section className="joeSplashPage">
+      <div className="joeSplashGlow one" />
+      <div className="joeSplashGlow two" />
+
+      <section className="joeSplashHeroCard">
+        <div className="joeSplashCopy">
+          <div className="joeSplashBrand">
+            <span className="joeSplashLogo">🍜</span>
+            <div>
+              <p className="joeSplashEyebrow">JoeAnimeDB</p>
+              <h1>Your anime library. Powered by JoeAI.</h1>
+            </div>
+          </div>
+
+          <h2>Track what you’ve watched. Understand <span>why</span> you loved it.</h2>
+          <p className="joeSplashLead">
+            JoeAI reads your library, Anime DNA, rewatches, ratings, and Genome signals to help you discover what to watch next.
+          </p>
+
+          <div className="joeSplashActions">
+            <button type="button" className="primary" onClick={() => go('assistant')}>Ask JoeAI</button>
+            <button type="button" onClick={() => go('library')}>Open Library</button>
+            <button type="button" onClick={() => go('taste-profile')}>Anime DNA</button>
+          </div>
+        </div>
+
+        <div className="joeSplashVisual">
+          <img src={joeAnimeSplashHero} alt="JoeAnimeDB splash artwork" />
+          <div className="joeSplashStatusCard">
+            <strong>JoeAI Status</strong>
+            <span>● Learning from your library</span>
+          </div>
+        </div>
+      </section>
+
+      <section className="joeSplashStats">
+        <div><strong>{total}</strong><span>Total Anime</span></div>
+        <div><strong>{completed}</strong><span>Completed</span></div>
+        <div><strong>{watching}</strong><span>Watching</span></div>
+        <div><strong>{rewatches}</strong><span>Rewatches</span></div>
+        <div><strong>{averageScore}</strong><span>Average Score</span></div>
+      </section>
+
+      <section className="joeSplashGrid">
+        <article className="joeSplashPanel featured">
+          <div className="joeSplashPanelHeader">
+            <h3>🧠 JoeAI Thought</h3>
+            <button type="button" onClick={() => go('memory-timeline')}>Memory</button>
+          </div>
+          <p>
+            Your strongest signals are forming around long-term attachment, worldbuilding, and comfort anchors. JoeAI will get sharper as you rate, rewatch, drop, and accept recommendations.
+          </p>
+        </article>
+
+        <article className="joeSplashPanel">
+          <div className="joeSplashPanelHeader">
+            <h3>🎯 Quick Start</h3>
+            <button type="button" onClick={() => go('assistant')}>Ask</button>
+          </div>
+          <div className="joeSplashPromptList">
+            {[
+              'recommend something like Slime',
+              'what should I watch next?',
+              'why do I like Bleach?',
+              'what changed recently?'
+            ].map((prompt) => (
+              <button type="button" key={prompt} onClick={() => go('assistant')}>{prompt}</button>
+            ))}
+          </div>
+        </article>
+
+        <article className="joeSplashPanel">
+          <div className="joeSplashPanelHeader">
+            <h3>❤️ Comfort Anchors</h3>
+            <button type="button" onClick={() => go('taste-profile')}>DNA</button>
+          </div>
+          <div className="joeSplashChipList">
+            {(anchors.length ? anchors : favorites).map((item) => (
+              <button type="button" key={item.id || item.title} onClick={() => jump(item.title)}>
+                {item.title}{Number(item.rewatches || 0) > 0 ? ` · ${item.rewatches}x` : ''}
+              </button>
+            ))}
+            {!anchors.length && !favorites.length && <span>No anchors yet — mark favorites or rewatches to teach JoeAI.</span>}
+          </div>
+        </article>
+
+        <article className="joeSplashPanel">
+          <div className="joeSplashPanelHeader">
+            <h3>📊 Top Signals</h3>
+            <button type="button" onClick={() => go('analytics')}>Stats</button>
+          </div>
+          <div className="joeSplashSignalRows">
+            {genres.map(([name, count]) => (
+              <button type="button" key={name} onClick={() => jump(name)}>
+                <span>{name}</span><strong>{count}</strong>
+              </button>
+            ))}
+          </div>
+        </article>
+
+        <article className="joeSplashPanel">
+          <div className="joeSplashPanelHeader">
+            <h3>🎬 Studio DNA</h3>
+            <button type="button" onClick={() => go('analytics')}>Explore</button>
+          </div>
+          <div className="joeSplashSignalRows">
+            {studios.map(([name, count]) => (
+              <button type="button" key={name} onClick={() => jump(name)}>
+                <span>{name}</span><strong>{count}</strong>
+              </button>
+            ))}
+          </div>
+        </article>
+      </section>
     </section>
   );
 }
@@ -352,9 +471,82 @@ export function Assistant({ anime, catalog = [], updateAnime }) {
 
     const intent = parseJoeAIIntent(q);
 
-    try {
-      const routed = await routeJoeAI({
-        question: q,
+
+    if (intent.kind === 'generateGenome') {
+      const result = await executeJoeAICommand({
+        intent,
+        anime,
+        catalog,
+        updateAnime,
+        brain
+      });
+      setLog((current) => [...current, { who: 'bot', ...result }]);
+      return;
+    }
+
+    if (intent.kind === 'help') {
+      appendBotResult(helpAnswer());
+      return;
+    }
+
+    if (intent.kind === 'stats') {
+      setLog((current) => [...current, { who: 'bot', type: 'text', text: libraryStatsAnswer() }]);
+      return;
+    }
+
+    if (intent.kind === 'watchingList') {
+      setLog((current) => [...current, { who: 'bot', type: 'text', text: currentlyWatchingAnswer() }]);
+      return;
+    }
+
+    if (intent.kind === 'bulkAdd') {
+      const action = { titles: intent.titles, status: intent.status, kind: 'bulkAdd' };
+      setPendingAction(action);
+      setLog((current) => [
+        ...current,
+        {
+          who: 'bot',
+          type: 'confirmAction',
+          title: '🍜 Ready to bulk import',
+          text: `I found ${intent.titles.length} title(s). I will add them as ${intent.status}, skip duplicates, and fetch metadata only when needed. Import these?`,
+          confirmLabel: 'Import Titles',
+          action
+        }
+      ]);
+      return;
+    }
+
+    if (intent.kind === 'singleAdd') {
+      const action = { title: intent.title, status: intent.status, kind: 'singleAdd' };
+      setPendingAction(action);
+      setLog((current) => [
+        ...current,
+        {
+          who: 'bot',
+          type: 'confirmAction',
+          title: '🍜 Ready to update your library',
+          text: `I will add or update “${intent.title}” as ${intent.status}. Metadata will only be fetched if needed. Continue?`,
+          confirmLabel: 'Do It',
+          action
+        }
+      ]);
+      return;
+    }
+
+    if (intent.kind === 'recommendation') {
+      // Specific recommendation prompts go to the rich card router.
+      // Generic prompts like "what should I watch next" stay on the normal
+      // recommendation engine so they do not get swallowed by Genome title lookup.
+      if (shouldUseRecommendationRouter(q)) {
+        const smartAnswer = routeJoeAIRecommendation(q, anime, catalog);
+
+        if (smartAnswer) {
+          appendBotResult(smartAnswer);
+          return;
+        }
+      }
+
+      const result = await executeJoeAICommand({
         intent,
         anime,
         catalog,
@@ -362,18 +554,32 @@ export function Assistant({ anime, catalog = [], updateAnime }) {
         brain
       });
 
-      if (routed?.pendingAction) {
-        setPendingAction(routed.pendingAction);
-      }
-
-      appendBotResult(routed?.message || routed);
-    } catch (error) {
-      console.warn('JoeAI Router V2 failed:', error);
-      appendBotResult({
-        type: 'text',
-        text: 'JoeAI routing hit an error. Check the console and we will fix the exact handler.'
-      });
+      appendBotResult(result);
+      return;
     }
+
+    // For normal questions, let the conversation/reasoning/memory engine answer first.
+    // Only use the Genome title lookup as a fallback for direct title lookups like "Slime".
+    const routedQuestion = await executeJoeAICommand({
+      intent: { kind: 'question', text: q },
+      anime,
+      catalog,
+      updateAnime,
+      brain
+    });
+
+    if (routedQuestion?.type !== 'text' || !String(routedQuestion?.text || '').startsWith('Try asking about your Anime DNA')) {
+      appendBotResult(routedQuestion);
+      return;
+    }
+
+    const smartAnswer = routeJoeAIRecommendation(q, anime, catalog);
+    if (smartAnswer) {
+      appendBotResult(smartAnswer);
+      return;
+    }
+
+    appendBotResult(routedQuestion);
   }
 
   function renderRecommendationCard(item, index) {

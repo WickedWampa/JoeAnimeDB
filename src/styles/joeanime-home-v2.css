@@ -1,0 +1,323 @@
+.homeV2Page {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 24px 26px 48px;
+  isolation: isolate;
+}
+
+.homeV2Page::before {
+  content: '';
+  position: fixed;
+  inset: 0 0 0 260px;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 20% 8%, rgba(38, 221, 255, 0.14), transparent 34%),
+    radial-gradient(circle at 90% 18%, rgba(255, 75, 210, 0.12), transparent 36%),
+    linear-gradient(135deg, rgba(4, 18, 29, 0.82), rgba(8, 10, 22, 0.92));
+  z-index: -1;
+}
+
+.homeV2Hero,
+.homeV2Panel {
+  border: 1px solid rgba(38, 221, 255, 0.24);
+  background: linear-gradient(145deg, rgba(8, 29, 43, 0.86), rgba(8, 13, 27, 0.88));
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(14px);
+}
+
+.homeV2Hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) auto auto;
+  align-items: center;
+  gap: 24px;
+  border-radius: 28px;
+  padding: 28px 30px;
+  overflow: hidden;
+}
+
+.homeV2Hero h1 {
+  margin: 2px 0 8px;
+  font-size: clamp(38px, 5vw, 72px);
+  line-height: 0.96;
+  letter-spacing: -0.06em;
+}
+
+.homeV2Hero p {
+  max-width: 730px;
+  margin: 0;
+  color: rgba(219, 241, 255, 0.82);
+  font-size: 1.05rem;
+  line-height: 1.65;
+}
+
+.homeV2Eyebrow {
+  margin: 0 !important;
+  color: #27efff !important;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 0.78rem !important;
+  font-weight: 900;
+}
+
+.homeV2HeroStats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(88px, 1fr));
+  gap: 10px;
+  min-width: 280px;
+}
+
+.homeV2HeroStats span {
+  display: grid;
+  gap: 2px;
+  padding: 14px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(214, 234, 255, 0.66);
+  font-size: 0.78rem;
+}
+
+.homeV2HeroStats strong {
+  color: #2df2ff;
+  font-size: 1.55rem;
+  line-height: 1;
+}
+
+.homeV2HeroActions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.homeV2HeroActions button,
+.homeV2Panel button,
+.homeV2Empty button {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(5, 12, 24, 0.7);
+  color: #e8f8ff;
+  border-radius: 14px;
+  padding: 12px 16px;
+  font-weight: 900;
+  cursor: pointer;
+  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+}
+
+.homeV2HeroActions button:hover,
+.homeV2Panel button:hover,
+.homeV2Empty button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(38, 221, 255, 0.55);
+  box-shadow: 0 10px 24px rgba(31, 224, 255, 0.1);
+}
+
+.homeV2HeroActions .primary {
+  background: linear-gradient(135deg, #ff54d9, #2f8cff);
+  border-color: transparent;
+  box-shadow: 0 14px 34px rgba(255, 84, 217, 0.22);
+}
+
+.homeV2Grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr) minmax(300px, 0.8fr);
+  gap: 16px;
+  align-items: stretch;
+}
+
+.homeV2Panel {
+  min-height: 210px;
+  border-radius: 24px;
+  padding: 20px;
+}
+
+.homeV2Thought {
+  grid-column: span 2;
+  min-height: 230px;
+  background: linear-gradient(135deg, rgba(10, 45, 59, 0.9), rgba(49, 20, 75, 0.86));
+}
+
+.homeV2Learning {
+  grid-column: span 2;
+}
+
+.homeV2PanelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.homeV2PanelHeader h2 {
+  margin: 0;
+  font-size: 1.24rem;
+  letter-spacing: -0.02em;
+}
+
+.homeV2PanelHeader button {
+  padding: 8px 12px;
+  color: #2df2ff;
+  border-radius: 999px;
+  font-size: 0.78rem;
+}
+
+.homeV2Thought p {
+  margin: 0;
+  max-width: 850px;
+  color: rgba(225, 246, 255, 0.84);
+  font-size: 1.04rem;
+  line-height: 1.75;
+}
+
+.homeV2List,
+.homeV2PromptList,
+.homeV2SignalList,
+.homeV2StudioList {
+  display: grid;
+  gap: 10px;
+}
+
+.homeV2MiniRow,
+.homeV2Seed {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  text-align: left;
+}
+
+.homeV2MiniPoster,
+.homeV2SeedPoster {
+  width: 56px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 12px;
+}
+
+.homeV2SeedPoster {
+  width: 72px;
+  height: 94px;
+}
+
+.homeV2MiniRow strong,
+.homeV2Seed strong {
+  display: block;
+  font-size: 1rem;
+}
+
+.homeV2MiniRow small,
+.homeV2Seed small,
+.homeV2AnchorGrid small {
+  display: block;
+  margin-top: 4px;
+  color: rgba(217, 235, 255, 0.62);
+  font-weight: 700;
+}
+
+.homeV2PromptList button {
+  text-align: left;
+  width: 100%;
+}
+
+.homeV2SignalList button {
+  display: grid;
+  grid-template-columns: minmax(110px, 1fr) minmax(120px, 2fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+}
+
+.homeV2SignalList div {
+  height: 9px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.homeV2SignalList i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2df2ff, #1be27d);
+}
+
+.homeV2SignalList strong,
+.homeV2StudioList strong {
+  color: #2df2ff;
+}
+
+.homeV2AnchorGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.homeV2AnchorGrid button {
+  min-height: 76px;
+  text-align: left;
+}
+
+.homeV2StudioList button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.homeV2Learning ul {
+  margin: 0;
+  padding-left: 20px;
+  color: rgba(225, 246, 255, 0.82);
+  line-height: 1.8;
+}
+
+.homeV2Empty {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border: 1px dashed rgba(255, 255, 255, 0.16);
+  border-radius: 16px;
+  color: rgba(225, 246, 255, 0.72);
+}
+
+.homeV2Empty p {
+  margin: 0;
+}
+
+@media (max-width: 1180px) {
+  .homeV2Hero {
+    grid-template-columns: 1fr;
+  }
+
+  .homeV2HeroActions {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .homeV2Grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 820px) {
+  .homeV2Page {
+    padding: 16px;
+  }
+
+  .homeV2Grid {
+    grid-template-columns: 1fr;
+  }
+
+  .homeV2Thought,
+  .homeV2Learning {
+    grid-column: auto;
+  }
+
+  .homeV2HeroStats {
+    grid-template-columns: repeat(2, 1fr);
+    min-width: 0;
+  }
+}
