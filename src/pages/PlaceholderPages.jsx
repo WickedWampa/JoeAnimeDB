@@ -4,6 +4,7 @@ import { score, countBy } from '../utils/animeUtils';
 import { exportBackup, resetData } from '../services/storage';
 import { createAnimeBrain } from '../engine/animeBrain'; import { fetchMetadata } from '../services/metadata'; import { maybeKnowledgeFirstRecommendation } from '../ai/knowledgeFirstRecommender'; import { parseJoeAIIntent } from '../ai/intentParser'; import { executeJoeAICommand } from '../ai/commandExecutor'; import { routeJoeAIRecommendation } from '../ai/joeAIRecommendationRouter';
 import { buildTonightsWatch } from '../ai/tonightsWatch'; import { importAnimeByTitle, mergeAnimeMetadata } from '../services/animeImporter';
+import { routeJoeAI } from '../ai/router/router';
 
 export function Universe({ anime, setQuery, setView }) {
   const studios = countBy(anime.map((item) => item.studio)).slice(0, 10);
@@ -137,21 +138,80 @@ export function Assistant({ anime, catalog = [], updateAnime }) {
   }
 
   function helpAnswer() {
-    return [
-      '🍜 JoeAI can do this now:',
-      '',
-      '• what should I watch next?',
-      '• explain my Anime DNA',
-      '• what are my top genres?',
-      '• what studio do I watch most?',
-      '• what am I watching?',
-      '• add Frieren as completed',
-      '• I finished World Trigger',
-      '• I am watching Magi',
-      '• add these as completed: Bleach, Naruto, One Piece',
-      '',
-      'I use the same importer as the Library, so I fetch metadata, skip duplicates, and update existing entries.'
-    ].join('\n');
+    return {
+      type: 'helpCard',
+      title: '🍜 JoeAI Guide',
+      subtitle: 'I can manage your library, explain your Anime DNA, recommend shows with reasons, and remember how your taste evolves.',
+      sections: [
+        {
+          icon: '🎯',
+          title: 'Recommendations',
+          items: [
+            'recommend something like Slime',
+            'recommend something like Bleach',
+            'recommend something darker',
+            'what should I watch next?',
+            'surprise me'
+          ]
+        },
+        {
+          icon: '🧬',
+          title: 'Anime DNA',
+          items: [
+            'explain my Anime DNA',
+            'explain worldbuilding',
+            'why do I like Bleach?',
+            'how has my taste changed?',
+            'prediction accuracy'
+          ]
+        },
+        {
+          icon: '🧠',
+          title: 'JoeAI Memory',
+          items: [
+            'what did you learn?',
+            'what changed recently?',
+            'what surprised you most?',
+            'when did you learn worldbuilding?',
+            'daily thought'
+          ]
+        },
+        {
+          icon: '📚',
+          title: 'Library',
+          items: [
+            'I finished Frieren',
+            'I am watching Magi',
+            'add Bleach as completed',
+            'add these as completed: Bleach, Naruto, One Piece',
+            'what am I watching?'
+          ]
+        },
+        {
+          icon: '📊',
+          title: 'Stats',
+          items: [
+            'library stats',
+            'top genres',
+            'top studios',
+            'top rated anime',
+            'show me unrated anime'
+          ]
+        },
+        {
+          icon: '🎲',
+          title: 'No idea what to ask?',
+          items: [
+            'what are your strongest signals?',
+            'what are you least certain about?',
+            'recommend a hidden gem',
+            'compare Slime and Overlord',
+            'predict my next favorite anime'
+          ]
+        }
+      ],
+      footer: 'Click any prompt to load it, then hit Ask — or just type naturally. JoeAI will route it.'
+    };
   }
 
   function libraryStatsAnswer() {
@@ -189,6 +249,20 @@ export function Assistant({ anime, catalog = [], updateAnime }) {
   function isRecommendationQuestion(value) {
     const lower = String(value).toLowerCase();
     return lower.includes('recommend') || lower.includes('next') || lower.includes('watch') || lower.includes('new anime');
+  }
+
+  function shouldUseRecommendationRouter(value = '') {
+    const lower = String(value).toLowerCase();
+
+    // Title-similarity and mood/theme requests belong to the card router.
+    // Generic requests like "what should I watch next" should NOT go through
+    // the Genome title lookup path, because that is what caused the Space Dandy fallback.
+    return (
+      /(something|show|shows|anime)\s+like/.test(lower) ||
+      /similar\s+to/.test(lower) ||
+      /recommend\s+.+\s+like/.test(lower) ||
+      /(darker|dark|funny|comedy|emotional|cozy|comfort|strategy|strategic|sports|hidden gem|underrated|movie|short binge)/.test(lower)
+    );
   }
 
   function appendBotResult(result) {
@@ -278,101 +352,28 @@ export function Assistant({ anime, catalog = [], updateAnime }) {
 
     const intent = parseJoeAIIntent(q);
 
-
-    if (intent.kind === 'generateGenome') {
-      const result = await executeJoeAICommand({
+    try {
+      const routed = await routeJoeAI({
+        question: q,
         intent,
         anime,
         catalog,
         updateAnime,
         brain
       });
-      setLog((current) => [...current, { who: 'bot', ...result }]);
-      return;
-    }
 
-    if (intent.kind === 'help') {
-      setLog((current) => [...current, { who: 'bot', type: 'text', text: helpAnswer() }]);
-      return;
-    }
-
-    if (intent.kind === 'stats') {
-      setLog((current) => [...current, { who: 'bot', type: 'text', text: libraryStatsAnswer() }]);
-      return;
-    }
-
-    if (intent.kind === 'watchingList') {
-      setLog((current) => [...current, { who: 'bot', type: 'text', text: currentlyWatchingAnswer() }]);
-      return;
-    }
-
-    if (intent.kind === 'bulkAdd') {
-      const action = { titles: intent.titles, status: intent.status, kind: 'bulkAdd' };
-      setPendingAction(action);
-      setLog((current) => [
-        ...current,
-        {
-          who: 'bot',
-          type: 'confirmAction',
-          title: '🍜 Ready to bulk import',
-          text: `I found ${intent.titles.length} title(s). I will add them as ${intent.status}, skip duplicates, and fetch metadata only when needed. Import these?`,
-          confirmLabel: 'Import Titles',
-          action
-        }
-      ]);
-      return;
-    }
-
-    if (intent.kind === 'singleAdd') {
-      const action = { title: intent.title, status: intent.status, kind: 'singleAdd' };
-      setPendingAction(action);
-      setLog((current) => [
-        ...current,
-        {
-          who: 'bot',
-          type: 'confirmAction',
-          title: '🍜 Ready to update your library',
-          text: `I will add or update “${intent.title}” as ${intent.status}. Metadata will only be fetched if needed. Continue?`,
-          confirmLabel: 'Do It',
-          action
-        }
-      ]);
-      return;
-    }
-
-    if (intent.kind === 'recommendation') {
-      const smartAnswer = routeJoeAIRecommendation(q, anime, catalog);
-
-      if (smartAnswer) {
-        appendBotResult(smartAnswer);
-        return;
+      if (routed?.pendingAction) {
+        setPendingAction(routed.pendingAction);
       }
 
-      const picks = brain.recommendations(5);
-      const answer = picks.length
-        ? {
-            type: 'recommendations',
-            title: '🍜 JoeAI Recommendations',
-            subtitle: 'Based on your Anime DNA, these unseen catalog picks look strongest.',
-            items: picks
-          }
-        : {
-            type: 'text',
-            text: brain.answer(q)
-          };
-
-      setLog((current) => [...current, { who: 'bot', ...answer }]);
-      return;
+      appendBotResult(routed?.message || routed);
+    } catch (error) {
+      console.warn('JoeAI Router V2 failed:', error);
+      appendBotResult({
+        type: 'text',
+        text: 'JoeAI routing hit an error. Check the console and we will fix the exact handler.'
+      });
     }
-
-    const smartAnswer = routeJoeAIRecommendation(q, anime, catalog);
-    if (smartAnswer) {
-      appendBotResult(smartAnswer);
-      return;
-    }
-
-    const answer = brain.answer(q);
-    setLog((current) => [...current, { who: 'bot', type: 'text', text: answer }]);
   }
 
   function renderRecommendationCard(item, index) {

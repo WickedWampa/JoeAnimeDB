@@ -113,26 +113,25 @@ export function parseJoeAIIntent(input = '') {
   const status = normalizeStatus(raw);
 
   const memoryPrompt =
-    /\b(what do you know about me|analyze my taste|analyse my taste|taste profile|joeai memory|anime taste|my taste|taste memory|what have you learned about me)\b/i.test(raw);
+    /\b(what do you know about me|analyze my taste|analyse my taste|taste profile|joeai memory|anime taste|my taste|taste memory|what have you learned about me|what have you learned|what did you learn|what changed recently|what surprised you most|daily thought|prediction accuracy|least certain|strongest signals|how has my taste changed|when did you learn|when did you realize)\b/i.test(raw);
 
   if (memoryPrompt) {
     return { kind: 'memory', text: raw };
   }
 
-  // Highest-priority reasoning requests must NOT fall through to title/genome lookup.
-  // Examples: "why do I like Bleach", "why did you recommend Kingdom",
-  // "explain worldbuilding". These belong to the conversation/reasoning engine.
-  const reasoningPrompt =
-    /^(why|explain|reason|reasons|how did you decide|how do you know|why did you recommend|why do i like|why should i watch)\b/i.test(raw) ||
-    /\b(why did you recommend|why do i like|why do you think|explain my|explain the|explain worldbuilding|reasoning|match breakdown)\b/i.test(raw);
+  // Explicit recommendation requests must win before bare title/Genome lookups.
+  // Example: "recommend something like Slime" should render recommendation cards,
+  // while bare "Slime" can still render the knowledge/Genome card.
+  const explicitRecommendationPrompt =
+    /\b(recommend|suggest|find|give me|show me|what should i watch|watch next|something to watch|hidden gem|surprise me|next anime)\b/i.test(raw);
 
-  if (reasoningPrompt) {
-    return { kind: 'question', text: raw, priority: 'reasoning' };
+  if (explicitRecommendationPrompt) {
+    return { kind: 'recommendation', text: raw };
   }
 
-  // Similarity/title-like requests are handled by the recommendation router.
-  // Keep them as questions so routeJoeAIRecommendation() can decide whether this is
-  // a "similar to X" request, a known Genome title lookup, or normal fallback.
+  // Similarity/title-like requests without an explicit recommendation word stay questions
+  // so the conversation/router layer can decide whether it is a comparison, explanation,
+  // or a direct title lookup.
   const similarityPrompt = /\b(like|similar to|something like|anime like|show like|shows like|show me something like)\b/i.test(raw);
 
   if (similarityPrompt) {
