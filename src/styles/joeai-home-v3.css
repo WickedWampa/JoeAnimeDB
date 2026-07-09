@@ -927,3 +927,152 @@
     transition: none !important;
   }
 }
+
+/* Home 3.3 animated-world polish: billboard pulse, atmospheric glow, smoother living themes */
+.homeV3HeroShade {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.homeV3HeroShade::before,
+.homeV3HeroShade::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: .55;
+  mix-blend-mode: screen;
+}
+
+.homeV3HeroShade::before {
+  width: 44%;
+  height: 54%;
+  left: 1%;
+  top: 0;
+  right: auto;
+  bottom: auto;
+  border-radius: 999px;
+  filter: blur(34px);
+  animation: joeBillboardPulse 5.8s ease-in-out infinite;
+}
+
+.homeV3HeroShade::after {
+  opacity: .18;
+  background: radial-gradient(circle at 74% 26%, var(--home-accent), transparent 16%),
+              radial-gradient(circle at 92% 18%, var(--home-accent-2), transparent 12%);
+  animation: joeWorldBreath 8s ease-in-out infinite;
+}
+
+.theme-neon .homeV3HeroShade::before {
+  background:
+    radial-gradient(circle at 28% 34%, rgb(37 230 255 / .58), transparent 34%),
+    radial-gradient(circle at 42% 58%, rgb(255 79 216 / .42), transparent 42%);
+}
+
+.theme-sakura .homeV3HeroShade::before {
+  background:
+    radial-gradient(circle at 30% 42%, rgb(255 120 189 / .46), transparent 38%),
+    radial-gradient(circle at 55% 40%, rgb(255 198 116 / .26), transparent 45%);
+}
+
+.theme-vapor .homeV3HeroShade::before {
+  background:
+    radial-gradient(circle at 26% 42%, rgb(255 79 216 / .54), transparent 38%),
+    radial-gradient(circle at 56% 48%, rgb(32 223 255 / .26), transparent 46%);
+}
+
+.theme-inferno .homeV3HeroShade::before {
+  background:
+    radial-gradient(circle at 28% 40%, rgb(255 176 0 / .46), transparent 38%),
+    radial-gradient(circle at 52% 55%, rgb(255 61 46 / .36), transparent 48%);
+}
+
+.theme-ramen .homeV3HeroShade::before {
+  background:
+    radial-gradient(circle at 28% 42%, rgb(255 197 51 / .44), transparent 38%),
+    radial-gradient(circle at 52% 60%, rgb(255 122 26 / .25), transparent 48%);
+}
+
+.theme-amoled .homeV3HeroShade::before {
+  background:
+    radial-gradient(circle at 28% 42%, rgb(194 77 255 / .42), transparent 38%),
+    radial-gradient(circle at 52% 50%, rgb(35 231 255 / .18), transparent 50%);
+}
+
+.theme-inferno .homeV3Hero::after {
+  animation: joeHeatShimmer 5.2s ease-in-out infinite;
+}
+
+.theme-ramen .homeV3Hero::after {
+  animation: joeLanternFlicker 4.4s ease-in-out infinite;
+}
+
+.theme-amoled .homeV3Hero::after {
+  animation: joeAmoledGlow 6.5s ease-in-out infinite;
+}
+
+.theme-neon .homeV3BrainPulse,
+.theme-neon .homeV3BrainPulse::after {
+  filter: drop-shadow(0 0 22px rgb(37 230 255 / .45));
+}
+
+.theme-inferno .homeV3BrainPulse {
+  animation: joeBrainPulse 2.8s ease-in-out infinite, joeInfernoBrain 4.2s ease-in-out infinite;
+}
+
+.theme-ramen .homeV3BrainPulse {
+  animation: joeBrainPulse 2.8s ease-in-out infinite, joeLanternBrain 5.1s ease-in-out infinite;
+}
+
+@keyframes joeBillboardPulse {
+  0%, 100% { opacity: .28; transform: scale(.96); }
+  45% { opacity: .7; transform: scale(1.06); }
+  62% { opacity: .42; transform: scale(1.01); }
+  76% { opacity: .66; transform: scale(1.05); }
+}
+
+@keyframes joeWorldBreath {
+  0%, 100% { opacity: .12; filter: saturate(1); }
+  50% { opacity: .28; filter: saturate(1.32); }
+}
+
+@keyframes joeHeatShimmer {
+  0%, 100% { filter: contrast(1) saturate(1.02); opacity: 1; }
+  50% { filter: contrast(1.08) saturate(1.24); opacity: .92; }
+}
+
+@keyframes joeLanternFlicker {
+  0%, 100% { opacity: 1; filter: saturate(1); }
+  7% { opacity: .92; }
+  11% { opacity: 1; }
+  48% { filter: saturate(1.18) brightness(1.05); }
+  53% { opacity: .95; }
+}
+
+@keyframes joeAmoledGlow {
+  0%, 100% { opacity: .82; }
+  50% { opacity: 1; }
+}
+
+@keyframes joeInfernoBrain {
+  0%, 100% { box-shadow: 0 0 36px color-mix(in srgb, var(--home-accent-2) 24%, transparent); }
+  50% { box-shadow: 0 0 62px color-mix(in srgb, var(--home-accent-2) 42%, transparent); }
+}
+
+@keyframes joeLanternBrain {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.18); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .homeV3HeroShade::before,
+  .homeV3HeroShade::after,
+  .theme-inferno .homeV3Hero::after,
+  .theme-ramen .homeV3Hero::after,
+  .theme-amoled .homeV3Hero::after {
+    animation: none !important;
+  }
+}
