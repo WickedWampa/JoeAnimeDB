@@ -1,0 +1,381 @@
+
+/* =========================================================
+   Library hero v5 — real image layer + live UI
+   ========================================================= */
+
+.libraryArchiveHeroLive {
+  position: relative;
+  min-height: 320px;
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  overflow: hidden;
+  margin-bottom: 18px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--cyan) 30%, var(--pink));
+  border-radius: 24px;
+  background: #050b16;
+  box-shadow:
+    0 24px 64px rgba(0, 0, 0, .34),
+    0 0 36px color-mix(in srgb, var(--pink) 10%, transparent);
+}
+
+.libraryArchiveLiveArt {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+  pointer-events: none;
+  user-select: none;
+  filter: saturate(1.05) contrast(1.03);
+}
+
+.libraryArchiveHeroLive::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(3, 10, 18, .995) 0%,
+      rgba(3, 10, 18, .985) 24%,
+      rgba(3, 10, 18, .88) 39%,
+      rgba(3, 10, 18, .45) 56%,
+      rgba(3, 10, 18, .12) 76%,
+      rgba(3, 10, 18, .24) 100%
+    ),
+    linear-gradient(0deg, rgba(2, 8, 15, .66), transparent 32%);
+}
+
+.libraryArchiveHeroLive::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  border-radius: inherit;
+  box-shadow:
+    inset 0 0 46px rgba(0, 0, 0, .34),
+    inset 0 0 1px color-mix(in srgb, var(--cyan) 62%, white);
+}
+
+.libraryArchiveLiveCopy {
+  position: relative;
+  z-index: 2;
+  width: min(650px, 55%);
+  padding: 34px 38px 30px;
+}
+
+.libraryArchiveHeroLive .eyebrow {
+  margin: 0 0 10px;
+  color: var(--cyan);
+  font-size: 12px;
+  font-weight: 1000;
+  letter-spacing: .22em;
+  text-transform: uppercase;
+  text-shadow: 0 0 16px color-mix(in srgb, var(--cyan) 50%, transparent);
+}
+
+.libraryArchiveHeroLive h1 {
+  margin: 0;
+  width: fit-content;
+  font-size: clamp(54px, 6vw, 90px);
+  line-height: .92;
+  letter-spacing: -.055em;
+  color: transparent;
+  background:
+    linear-gradient(
+      100deg,
+      #18e6ff 0%,
+      #5ed8ff 28%,
+      #a99bff 58%,
+      #ff54dc 100%
+    );
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter:
+    drop-shadow(0 0 16px rgba(24, 230, 255, .12))
+    drop-shadow(0 0 20px rgba(255, 84, 220, .10));
+}
+
+.libraryArchiveLiveTagline {
+  max-width: 520px;
+  margin: 19px 0 0;
+  color: color-mix(in srgb, var(--text) 90%, var(--muted));
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+.libraryArchiveLiveStats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px 34px;
+  margin-top: 28px;
+}
+
+.libraryArchiveLiveStats > div {
+  display: grid;
+  grid-template-columns: 29px auto;
+  grid-template-areas:
+    "icon value"
+    "icon label";
+  align-items: center;
+  column-gap: 8px;
+}
+
+.libraryArchiveLiveStats span {
+  grid-area: icon;
+  align-self: center;
+  color: var(--cyan);
+  font-size: 25px;
+  text-shadow: 0 0 18px color-mix(in srgb, var(--cyan) 65%, transparent);
+}
+
+.libraryArchiveLiveStats div:nth-child(even) span,
+.libraryArchiveLiveStats div:nth-child(even) strong {
+  color: var(--pink);
+}
+
+.libraryArchiveLiveStats strong {
+  grid-area: value;
+  color: var(--cyan);
+  font-size: 25px;
+  line-height: 1;
+}
+
+.libraryArchiveLiveStats small {
+  grid-area: label;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .03em;
+}
+
+.libraryArchiveLiveAdd {
+  position: absolute;
+  z-index: 3;
+  right: 28px;
+  bottom: 28px;
+  min-width: 145px;
+  border-color: color-mix(in srgb, var(--cyan) 72%, white) !important;
+  background: rgba(2, 10, 18, .80) !important;
+  backdrop-filter: blur(12px);
+  box-shadow:
+    0 0 28px color-mix(in srgb, var(--cyan) 18%, transparent),
+    inset 0 0 20px rgba(0, 0, 0, .28);
+}
+
+.libraryArchiveLiveAdd:hover {
+  transform: translateY(-2px);
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--pink) 76%, transparent),
+      color-mix(in srgb, var(--cyan) 76%, transparent)
+    ) !important;
+}
+
+.libraryPosterGrid {
+  grid-template-columns: repeat(auto-fill, minmax(230px, 270px)) !important;
+  justify-content: center;
+  align-items: start;
+  gap: 18px !important;
+}
+
+.libraryPosterGrid .animeCard {
+  width: 100%;
+  min-width: 0;
+  height: 410px;
+}
+
+@media (min-width: 1650px) {
+  .libraryPosterGrid {
+    grid-template-columns: repeat(auto-fill, minmax(220px, 250px)) !important;
+    gap: 16px !important;
+  }
+
+  .libraryPosterGrid .animeCard {
+    height: 390px;
+  }
+}
+
+@media (max-width: 1180px) {
+  .libraryArchiveHeroLive {
+    min-height: 300px;
+  }
+
+  .libraryArchiveLiveArt {
+    object-position: 60% center;
+  }
+
+  .libraryArchiveLiveCopy {
+    width: 64%;
+  }
+
+  .libraryPosterGrid {
+    grid-template-columns: repeat(auto-fill, minmax(220px, 250px)) !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .libraryArchiveHeroLive {
+    min-height: 390px;
+  }
+
+  .libraryArchiveLiveArt {
+    height: 64%;
+    object-position: 66% top;
+  }
+
+  .libraryArchiveHeroLive::before {
+    background:
+      linear-gradient(
+        0deg,
+        rgba(4, 13, 23, .99) 0%,
+        rgba(4, 13, 23, .92) 58%,
+        rgba(4, 13, 23, .30) 100%
+      );
+  }
+
+  .libraryArchiveLiveCopy {
+    width: 100%;
+    align-self: end;
+    padding: 158px 22px 26px;
+  }
+
+  .libraryArchiveHeroLive h1 {
+    font-size: 54px;
+  }
+
+  .libraryArchiveLiveStats {
+    gap: 17px;
+  }
+
+  .libraryArchiveLiveAdd {
+    right: 18px;
+    bottom: 18px;
+  }
+
+  .libraryPosterGrid {
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)) !important;
+    justify-content: stretch;
+  }
+
+  .libraryPosterGrid .animeCard {
+    height: 360px;
+  }
+}
+
+
+/* ===== Final Library hero polish v6 ===== */
+
+.libraryArchiveHeroLive {
+  min-height: 380px;
+}
+
+.libraryArchiveLiveArt {
+  object-fit: cover;
+  object-position: 58% center;
+  transform: scale(.985);
+  transform-origin: center;
+}
+
+.libraryArchiveHeroLive::before {
+  background:
+    linear-gradient(
+      90deg,
+      rgba(3, 10, 18, .995) 0%,
+      rgba(3, 10, 18, .98) 21%,
+      rgba(3, 10, 18, .82) 36%,
+      rgba(3, 10, 18, .34) 52%,
+      rgba(3, 10, 18, .08) 72%,
+      rgba(3, 10, 18, .18) 100%
+    ),
+    linear-gradient(0deg, rgba(2, 8, 15, .52), transparent 30%);
+}
+
+.libraryArchiveLiveCopy {
+  width: min(700px, 56%);
+  padding: 42px 42px 34px;
+}
+
+.libraryArchiveHeroLive h1 {
+  font-size: clamp(64px, 7vw, 104px);
+  font-weight: 1000;
+  letter-spacing: -.06em;
+  background:
+    linear-gradient(
+      100deg,
+      #16e8ff 0%,
+      #58d9ff 28%,
+      #b39aff 62%,
+      #ff4fd8 100%
+    );
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter:
+    drop-shadow(0 0 14px rgba(22, 232, 255, .22))
+    drop-shadow(0 0 28px rgba(255, 79, 216, .16));
+}
+
+.libraryArchiveLiveTagline {
+  margin-top: 22px;
+}
+
+.libraryArchiveLiveStats {
+  margin-top: 32px;
+}
+
+.libraryArchiveLiveAdd {
+  right: 32px;
+  bottom: 32px;
+}
+
+@media (max-width: 1180px) {
+  .libraryArchiveHeroLive {
+    min-height: 350px;
+  }
+
+  .libraryArchiveLiveArt {
+    object-position: 64% center;
+    transform: scale(1);
+  }
+
+  .libraryArchiveLiveCopy {
+    width: 62%;
+    padding: 38px 32px 30px;
+  }
+
+  .libraryArchiveHeroLive h1 {
+    font-size: clamp(58px, 7vw, 88px);
+  }
+}
+
+@media (max-width: 760px) {
+  .libraryArchiveHeroLive {
+    min-height: 430px;
+  }
+
+  .libraryArchiveLiveArt {
+    height: 68%;
+    object-position: 68% top;
+    transform: scale(1);
+  }
+
+  .libraryArchiveLiveCopy {
+    padding: 176px 22px 28px;
+  }
+
+  .libraryArchiveHeroLive h1 {
+    font-size: 58px;
+  }
+}

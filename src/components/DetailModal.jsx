@@ -1,6 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Poster } from './Poster';
 import { score } from '../utils/animeUtils';
+import { fetchMetadata } from '../services/metadata';
+import { mergeAnimeMetadata } from '../services/animeImporter';
+import '../styles/detail-metadata-repair.css';
 
 const WATCH_STATUSES = [
   '',
@@ -30,7 +33,12 @@ function Stars({ value }) {
   );
 }
 
-export function DetailModal({ anime, onClose, updateAnime, deleteAnime }) {
+export function DetailModal({ anime, onClose, updateAnime, updateCatalogAnime, deleteAnime }) {
+  const [repairingMetadata, setRepairingMetadata] = useState(false);
+  const [metadataMessage, setMetadataMessage] = useState('');
+  const [metadataMessageType, setMetadataMessageType] = useState('');
+  const [metadataProgressText, setMetadataProgressText] = useState('');
+  const isCatalogTitle = String(anime.id || '').startsWith('catalog-') || Boolean(anime.catalogSource);
   const currentScore = Number(anime.joeScore ?? score(anime) ?? 0);
   const currentStatus = anime.status || '';
 
@@ -47,6 +55,101 @@ export function DetailModal({ anime, onClose, updateAnime, deleteAnime }) {
     updateField('rewatches', next);
   }
 
+  async function toggleFollow() {
+    if (!updateCatalogAnime) return;
+
+    const following = !Boolean(anime.followed);
+
+    await updateCatalogAnime({
+      ...anime,
+      followed: following,
+      ignored: false,
+      followedAt: following ? (anime.followedAt || new Date().toISOString()) : '',
+      listUpdatedAt: new Date().toISOString()
+    });
+  }
+
+  async function repairMetadata() {
+    if (!updateAnime || repairingMetadata) return;
+
+    const retryDelays = [0, 1200, 2600];
+    let lastError = null;
+
+    setRepairingMetadata(true);
+    setMetadataMessage('');
+    setMetadataMessageType('');
+    setMetadataProgressText('Contacting Jikan…');
+
+    try {
+      for (let attempt = 0; attempt < retryDelays.length; attempt++) {
+        if (retryDelays[attempt]) {
+          setMetadataProgressText(`Jikan timed out. Retrying ${attempt + 1} of ${retryDelays.length - 1}…`);
+          await new Promise((resolve) => setTimeout(resolve, retryDelays[attempt]));
+        }
+
+        try {
+          setMetadataProgressText(attempt === 0 ? 'Contacting Jikan…' : `Retrying metadata lookup (${attempt + 1}/${retryDelays.length})…`);
+          const fetched = await fetchMetadata(anime);
+
+          const hasNewMetadata = Boolean(
+            fetched?.malId ||
+            fetched?.cover ||
+            fetched?.synopsis ||
+            fetched?.studio ||
+            fetched?.year ||
+            fetched?.episodeCount ||
+            fetched?.communityScore ||
+            (Array.isArray(fetched?.genres) && fetched.genres.length)
+          );
+
+          if (!hasNewMetadata) {
+            setMetadataMessage('No metadata match was found for this title.');
+            setMetadataMessageType('warning');
+            setMetadataProgressText('');
+            return;
+          }
+
+          setMetadataProgressText('Updating poster, synopsis, genres, and studio…');
+
+          const merged = mergeAnimeMetadata(anime, fetched, anime.status);
+          await updateAnime({
+            ...merged,
+            metadataNeedsRefresh: false,
+            syncStatus: {
+              ...(anime.syncStatus || {}),
+              metadata: true,
+              poster: Boolean(merged.cover),
+              dirty: false,
+              metadataError: '',
+              lastMetadataSync: new Date().toISOString()
+            }
+          });
+
+          setMetadataMessage('Metadata repaired successfully.');
+          setMetadataMessageType('success');
+          setMetadataProgressText('');
+          return;
+        } catch (error) {
+          lastError = error;
+          console.warn(`Single-title metadata repair attempt ${attempt + 1} failed:`, anime.title, error);
+        }
+      }
+
+      const message = String(lastError?.message || '');
+      const isTimeout = /504|timeout|gateway/i.test(message);
+
+      setMetadataMessage(
+        isTimeout
+          ? 'Jikan is temporarily unavailable or timed out. Your library is safe and nothing was changed. Please try again in a minute.'
+          : `Metadata repair failed${message ? `: ${message}` : '.'} Your library is safe and nothing was changed.`
+      );
+      setMetadataMessageType('error');
+      setMetadataProgressText('');
+    } finally {
+      setRepairingMetadata(false);
+    }
+  }
+
   return (
     <div className="modalBackdrop">
       <section className="detailModal upgradedModal">
@@ -60,6 +163,37 @@ export function DetailModal({ anime, onClose, updateAnime, deleteAnime }) {
           >
             {anime.favorite ? '❤️ Favorite' : '🤍 Add Favorite'}
           </button>
+
+          {isCatalogTitle && (
+            <button
+              className={`repairMetadataButton ${anime.followed ? 'followingActive' : ''}`}
+              type="button"
+              onClick={toggleFollow}
+              disabled={!updateCatalogAnime}
+            >
+              {anime.followed ? '🔔 Following' : '🔔 Notify Me / Follow'}
+            </button>
+          )}
+
+          <button
+            className="repairMetadataButton"
+            type="button"
+            onClick={repairMetadata}
+            disabled={repairingMetadata || !updateAnime}
+          >
+            {repairingMetadata ? `⏳ ${metadataProgressText || 'Repairing Metadata…'}` : '🔄 Repair Metadata'}
+          </button>
+
+          {repairingMetadata && metadataProgressText && (
+            <p className="metadataRepairProgress" role="status">{metadataProgressText}</p>
+          )}
+
+          {metadataMessage && (
+            <p className={`metadataRepairMessage ${metadataMessageType}`} role="status">
+              {metadataMessageType === 'success' ? '✓ ' : metadataMessageType === 'warning' ? '⚠ ' : '✕ '}
+              {metadataMessage}
+            </p>
+          )}
         </aside>
 
         <div className="detailBody">
@@ -67,7 +201,7 @@ export function DetailModal({ anime, onClose, updateAnime, deleteAnime }) {
           <h1>{anime.title}</h1>
           <p className="muted">{anime.studio} · {anime.type || 'TV'} · {anime.year || ''}</p>
 
-          <section className="scoreEditor">
+          {!isCatalogTitle && <section className="scoreEditor">
             <div>
               <span className="controlLabel">My Score</span>
               <Stars value={currentScore} />
@@ -82,7 +216,7 @@ export function DetailModal({ anime, onClose, updateAnime, deleteAnime }) {
               aria-label="My Score"
               onChange={(event) => updateField('joeScore', Number(event.target.value))}
             />
-          </section>
+          </section>}
 
           <div className="detailStats">
             <div><strong>{currentScore.toFixed(1)}</strong><span>My Score</span></div>
@@ -91,7 +225,7 @@ export function DetailModal({ anime, onClose, updateAnime, deleteAnime }) {
             <div><strong>{anime.rewatches || 0}</strong><span>Rewatches</span></div>
           </div>
 
-          <section className="personalPanel glowPanel">
+          {!isCatalogTitle && <section className="personalPanel glowPanel">
             <label className="statusControl">
               <span className="controlLabel">Watch Status</span>
               <div className={`statusPill ${STATUS_CLASS[currentStatus] || 'unset'}`}>
@@ -124,7 +258,7 @@ export function DetailModal({ anime, onClose, updateAnime, deleteAnime }) {
                 onChange={(event) => updateField('notes', event.target.value)}
               />
             </label>
-          </section>
+          </section>}
 
           <div className="tags">{(anime.genres || []).map((g) => <span key={g}>{g}</span>)}</div>
           <section className="synopsisBlock">
@@ -133,7 +267,7 @@ export function DetailModal({ anime, onClose, updateAnime, deleteAnime }) {
           </section>
           {anime.trailerUrl && <a className="trailer" href={anime.trailerUrl} target="_blank" rel="noreferrer">Watch Trailer</a>}
 
-          <section className="dangerZone">
+          {!isCatalogTitle && <section className="dangerZone">
             <button
               className="removeAnimeButton"
               type="button"
@@ -147,7 +281,7 @@ export function DetailModal({ anime, onClose, updateAnime, deleteAnime }) {
             >
               🗑 Remove From Library
             </button>
-          </section>
+          </section>}
         </div>
       </section>
     </div>

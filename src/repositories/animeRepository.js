@@ -22,8 +22,8 @@ function normalizeDatabase(database) {
   return {
     ...clone(seedData),
     ...database,
-    anime: database?.anime?.length ? database.anime : clone(seedData.anime || []),
-    catalog: database?.catalog?.length ? database.catalog : []
+    anime: Array.isArray(database?.anime) ? database.anime : clone(seedData.anime || []),
+    catalog: Array.isArray(database?.catalog) ? database.catalog : []
   };
 }
 
@@ -32,11 +32,9 @@ export const animeRepository = {
 
   async getDatabase() {
     if (hasElectronDatabase()) {
-      const legacy = readLegacyLocalStorage();
-      const seed = legacy?.anime?.length
-        ? { ...legacy, catalog: catalogSeed }
-        : { ...seedData, catalog: catalogSeed };
-
+      // Packaged desktop installs always initialize from the clean application
+      // seed. Never silently import browser/localStorage data into a new install.
+      const seed = { ...seedData, catalog: catalogSeed };
       const database = await window.JoeAnimeDB.database.init(seed);
       return normalizeDatabase(database);
     }
@@ -80,15 +78,70 @@ export const animeRepository = {
 
   async updateAnime(updatedAnime) {
     if (hasElectronDatabase()) {
-      await window.JoeAnimeDB.database.updateAnime(updatedAnime);
+      const current = await window.JoeAnimeDB.database.getDatabase();
+      const currentAnime = current?.anime || [];
+      const malId = updatedAnime.malId ?? updatedAnime.mal_id;
+      const existing = currentAnime.find((item) =>
+        (malId && String(item.malId || '') === String(malId)) ||
+        String(item.id) === String(updatedAnime.id)
+      );
+
+      if (existing) {
+        await window.JoeAnimeDB.database.updateAnime({
+          ...existing,
+          ...updatedAnime,
+          id: existing.id
+        });
+      } else {
+        await window.JoeAnimeDB.database.updateAnime(updatedAnime);
+      }
+
       return normalizeDatabase(await window.JoeAnimeDB.database.getDatabase());
     }
 
     const current = await this.getDatabase();
-    const anime = (current.anime || []).map((item) =>
-      item.id === updatedAnime.id ? { ...item, ...updatedAnime } : item
+    const currentAnime = current.anime || [];
+    const malId = updatedAnime.malId ?? updatedAnime.mal_id;
+    const existing = currentAnime.find((item) =>
+      (malId && String(item.malId || '') === String(malId)) ||
+      String(item.id) === String(updatedAnime.id)
     );
+
+    const anime = existing
+      ? currentAnime.map((item) =>
+          String(item.id) === String(existing.id)
+            ? { ...item, ...updatedAnime, id: existing.id }
+            : item
+        )
+      : [...currentAnime, updatedAnime];
+
     const next = { ...current, anime };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    return normalizeDatabase(next);
+  },
+
+
+  async updateCatalogAnime(updatedAnime) {
+    if (hasElectronDatabase() && window.JoeAnimeDB.database.updateCatalogAnime) {
+      await window.JoeAnimeDB.database.updateCatalogAnime(updatedAnime);
+      return normalizeDatabase(await window.JoeAnimeDB.database.getDatabase());
+    }
+
+    const current = await this.getDatabase();
+    const key = String(updatedAnime.id || updatedAnime.malId || updatedAnime.title);
+    const exists = (current.catalog || []).some((item) =>
+      String(item.id || item.malId || item.title) === key
+    );
+
+    const catalog = exists
+      ? (current.catalog || []).map((item) =>
+          String(item.id || item.malId || item.title) === key
+            ? { ...item, ...updatedAnime }
+            : item
+        )
+      : [...(current.catalog || []), updatedAnime];
+
+    const next = { ...current, catalog };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
     return normalizeDatabase(next);
   },

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, Library, Trophy, BarChart3, Settings, Sparkles, CalendarDays, RefreshCw, Heart, Palette } from 'lucide-react';
+import { Home, Library, Compass, BarChart3, Settings, Sparkles, CalendarDays, RefreshCw, Heart, Palette, Bell } from 'lucide-react';
 
 const THEMES = [
   { id: 'neon', label: 'Neon' },
@@ -10,16 +10,17 @@ const THEMES = [
   { id: 'amoled', label: 'AMOLED' }
 ];
 
-function NavButton({ icon, label, id, view, setView }) {
+function NavButton({ icon, label, id, view, setView, badge }) {
   return (
     <button className={view === id ? 'active' : ''} onClick={() => setView(id)}>
       {icon}
-      {label}
+      <span>{label}</span>
+      {Number(badge || 0) > 0 && <b className="navBadge">{badge}</b>}
     </button>
   );
 }
 
-export function Sidebar({ view, setView, syncMetadata, theme, setTheme, newUserMode }) {
+export function Sidebar({ view, setView, syncMetadata, theme, setTheme, newUserMode, followingCount = 0 }) {
   return (
     <aside className="sidebar">
       <div className="brand">
@@ -33,7 +34,8 @@ export function Sidebar({ view, setView, syncMetadata, theme, setTheme, newUserM
 
         <NavButton icon={<Library />} label="Library" id="library" view={view} setView={setView} />
         <NavButton icon={<Heart />} label="Favorites" id="favorites" view={view} setView={setView} />
-        <NavButton icon={<Trophy />} label="Rankings" id="rankings" view={view} setView={setView} />
+        <NavButton icon={<Compass />} label="Discover" id="discover" view={view} setView={setView} />
+        <NavButton icon={<Bell />} label="Following" id="following" view={view} setView={setView} badge={followingCount} />
 
         <NavButton icon={<BarChart3 />} label="Analytics" id="analytics" view={view} setView={setView} />
         <NavButton icon={<CalendarDays />} label="Timeline" id="timeline" view={view} setView={setView} />

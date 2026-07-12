@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { AnimeCard } from '../components/AnimeCard';
 import { Poster } from '../components/Poster';
 import { score } from '../utils/animeUtils';
+import libraryNeonArchive from '../assets/library-neon-archive-clean.jpg';
 import {
   animeIdFromTitle,
   findDuplicateAnime,
@@ -548,15 +549,65 @@ export function LibraryPage({ anime, allAnime, mode, setSelected, title, updateA
 
   return (
     <>
-      <section className="pageHeader libraryHeader">
-        <div>
-          <p className="eyebrow">Sprint 3</p>
+      <section
+        className={`pageHeader libraryHeader libraryArchiveHeroLive ${title === 'Favorites' ? 'favoritesArchiveHero' : ''}`}
+      >
+        <img
+          className="libraryArchiveLiveArt"
+          src={libraryNeonArchive}
+          alt=""
+          aria-hidden="true"
+        />
+        <div className="libraryArchiveLiveCopy">
+          <p className="eyebrow">
+            {title === 'Favorites' ? 'Your Anime Hall of Fame' : 'Your Anime Archive'}
+          </p>
+
           <h1>{title}</h1>
-          <p>{anime.length} titles shown. Search, switch views, favorite titles, and click any title for details.</p>
+
+          <p className="libraryArchiveLiveTagline">
+            {title === 'Favorites'
+              ? 'The stories that earned a permanent place in your collection.'
+              : 'Your complete anime collection. Every story. Every moment. All in one place.'}
+          </p>
+
+          <div className="libraryArchiveLiveStats">
+            <div>
+              <span>▤</span>
+              <strong>{allAnime?.length || anime.length}</strong>
+              <small>Total Titles</small>
+            </div>
+
+            <div>
+              <span>☆</span>
+              <strong>{(allAnime || anime).filter((item) => item.favorite).length}</strong>
+              <small>Favorites</small>
+            </div>
+
+            <div>
+              <span>↻</span>
+              <strong>{(allAnime || anime).reduce((sum, item) => sum + Number(item.rewatches || 0), 0)}</strong>
+              <small>Rewatches</small>
+            </div>
+
+            <div>
+              <span>✦</span>
+              <strong>{Math.max(
+                0,
+                (allAnime?.length || anime.length) -
+                  (allAnime || anime).filter((item) => Number(item.joeScore || item.score || 0) > 0).length
+              )}</strong>
+              <small>Unrated</small>
+            </div>
+          </div>
         </div>
 
         {canAddAnime && (
-          <button className="addAnimeButton" type="button" onClick={() => setAddingAnime(true)}>
+          <button
+            className="addAnimeButton libraryArchiveLiveAdd"
+            type="button"
+            onClick={() => setAddingAnime(true)}
+          >
             + Add Anime
           </button>
         )}
@@ -609,7 +660,7 @@ export function LibraryPage({ anime, allAnime, mode, setSelected, title, updateA
           </table>
         </section>
       ) : (
-        <section className="posterGrid">
+        <section className="posterGrid libraryPosterGrid">
           {anime.map((item, index) => <AnimeCard key={item.id} anime={item} displayRank={index + 1} totalCount={anime.length} setSelected={setSelected} updateAnime={updateAnime} />)}
         </section>
       )}

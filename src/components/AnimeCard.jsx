@@ -14,8 +14,8 @@ function rankTierClass(rank, totalCount = 0) {
   return 'rank-common';
 }
 
-export function AnimeCard({ anime, setSelected, updateAnime, displayRank, totalCount }) {
-  const rank = Number(displayRank || anime.finalRank || 0);
+export function AnimeCard({ anime, setSelected, updateAnime, displayRank, totalCount, showRank = true }) {
+  const rank = showRank ? Number(displayRank || anime.finalRank || 0) : 0;
   const ribbon = rank > 0 ? `#${rank}` : '';
   const rankTier = rankTierClass(rank, totalCount);
   const isFavorite = Boolean(anime.favorite);
@@ -66,7 +66,7 @@ export function AnimeCard({ anime, setSelected, updateAnime, displayRank, totalC
 
       <div className="cardInfo">
         <h3>{anime.title}</h3>
-        <p>#{rank || '—'} · {anime.studio || 'Unknown Studio'}</p>
+        <p>{showRank ? `#${rank || '—'} · ` : ''}{anime.studio || 'Unknown Studio'}</p>
 
         <div className="metaPills">
           {anime.year && <span>{anime.year}</span>}

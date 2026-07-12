@@ -321,3 +321,26 @@
     min-width: 0;
   }
 }
+
+
+/* Dashboard interaction polish */
+.homeV3SignalRow,
+.homeV3StudioRow,
+.homeV3Prompt {
+  cursor: pointer;
+}
+
+.homeV3SignalRow:hover,
+.homeV3StudioRow:hover,
+.homeV3Prompt:hover {
+  transform: translateY(-1px);
+  border-color: var(--accent, #30e5ff);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, .22), 0 0 22px color-mix(in srgb, var(--accent, #30e5ff) 18%, transparent);
+}
+
+.homeV3SignalRow:focus-visible,
+.homeV3StudioRow:focus-visible,
+.homeV3Prompt:focus-visible {
+  outline: 2px solid var(--accent, #30e5ff);
+  outline-offset: 2px;
+}

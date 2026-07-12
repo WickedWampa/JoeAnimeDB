@@ -1,20 +1,73 @@
 const { app, BrowserWindow, shell, ipcMain } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const { execFile } = require('child_process');
 const database = require('./database.cjs');
 
 const isDev = !app.isPackaged;
 
+/**
+ * Installer-safe storage.
+ *
+ * Development keeps using Electron's normal userData folder.
+ * Packaged installer builds also use Electron's per-user AppData location,
+ * which is writable without administrator permissions:
+ *
+ *   %APPDATA%\JoeAnimeDB\
+ *     JoeAnime.db
+ *     backups\
+ *     logs\
+ *
+ * The clean first-run seed still ensures new installs start empty.
+ */
+function getAppFolders() {
+  const root = app.getPath('userData');
+
+  return {
+    root,
+    data: root,
+    runtime: root,
+    backups: path.join(root, 'backups'),
+    logs: path.join(root, 'logs')
+  };
+}
+
+function ensureAppFolders() {
+  const folders = getAppFolders();
+  [folders.data, folders.backups, folders.logs].forEach((folder) => {
+    fs.mkdirSync(folder, { recursive: true });
+  });
+  return folders;
+}
+
+
 function registerDatabaseHandlers() {
-  ipcMain.handle('db:init', async (_event, seedDatabase) => database.initDatabase(app.getPath('userData'), seedDatabase));
+  ipcMain.handle('db:init', async (_event, seedDatabase) => {
+    const folders = ensureAppFolders();
+    return database.initDatabase(folders.data, seedDatabase);
+  });
   ipcMain.handle('db:getDatabase', async () => database.getDatabase());
   ipcMain.handle('db:getAll', async () => database.getAll());
   ipcMain.handle('db:getCatalog', async () => database.getCatalog());
   ipcMain.handle('db:replaceAll', async (_event, anime) => database.replaceAll(anime));
   ipcMain.handle('db:updateAnime', async (_event, anime) => database.upsertAnime(anime));
   ipcMain.handle('db:importCatalog', async (_event, catalog) => database.importCatalog(catalog));
+  ipcMain.handle('db:updateCatalogAnime', async (_event, anime) => database.upsertCatalogAnime(anime));
   ipcMain.handle('db:reset', async (_event, seedDatabase) => database.reset(seedDatabase));
 }
+
+
+ipcMain.handle('app:getStorageInfo', async () => {
+  const folders = ensureAppFolders();
+  return {
+    packaged: app.isPackaged,
+    root: folders.root,
+    data: folders.data,
+    backups: folders.backups,
+    logs: folders.logs,
+    database: path.join(folders.data, 'JoeAnime.db')
+  };
+});
 
 
 function runNodeScript(scriptPath, args = []) {
@@ -156,6 +209,7 @@ ipcMain.handle('genome:generateMissingForLibrary', async (_event, animeList, opt
 
 
 app.whenReady().then(() => {
+  ensureAppFolders();
   registerDatabaseHandlers();
   createWindow();
 });

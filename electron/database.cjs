@@ -26,7 +26,11 @@ function titleKey(title = '') {
 function animeToRow(item) {
   return {
     id: String(item.id),
+    malId: item.malId ?? item.mal_id ?? null,
     title: item.title || '',
+    officialTitle: item.officialTitle || item.title || '',
+    titleSynonyms: encodeList(item.titleSynonyms || item.synonyms),
+    canonicalTitleVersion: item.canonicalTitleVersion ?? 0,
     type: item.type || '',
     year: item.year ?? null,
     episodes: item.episodes ?? item.episodeCount ?? null,
@@ -48,7 +52,11 @@ function animeToRow(item) {
 function rowToAnime(row) {
   return {
     id: row.id,
+    malId: row.malId,
     title: row.title,
+    officialTitle: row.officialTitle || row.title,
+    titleSynonyms: decodeList(row.titleSynonyms),
+    canonicalTitleVersion: row.canonicalTitleVersion || 0,
     type: row.type,
     year: row.year,
     episodes: row.episodes,
@@ -86,6 +94,11 @@ function catalogToRow(item) {
     malId: item.malId ?? null,
     malScore: item.malScore ?? item.communityScore ?? null,
     popularity: item.popularity ?? null,
+    members: item.members ?? item.memberCount ?? item.popularityMembers ?? null,
+    followed: item.followed ? 1 : 0,
+    ignored: item.ignored ? 1 : 0,
+    followedAt: item.followedAt || null,
+    listUpdatedAt: item.listUpdatedAt || null,
     updatedAt: new Date().toISOString()
   };
 }
@@ -109,6 +122,10 @@ function rowToCatalogAnime(row) {
     malScore: row.malScore,
     communityScore: row.malScore,
     popularity: row.popularity,
+    followed: Boolean(row.followed),
+    ignored: Boolean(row.ignored),
+    followedAt: row.followedAt || '',
+    listUpdatedAt: row.listUpdatedAt || '',
     updatedAt: row.updatedAt
   };
 }
@@ -117,7 +134,11 @@ function createTables() {
   db.exec(`
     CREATE TABLE IF NOT EXISTS anime (
       id TEXT PRIMARY KEY,
+      malId INTEGER,
       title TEXT NOT NULL,
+      officialTitle TEXT,
+      titleSynonyms TEXT,
+      canonicalTitleVersion INTEGER DEFAULT 0,
       type TEXT,
       year INTEGER,
       episodes INTEGER,
@@ -151,6 +172,11 @@ function createTables() {
       malId INTEGER,
       malScore REAL,
       popularity INTEGER,
+      members INTEGER,
+      followed INTEGER DEFAULT 0,
+      ignored INTEGER DEFAULT 0,
+      followedAt TEXT,
+      listUpdatedAt TEXT,
       updatedAt TEXT
     );
 
@@ -159,6 +185,41 @@ function createTables() {
     CREATE INDEX IF NOT EXISTS idx_anime_catalog_studio ON anime_catalog(studio);
     CREATE INDEX IF NOT EXISTS idx_anime_catalog_year ON anime_catalog(year);
   `);
+
+  const animeColumns = new Set(
+    db.prepare(`PRAGMA table_info(anime)`).all().map((column) => column.name)
+  );
+
+  const addAnimeColumn = (name, definition) => {
+    if (!animeColumns.has(name)) {
+      db.exec(`ALTER TABLE anime ADD COLUMN ${name} ${definition}`);
+      animeColumns.add(name);
+    }
+  };
+
+  addAnimeColumn('malId', 'INTEGER');
+  addAnimeColumn('officialTitle', 'TEXT');
+  addAnimeColumn('titleSynonyms', 'TEXT');
+  addAnimeColumn('canonicalTitleVersion', 'INTEGER DEFAULT 0');
+
+  db.exec('CREATE INDEX IF NOT EXISTS idx_anime_mal_id ON anime(malId)');
+
+  const columns = new Set(
+    db.prepare(`PRAGMA table_info(anime_catalog)`).all().map((column) => column.name)
+  );
+
+  const addColumn = (name, definition) => {
+    if (!columns.has(name)) {
+      db.exec(`ALTER TABLE anime_catalog ADD COLUMN ${name} ${definition}`);
+      columns.add(name);
+    }
+  };
+
+  addColumn('members', 'INTEGER');
+  addColumn('followed', 'INTEGER DEFAULT 0');
+  addColumn('ignored', 'INTEGER DEFAULT 0');
+  addColumn('followedAt', 'TEXT');
+  addColumn('listUpdatedAt', 'TEXT');
 }
 
 async function initDatabase(userDataPath, seedDatabase) {
@@ -206,37 +267,126 @@ function getDatabase() {
   };
 }
 
+function chooseUserValue(primary, secondary, fallback) {
+  if (primary !== undefined && primary !== null && primary !== '') return primary;
+  if (secondary !== undefined && secondary !== null && secondary !== '') return secondary;
+  return fallback;
+}
+
+function mergeDuplicateAnime(existingRows = [], incoming = {}) {
+  const existingAnime = existingRows.map(rowToAnime);
+
+  const bestExisting = existingAnime
+    .sort((a, b) => {
+      const aSignals =
+        Number(a.joeScore > 0) * 8 +
+        Number(Boolean(a.favorite)) * 5 +
+        Number(Boolean(a.status)) * 4 +
+        Number(Boolean(a.notes)) * 3 +
+        Number(a.rewatches || 0) * 2;
+      const bSignals =
+        Number(b.joeScore > 0) * 8 +
+        Number(Boolean(b.favorite)) * 5 +
+        Number(Boolean(b.status)) * 4 +
+        Number(Boolean(b.notes)) * 3 +
+        Number(b.rewatches || 0) * 2;
+      return bSignals - aSignals;
+    })[0] || {};
+
+  return {
+    ...bestExisting,
+    ...incoming,
+
+    // Identity and canonical display data come from current metadata.
+    id: bestExisting.id || incoming.id,
+    malId: incoming.malId ?? bestExisting.malId ?? null,
+    title: incoming.title || incoming.officialTitle || bestExisting.title || '',
+    officialTitle:
+      incoming.officialTitle ||
+      incoming.title ||
+      bestExisting.officialTitle ||
+      bestExisting.title ||
+      '',
+    titleSynonyms: [
+      ...new Set([
+        ...(bestExisting.titleSynonyms || []),
+        ...(incoming.titleSynonyms || []),
+        bestExisting.title
+      ].filter(Boolean))
+    ],
+
+    // User-authored/personal fields must never be lost during migration.
+    joeScore: chooseUserValue(incoming.joeScore, bestExisting.joeScore, null),
+    finalRank: chooseUserValue(incoming.finalRank, bestExisting.finalRank, null),
+    rewatches: Math.max(
+      Number(incoming.rewatches || 0),
+      Number(bestExisting.rewatches || 0)
+    ),
+    status: chooseUserValue(incoming.status, bestExisting.status, ''),
+    favorite: Boolean(incoming.favorite || bestExisting.favorite),
+    notes: chooseUserValue(incoming.notes, bestExisting.notes, '')
+  };
+}
+
 function upsertAnime(item) {
-  const row = animeToRow(item);
+  const incomingMalId = item.malId ?? item.mal_id ?? null;
+  let duplicateRows = [];
 
-  db.prepare(`
-    INSERT INTO anime (
-      id, title, type, year, episodes, studio, genres, cover, synopsis,
-      malScore, joeScore, finalRank, rewatches, status, favorite, notes, updatedAt
-    ) VALUES (
-      @id, @title, @type, @year, @episodes, @studio, @genres, @cover, @synopsis,
-      @malScore, @joeScore, @finalRank, @rewatches, @status, @favorite, @notes, @updatedAt
-    )
-    ON CONFLICT(id) DO UPDATE SET
-      title=excluded.title,
-      type=excluded.type,
-      year=excluded.year,
-      episodes=excluded.episodes,
-      studio=excluded.studio,
-      genres=excluded.genres,
-      cover=excluded.cover,
-      synopsis=excluded.synopsis,
-      malScore=excluded.malScore,
-      joeScore=excluded.joeScore,
-      finalRank=excluded.finalRank,
-      rewatches=excluded.rewatches,
-      status=excluded.status,
-      favorite=excluded.favorite,
-      notes=excluded.notes,
-      updatedAt=excluded.updatedAt
-  `).run(row);
+  if (incomingMalId !== null && incomingMalId !== undefined && incomingMalId !== '') {
+    duplicateRows = db
+      .prepare('SELECT * FROM anime WHERE malId = ? OR id = ?')
+      .all(incomingMalId, String(item.id));
+  } else {
+    duplicateRows = db
+      .prepare('SELECT * FROM anime WHERE id = ?')
+      .all(String(item.id));
+  }
 
-  return rowToAnime(row);
+  const mergedItem = mergeDuplicateAnime(duplicateRows, item);
+  const row = animeToRow(mergedItem);
+
+  const transaction = db.transaction(() => {
+    // Once MAL identity is known, collapse every duplicate row into one record.
+    if (row.malId !== null && row.malId !== undefined) {
+      db.prepare('DELETE FROM anime WHERE malId = ? AND id != ?').run(row.malId, row.id);
+    }
+
+    db.prepare(`
+      INSERT INTO anime (
+        id, malId, title, officialTitle, titleSynonyms, canonicalTitleVersion,
+        type, year, episodes, studio, genres, cover, synopsis,
+        malScore, joeScore, finalRank, rewatches, status, favorite, notes, updatedAt
+      ) VALUES (
+        @id, @malId, @title, @officialTitle, @titleSynonyms, @canonicalTitleVersion,
+        @type, @year, @episodes, @studio, @genres, @cover, @synopsis,
+        @malScore, @joeScore, @finalRank, @rewatches, @status, @favorite, @notes, @updatedAt
+      )
+      ON CONFLICT(id) DO UPDATE SET
+        malId=excluded.malId,
+        title=excluded.title,
+        officialTitle=excluded.officialTitle,
+        titleSynonyms=excluded.titleSynonyms,
+        canonicalTitleVersion=excluded.canonicalTitleVersion,
+        type=excluded.type,
+        year=excluded.year,
+        episodes=excluded.episodes,
+        studio=excluded.studio,
+        genres=excluded.genres,
+        cover=excluded.cover,
+        synopsis=excluded.synopsis,
+        malScore=excluded.malScore,
+        joeScore=excluded.joeScore,
+        finalRank=excluded.finalRank,
+        rewatches=excluded.rewatches,
+        status=excluded.status,
+        favorite=excluded.favorite,
+        notes=excluded.notes,
+        updatedAt=excluded.updatedAt
+    `).run(row);
+  });
+
+  transaction();
+  return rowToAnime(db.prepare('SELECT * FROM anime WHERE id = ?').get(row.id));
 }
 
 function upsertCatalogAnime(item) {
@@ -247,10 +397,12 @@ function upsertCatalogAnime(item) {
   db.prepare(`
     INSERT INTO anime_catalog (
       id, title, titleKey, type, year, episodes, studio, genres, themes,
-      source, cover, synopsis, malId, malScore, popularity, updatedAt
+      source, cover, synopsis, malId, malScore, popularity, members,
+      followed, ignored, followedAt, listUpdatedAt, updatedAt
     ) VALUES (
       @id, @title, @titleKey, @type, @year, @episodes, @studio, @genres, @themes,
-      @source, @cover, @synopsis, @malId, @malScore, @popularity, @updatedAt
+      @source, @cover, @synopsis, @malId, @malScore, @popularity, @members,
+      @followed, @ignored, @followedAt, @listUpdatedAt, @updatedAt
     )
     ON CONFLICT(titleKey) DO UPDATE SET
       title=COALESCE(NULLIF(excluded.title, ''), anime_catalog.title),
@@ -266,6 +418,20 @@ function upsertCatalogAnime(item) {
       malId=COALESCE(excluded.malId, anime_catalog.malId),
       malScore=COALESCE(excluded.malScore, anime_catalog.malScore),
       popularity=COALESCE(excluded.popularity, anime_catalog.popularity),
+      members=COALESCE(excluded.members, anime_catalog.members),
+      followed=CASE
+        WHEN excluded.listUpdatedAt IS NOT NULL THEN excluded.followed
+        ELSE anime_catalog.followed
+      END,
+      ignored=CASE
+        WHEN excluded.listUpdatedAt IS NOT NULL THEN excluded.ignored
+        ELSE anime_catalog.ignored
+      END,
+      followedAt=CASE
+        WHEN excluded.listUpdatedAt IS NOT NULL THEN excluded.followedAt
+        ELSE anime_catalog.followedAt
+      END,
+      listUpdatedAt=COALESCE(excluded.listUpdatedAt, anime_catalog.listUpdatedAt),
       updatedAt=excluded.updatedAt
   `).run(row);
 

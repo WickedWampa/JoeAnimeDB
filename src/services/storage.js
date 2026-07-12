@@ -1,4 +1,4 @@
-export const STORAGE_KEY = 'joeanime-db-4-alpha';
+export const STORAGE_KEY = 'joeanime-db-4';
 
 export function loadData(seed) {
   try {

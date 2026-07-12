@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { countBy, filterAnime, score } from '../utils/animeUtils';
 import { isRemoteCover, needsArtworkRepair, sleep } from '../services/metadata';
 import { fetchMetadataFromProvider, hasManualMetadataOverride } from '../services/metadataProvider';
 import { animeRepository } from '../repositories/animeRepository';
-import { updateCatalogMetadata } from '../services/catalogService';
+import { updateCatalogMetadata, fetchMoreCatalogTitles as fetchMoreCatalogPage } from '../services/catalogService';
 import seedData from '../data/animeSeed.json';
 import { createNewUserDemoDatabase } from '../services/newUserMode';
 
@@ -36,16 +36,67 @@ function shouldRefreshMetadata(item = {}) {
   return hasManualMetadataOverride(item) || needsArtworkRepair(item) || !hasGoodMetadata(item) || metadataIsStale(item) || item.syncStatus?.dirty;
 }
 
-function setItemSyncStatus(item = {}, patch = {}) {
-  return {
-    ...item,
-    syncStatus: {
-      ...(item.syncStatus || {}),
-      ...patch
-    }
-  };
+const METADATA_LOOKUP_TIMEOUT_MS = 22000;
+const METADATA_BASE_DELAY_MS = 1450;
+const METADATA_RETRY_DELAYS_MS = [0, 2500, 5500];
+
+async function withTimeout(promise, timeoutMs, label = 'Metadata lookup') {
+  let timer;
+
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`${label} timed out after ${Math.round(timeoutMs / 1000)} seconds`)),
+          timeoutMs
+        );
+      })
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
+async function fetchMetadataWithBackoff(item = {}) {
+  let lastError = null;
+
+  for (let attempt = 0; attempt < METADATA_RETRY_DELAYS_MS.length; attempt++) {
+    const waitMs = METADATA_RETRY_DELAYS_MS[attempt];
+
+    if (waitMs) {
+      await sleep(waitMs);
+    }
+
+    try {
+      return await withTimeout(
+        fetchMetadataFromProvider(item),
+        METADATA_LOOKUP_TIMEOUT_MS,
+        `Metadata lookup for ${item.title || 'title'}`
+      );
+    } catch (error) {
+      lastError = error;
+
+      const status = Number(
+        error?.status ||
+        String(error?.message || '').match(/\b(429|500|502|503|504)\b/)?.[1] ||
+        0
+      );
+
+      const retryable = [429, 500, 502, 503, 504].includes(status);
+
+      if (!retryable || attempt === METADATA_RETRY_DELAYS_MS.length - 1) {
+        throw error;
+      }
+
+      console.warn(
+        `Retryable Jikan error for ${item.title || 'title'}: ${status}. Backing off before retry.`
+      );
+    }
+  }
+
+  throw lastError || new Error('Metadata lookup failed');
+}
 
 const emptyProgress = {
   step: 1,
@@ -59,12 +110,17 @@ const emptyProgress = {
 
 export function useAnimeLibrary() {
   const [data, setData] = useState(() => ({ ...seedData, anime: [], catalog: [] }));
+  const dataRef = useRef(data);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
   const [syncing, setSyncing] = useState(false);
   const [syncText, setSyncText] = useState('');
   const [syncProgress, setSyncProgress] = useState(emptyProgress);
   const [newUserMode, setNewUserMode] = useState(() => localStorage.getItem('joeanime-new-user-mode') === 'true');
+
+  useEffect(() => {
+    dataRef.current = data;
+  }, [data]);
 
   useEffect(() => {
     let alive = true;
@@ -135,31 +191,67 @@ export function useAnimeLibrary() {
 
   async function updateAnime(updatedAnime) {
     if (newUserMode) {
-      let nextSnapshot = null;
+      const previousData = dataRef.current || { ...seedData, anime: [], catalog: [] };
+      const currentAnime = previousData.anime || [];
+      const malId = updatedAnime.malId ?? updatedAnime.mal_id;
+      const existing = currentAnime.find((item) =>
+        (malId && String(item.malId || '') === String(malId)) ||
+        String(item.id) === String(updatedAnime.id)
+      );
 
-      setData((previousData) => {
-        const currentAnime = previousData.anime || [];
-        const exists = currentAnime.some((item) => String(item.id) === String(updatedAnime.id));
+      const nextAnime = existing
+        ? currentAnime.map((item) =>
+            String(item.id) === String(existing.id)
+              ? { ...item, ...updatedAnime, id: existing.id }
+              : item
+          )
+        : [...currentAnime, updatedAnime];
 
-        const nextAnime = exists
-          ? currentAnime.map((item) => String(item.id) === String(updatedAnime.id) ? updatedAnime : item)
-          : [...currentAnime, updatedAnime];
-
-        nextSnapshot = {
-          ...previousData,
-          anime: nextAnime
-        };
-
-        return nextSnapshot;
-      });
-
-      return nextSnapshot || {
-        ...data,
-        anime: [...(data.anime || []), updatedAnime]
+      const nextSnapshot = {
+        ...previousData,
+        anime: nextAnime
       };
+
+      // Update the ref immediately so rapid sequential bulk imports always see
+      // the title that was just added instead of a stale React render.
+      dataRef.current = nextSnapshot;
+      setData(nextSnapshot);
+
+      return nextSnapshot;
     }
 
     const saved = await animeRepository.updateAnime(updatedAnime);
+    dataRef.current = saved;
+    setData(saved);
+    return saved;
+  }
+
+  async function updateCatalogAnime(updatedAnime) {
+    const current = dataRef.current || data;
+
+    if (newUserMode) {
+      const currentCatalog = current.catalog || [];
+      const key = String(updatedAnime.id || updatedAnime.malId || updatedAnime.title);
+      const exists = currentCatalog.some((item) =>
+        String(item.id || item.malId || item.title) === key
+      );
+
+      const nextCatalog = exists
+        ? currentCatalog.map((item) =>
+            String(item.id || item.malId || item.title) === key
+              ? { ...item, ...updatedAnime }
+              : item
+          )
+        : [...currentCatalog, updatedAnime];
+
+      const next = { ...current, catalog: nextCatalog };
+      dataRef.current = next;
+      setData(next);
+      return next;
+    }
+
+    const saved = await animeRepository.updateCatalogAnime(updatedAnime);
+    dataRef.current = saved;
     setData(saved);
     return saved;
   }
@@ -241,6 +333,35 @@ export function useAnimeLibrary() {
     });
   }
 
+  async function fetchMoreCatalogTitles({ limit = 25 } = {}) {
+    const current = dataRef.current || data;
+    const currentAnime = current.anime || [];
+    const currentCatalog = current.catalog || [];
+    const savedPage = Number(localStorage.getItem('joeanime-discover-next-page') || 1);
+
+    const result = await fetchMoreCatalogPage({
+      library: currentAnime,
+      catalog: currentCatalog,
+      page: savedPage,
+      limit
+    });
+
+    let saved;
+
+    if (newUserMode) {
+      saved = { ...current, catalog: result.catalog };
+      dataRef.current = saved;
+      setData(saved);
+    } else {
+      saved = await animeRepository.importCatalog(result.catalog);
+      dataRef.current = saved;
+      setData(saved);
+    }
+
+    localStorage.setItem('joeanime-discover-next-page', String(result.nextPage));
+    return { ...result, saved };
+  }
+
   async function syncMetadata() {
     const auditRows = anime.map((item, index) => ({
       item,
@@ -257,11 +378,11 @@ export function useAnimeLibrary() {
       '',
       `• ${anime.length} titles scanned locally`,
       `• ${alreadyReady} already have usable metadata/artwork`,
-      `• ${updateQueue.length} need Jikan metadata/artwork repair`,
+      `• ${updateQueue.length} need missing/dirty metadata or artwork repair`,
       '',
       updateQueue.length
-        ? 'Only missing/dirty titles will hit Jikan.'
-        : 'No Jikan metadata refresh needed.',
+        ? 'Only those titles will contact Jikan.'
+        : 'No Jikan metadata calls are needed.',
       '',
       'Continue and build recommendation catalog / genomes?'
     ].join('\n');
@@ -289,38 +410,68 @@ export function useAnimeLibrary() {
         const { index } = updateQueue[passIndex];
         const title = nextAnime[index].title;
         const isRepair = needsArtworkRepair(nextAnime[index]);
+        const operationLabel = isRepair
+          ? 'Repairing Artwork / Metadata'
+          : 'Refreshing Missing Metadata';
 
         setLibraryProgress({
           processed: passIndex + 1,
           total: updateQueue.length,
           title,
-          label: isRepair ? 'Repairing Artwork / Metadata' : 'Refreshing Missing Metadata'
+          label: operationLabel
         });
 
-        setSyncText(`${isRepair ? 'Repairing artwork' : 'Refreshing missing metadata'} ${passIndex + 1}/${updateQueue.length}: ${title}`);
+        setSyncText(`${operationLabel} ${passIndex + 1}/${updateQueue.length}: ${title}`);
 
         try {
-          const refreshed = await fetchMetadataFromProvider(nextAnime[index]);
-          nextAnime[index] = setItemSyncStatus(refreshed, {
+          const existing = nextAnime[index];
+          const refreshed = await fetchMetadataWithBackoff(existing);
+
+          // A normal database update refreshes metadata without renaming the
+          // user's library entry. Official title data may be stored separately,
+          // but the display title remains untouched.
+          nextAnime[index] = setItemSyncStatus({
+            ...existing,
+            ...refreshed,
+            title: existing.title,
+            officialTitle:
+              refreshed.officialTitle ||
+              refreshed.title ||
+              existing.officialTitle ||
+              existing.title,
+            titleSynonyms: [
+              ...new Set([
+                ...(existing.titleSynonyms || []),
+                ...(refreshed.titleSynonyms || []),
+                refreshed.title
+              ])
+            ].filter((value) => value && value !== existing.title)
+          }, {
             metadata: true,
-            poster: !needsArtworkRepair(refreshed),
+            poster: !needsArtworkRepair({ ...existing, ...refreshed }),
             dirty: false,
+            metadataError: '',
             lastMetadataSync: new Date().toISOString()
           });
         } catch (error) {
-          console.warn('Metadata failed:', title, error);
+          console.warn('Metadata refresh failed:', title, error);
+
           nextAnime[index] = setItemSyncStatus(nextAnime[index], {
             metadataError: error?.message || String(error),
-            lastMetadataAttempt: new Date().toISOString()
+            lastMetadataAttempt: new Date().toISOString(),
           });
+
+          setSyncText(
+            `Skipped ${title}: ${error?.message || 'metadata lookup failed'}. Continuing...`
+          );
         }
 
         const saved = await updateData({ ...data, anime: nextAnime });
         nextAnime = [...(saved.anime || nextAnime)];
-        await sleep(isRepair ? 1750 : 1250);
+        await sleep(isRepair ? 1800 : METADATA_BASE_DELAY_MS);
       }
     } else {
-      setSyncText(`Local scan complete — ${alreadyReady} titles skipped. No metadata calls needed.`);
+      setSyncText(`Local scan complete — ${alreadyReady} titles already have usable metadata.`);
       await sleep(500);
     }
 
@@ -348,23 +499,50 @@ export function useAnimeLibrary() {
       setSyncProgress({
         step: 2,
         stepTotal: 2,
-        label: 'Generating Missing Genomes',
+        label: 'Checking Genome Coverage',
         processed: 0,
         total: savedData.anime?.length || 0,
         percent: 95,
-        current: 'Local Genome audit first'
+        current: 'Running local Genome audit'
       });
 
-      setSyncText('Checking local Genome coverage and generating only missing cards...');
+      setSyncText('Checking local Genome coverage...');
 
-      const genomeResult = await window.JoeAnimeDB.generateMissingGenomesForLibrary(savedData.anime || [], {
-        limit: 0,
-        delayMs: 1200
-      });
+      // Genome generation is a bonus post-update task. It must never trap the
+      // entire database updater if the Electron handler stalls or an AI call
+      // never resolves.
+      const GENOME_TIMEOUT_MS = 30000;
 
-      if (!genomeResult?.ok) {
-        console.warn('Genome batch failed:', genomeResult);
-        setSyncText('Catalog updated, but Genome generation failed: ' + (genomeResult?.error || 'Unknown error'));
+      try {
+        const genomeResult = await Promise.race([
+          window.JoeAnimeDB.generateMissingGenomesForLibrary(savedData.anime || [], {
+            limit: 0,
+            delayMs: 1200
+          }),
+          new Promise((resolve) =>
+            setTimeout(() => resolve({
+              ok: false,
+              timedOut: true,
+              error: 'Genome audit timed out'
+            }), GENOME_TIMEOUT_MS)
+          )
+        ]);
+
+        if (!genomeResult?.ok) {
+          if (genomeResult?.timedOut) {
+            console.warn('Genome audit timed out; finishing database update normally.');
+            setSyncText('Database updated. Genome audit timed out and was skipped for now.');
+          } else {
+            console.warn('Genome batch failed:', genomeResult);
+            setSyncText(
+              'Database updated, but Genome generation was skipped: ' +
+              (genomeResult?.error || 'Unknown error')
+            );
+          }
+        }
+      } catch (error) {
+        console.warn('Genome audit crashed; finishing database update normally.', error);
+        setSyncText('Database updated. Genome audit failed and was skipped for now.');
       }
     }
 
@@ -413,7 +591,9 @@ export function useAnimeLibrary() {
     resetNewUserMode,
     updateData,
     updateAnime,
+    updateCatalogAnime,
     deleteAnime,
+    fetchMoreCatalogTitles,
     syncMetadata
   };
 }

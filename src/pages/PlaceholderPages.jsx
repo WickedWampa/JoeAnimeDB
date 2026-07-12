@@ -1,6 +1,8 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import '../styles/joeanime-splash.css';
 import joeAnimeSplashHero from '../assets/joeanime-splash-hero.png';
+import joeAIHologramBrain from '../assets/joeai-hologram-brain.png';
+import '../styles/joeai-command-center.css';
 import { Poster } from '../components/Poster';
 import { score, countBy } from '../utils/animeUtils';
 import { exportBackup, resetData } from '../services/storage';
@@ -151,7 +153,7 @@ export function Universe({ anime, setQuery, setView }) {
   );
 }
 
-export function Assistant({ anime, catalog = [], updateAnime }) {
+export function Assistant({ anime, catalog = [], updateAnime, initialPrompt = '', onPromptConsumed }) {
   const brain = useMemo(() => createAnimeBrain(anime, catalog), [anime, catalog]);
   const [log, setLog] = useState([
     {
@@ -164,6 +166,33 @@ export function Assistant({ anime, catalog = [], updateAnime }) {
   const [addingId, setAddingId] = useState('');
   const [pendingAction, setPendingAction] = useState(null);
   const [expandedRecommendationIds, setExpandedRecommendationIds] = useState({});
+  const lastAutoPromptRef = useRef('');
+  const conversationRef = useRef(null);
+
+  useEffect(() => {
+    const conversation = conversationRef.current;
+    if (!conversation) return;
+
+    requestAnimationFrame(() => {
+      conversation.scrollTo({
+        top: conversation.scrollHeight,
+        behavior: 'smooth'
+      });
+    });
+  }, [log, pendingAction, expandedRecommendationIds]);
+
+  useEffect(() => {
+    const prompt = String(initialPrompt || '').trim();
+    if (!prompt) {
+      lastAutoPromptRef.current = '';
+      return;
+    }
+    if (lastAutoPromptRef.current === prompt) return;
+
+    lastAutoPromptRef.current = prompt;
+    void ask(prompt);
+    onPromptConsumed?.();
+  }, [initialPrompt, onPromptConsumed]);
 
   function animeId(item) {
     return String(item?.malId || item?.id || item?.title || '')
@@ -377,10 +406,10 @@ export function Assistant({ anime, catalog = [], updateAnime }) {
     // Generic requests like "what should I watch next" should NOT go through
     // the Genome title lookup path, because that is what caused the Space Dandy fallback.
     return (
-      /(something|show|shows|anime)\s+like/.test(lower) ||
-      /similar\s+to/.test(lower) ||
-      /recommend\s+.+\s+like/.test(lower) ||
-      /(darker|dark|funny|comedy|emotional|cozy|comfort|strategy|strategic|sports|hidden gem|underrated|movie|short binge)/.test(lower)
+      /\b(something|show|shows|anime)\s+like\b/.test(lower) ||
+      /\bsimilar\s+to\b/.test(lower) ||
+      /\brecommend\s+.+\s+like\b/.test(lower) ||
+      /\b(darker|dark|funny|comedy|emotional|cozy|comfort|strategy|strategic|sports|hidden gem|underrated|movie|short binge)\b/.test(lower)
     );
   }
 
@@ -462,8 +491,8 @@ export function Assistant({ anime, catalog = [], updateAnime }) {
     setLog((current) => [...current, { who: 'bot', ...result }]);
   }
 
-  async function ask() {
-    const q = text.trim();
+  async function ask(promptOverride = '') {
+    const q = String(promptOverride || text).trim();
     if (!q) return;
 
     setLog((current) => [...current, { who: 'user', type: 'text', text: q }]);
@@ -834,17 +863,55 @@ export function Assistant({ anime, catalog = [], updateAnime }) {
 
   function traitEmoji(tag = '') {
     const lower = String(tag).toLowerCase();
-    if (lower.includes('sword') || lower.includes('combat')) return '⚔️';
+    if (lower.includes('sword') || lower.includes('combat') || lower.includes('battle')) return '⚔️';
     if (lower.includes('demon') || lower.includes('curse') || lower.includes('horror')) return '👹';
     if (lower.includes('magic') || lower.includes('supernatural')) return '✨';
     if (lower.includes('kingdom') || lower.includes('leadership') || lower.includes('politic')) return '👑';
-    if (lower.includes('world') || lower.includes('adventure')) return '🌍';
-    if (lower.includes('friend') || lower.includes('family') || lower.includes('community')) return '🤝';
+    if (lower.includes('world') || lower.includes('adventure') || lower.includes('expansive')) return '🌍';
+    if (lower.includes('friend') || lower.includes('family') || lower.includes('community') || lower.includes('loyal')) return '🤝';
     if (lower.includes('power') || lower.includes('action')) return '💥';
     if (lower.includes('comedy') || lower.includes('fun')) return '😂';
     if (lower.includes('mystery') || lower.includes('identity')) return '🧩';
     if (lower.includes('emotional') || lower.includes('trauma') || lower.includes('drama')) return '💔';
     return '✓';
+  }
+
+  function traitCategory(tag = '') {
+    const lower = String(tag).toLowerCase();
+
+    if (
+      lower.includes('combat') || lower.includes('battle') || lower.includes('power') ||
+      lower.includes('action') || lower.includes('sword')
+    ) return 'action';
+
+    if (
+      lower.includes('friend') || lower.includes('family') || lower.includes('loyal') ||
+      lower.includes('mentor') || lower.includes('rival') || lower.includes('character')
+    ) return 'character';
+
+    if (
+      lower.includes('dark') || lower.includes('emotional') || lower.includes('comedy') ||
+      lower.includes('fun') || lower.includes('cozy') || lower.includes('horror') ||
+      lower.includes('tone')
+    ) return 'tone';
+
+    if (
+      lower.includes('world') || lower.includes('kingdom') || lower.includes('politic') ||
+      lower.includes('leadership') || lower.includes('magic') || lower.includes('adventure') ||
+      lower.includes('expansive') || lower.includes('setting')
+    ) return 'world';
+
+    return 'story';
+  }
+
+  function traitCategoryLabel(category = 'story') {
+    return {
+      action: 'Action',
+      character: 'Characters',
+      tone: 'Tone',
+      world: 'World',
+      story: 'Story'
+    }[category] || 'Story';
   }
 
   function recommendationTags(item = {}) {
@@ -864,7 +931,7 @@ export function Assistant({ anime, catalog = [], updateAnime }) {
         seen.add(key);
         return true;
       })
-      .slice(0, 5);
+      .slice(0, 7);
   }
 
   function recommendationSummary(item = {}, sourceTitle = 'that show') {
@@ -874,14 +941,14 @@ export function Assistant({ anime, catalog = [], updateAnime }) {
     if (item.joeAISummary) return item.joeAISummary;
 
     if (tags.length) {
-      return `If what you liked about ${sourceTitle} was ${tags.map((tag) => tag.toLowerCase()).join(', ')}, ${name} looks like a strong follow-up without feeling like a copy.`;
+      return `You tend to respond strongly to ${tags.map((tag) => tag.toLowerCase()).join(', ')}. ${name} carries that same core DNA as ${sourceTitle}, but still has enough of its own identity to feel fresh.`;
     }
 
     if (item.blurb && !/shares Curated knowledge match/i.test(item.blurb)) {
       return item.blurb;
     }
 
-    return `${name} has enough shared DNA with ${sourceTitle} that JoeAI thinks it is worth a serious look.`;
+    return `${name} overlaps with the parts of ${sourceTitle} that usually land best for you, so JoeAI thinks it deserves a serious look.`;
   }
 
   function parsePercentFromDeepDive(text = '', label = 'DNA score') {
@@ -911,15 +978,57 @@ export function Assistant({ anime, catalog = [], updateAnime }) {
     return 'Exploratory';
   }
 
-  function renderDnaMeter(percent) {
+  function scoreValue(item = {}) {
+    const value = Number(item.joeScore ?? item.score ?? item.finalScore ?? item.rating ?? 0);
+    return Number.isFinite(value) && value > 0 ? value.toFixed(1) : null;
+  }
+
+  function relationshipFacts(item = {}) {
+    if (!item.owned) return [];
+
+    const facts = [];
+    const status = item.status || item.watchStatus;
+    const rating = scoreValue(item);
+    const rewatches = Number(item.rewatches || 0);
+
+    if (status) facts.push({ label: 'Status', value: status });
+    if (rating) facts.push({ label: 'Your rating', value: `${rating}/10` });
+    if (rewatches > 0) facts.push({ label: 'Rewatches', value: `${rewatches}×` });
+    if (item.favorite) facts.push({ label: 'Library signal', value: 'Favorite' });
+
+    return facts;
+  }
+
+  function reasoningBullets(item = {}, sourceTitle = 'that show') {
+    const tags = recommendationTags(item).slice(0, 4);
+    const bullets = tags.map((tag) => `${traitEmoji(tag)} Shared ${tag.toLowerCase()} DNA`);
+
+    if (item.owned) {
+      const rating = scoreValue(item);
+      if (rating) bullets.push(`★ You rated this ${rating}/10`);
+      if (Number(item.rewatches || 0) > 0) bullets.push(`↻ You have rewatched it ${item.rewatches} time${Number(item.rewatches) === 1 ? '' : 's'}`);
+    } else {
+      bullets.push(`✦ New discovery outside your current library`);
+    }
+
+    if (!bullets.length) {
+      bullets.push(`🧬 Strong overall overlap with ${sourceTitle}`);
+    }
+
+    return bullets.slice(0, 5);
+  }
+
+  function renderMeter(label, percent, className = '') {
     const safePercent = Math.max(0, Math.min(100, Number(percent || 0)));
     return (
-      <div className="joeaiReasonList">
-        <strong>🧬 DNA Match</strong>
-        <div style={{ width: '100%', height: 10, borderRadius: 999, background: 'rgba(255,255,255,0.12)', overflow: 'hidden' }}>
-          <div style={{ width: `${safePercent}%`, height: '100%', borderRadius: 999, background: 'currentColor' }} />
+      <div className={`joeaiPremiumMeter ${className}`}>
+        <div className="joeaiPremiumMeterTop">
+          <span>{label}</span>
+          <strong>{safePercent}%</strong>
         </div>
-        <span>{safePercent}% shared Anime DNA</span>
+        <div className="joeaiPremiumMeterTrack">
+          <i style={{ width: `${safePercent}%` }} />
+        </div>
       </div>
     );
   }
@@ -929,9 +1038,12 @@ export function Assistant({ anime, catalog = [], updateAnime }) {
 
     return (
       <div key={index} className="chat bot joeaiRecommendations">
-        <div className="joeaiRecHeader">
-          <h2>{message.title}</h2>
-          {message.subtitle && <p>{message.subtitle}</p>}
+        <div className="joeaiRecHeader joeaiSmartRecHeader">
+          <p className="joeaiRecEyebrow">🧬 Genome recommendation run</p>
+          <h2>JoeAI found {message.items?.length || 0} strong matches for {sourceTitle}</h2>
+          <p>
+            These picks are based on shared world design, character dynamics, tone, and your personal library signals—not just genre labels.
+          </p>
         </div>
 
         {message.items?.some((item) => item.bucket === 'library') && (
@@ -969,16 +1081,24 @@ export function Assistant({ anime, catalog = [], updateAnime }) {
     const name = item.officialTitle || item.title;
     const tags = recommendationTags(item);
     const dna = dnaPercent(item);
+    const confidence = Math.max(0, Math.min(100, Number(item.match || 0)));
+    const facts = relationshipFacts(item);
+    const bullets = reasoningBullets(item, sourceTitle);
 
     return (
-      <article className="joeaiRecCard" key={id}>
-        <Poster anime={item} className="joeaiRecPoster" mode="thumb" />
+      <article className={`joeaiRecCard joeaiPremiumRecCard ${isExpanded ? 'isExpanded' : ''}`} key={id}>
+        <div className="joeaiPosterWrap">
+          <Poster anime={item} className="joeaiRecPoster" mode="thumb" />
+          <span className="joeaiPosterMatchBadge">{confidence}%</span>
+        </div>
+
         <div className="joeaiRecBody">
           <div className="joeaiRecTopline">
             <span className="joeaiRecRank">#{index + 1}</span>
-            <span className="joeaiMatchBadge">{item.match}%</span>
-            <span className="joeaiMatchLabel">{confidenceLabel(item.match)} Match</span>
-            <span className="joeaiMatchLabel">{item.owned ? 'In Library' : 'Discovery'}</span>
+            <span className="joeaiMatchLabel">{confidenceLabel(confidence)} Match</span>
+            <span className={`joeaiOwnershipBadge ${item.owned ? 'owned' : 'discovery'}`}>
+              {item.owned ? '✓ Already in Library' : '✦ New Discovery'}
+            </span>
           </div>
 
           <h3>{name}</h3>
@@ -990,49 +1110,183 @@ export function Assistant({ anime, catalog = [], updateAnime }) {
             {item.communityScore && <span>MAL {item.communityScore}</span>}
           </div>
 
-          <p><strong>🍜 JoeAI says:</strong> {recommendationSummary(item, sourceTitle)}</p>
+          <div className="joeaiPremiumInsight">
+            <span>🧠 JoeAI Insight</span>
+            <p>{recommendationSummary(item, sourceTitle)}</p>
+          </div>
 
           {tags.length > 0 && (
-            <div className="joeaiRecMeta" aria-label="Recommendation traits">
-              {tags.map((tag) => <span key={tag}>{traitEmoji(tag)} {tag}</span>)}
+            <div className="joeaiTraitCloud" aria-label="Recommendation traits">
+              {tags.map((tag) => {
+                const category = traitCategory(tag);
+                return (
+                  <span key={tag} className={`joeaiTraitChip ${category}`}>
+                    <small>{traitCategoryLabel(category)}</small>
+                    <b>{traitEmoji(tag)} {tag}</b>
+                  </span>
+                );
+              })}
             </div>
           )}
 
-          {isExpanded && (
-            <div className="joeaiReasonList">
-              <strong>🧠 Why JoeAI picked this</strong>
-              {renderDnaMeter(dna)}
-              <div className="joeaiRecMeta">
-                <span>Confidence: {confidenceLabel(item.match)}</span>
-                {item.owned && <span>Already in your library</span>}
-                {!item.owned && <span>New discovery</span>}
+          <div className={`joeaiExplainPanel ${isExpanded ? 'open' : ''}`}>
+            <div className="joeaiExplainHeader">
+              <div>
+                <p>JoeAI Match Analysis</p>
+                <h4>Why this fits your taste</h4>
               </div>
-              {tags.length > 0 && (
-                <div className="joeaiRecMeta">
-                  {tags.map((tag) => <span key={tag + '-why'}>{traitEmoji(tag)} {tag}</span>)}
-                </div>
-              )}
-              <p>Because you asked about <strong>{sourceTitle}</strong>, JoeAI looked for shows with overlapping anime DNA, matching themes, and enough differences to still feel fresh.</p>
-              {item.deepDive && (
-                <details>
-                  <summary>Technical notes</summary>
-                  <pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{item.deepDive}</pre>
-                </details>
-              )}
+              <span>{confidenceLabel(confidence)} confidence</span>
             </div>
-          )}
 
-          <div className="joeaiRecActions">
+            <div className="joeaiMeterGrid">
+              {renderMeter('JoeAI Confidence', confidence, 'confidence')}
+              {renderMeter('Shared Anime DNA', dna, 'dna')}
+            </div>
+
+            <div className="joeaiReasonBullets">
+              {bullets.map((bullet) => <span key={bullet}>{bullet}</span>)}
+            </div>
+
+            {facts.length > 0 && (
+              <div className="joeaiLibraryRelationship">
+                <p>Your relationship with this title</p>
+                <div>
+                  {facts.map((fact) => (
+                    <span key={fact.label}>
+                      <small>{fact.label}</small>
+                      <strong>{fact.value}</strong>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <p className="joeaiExplainCopy">
+              Because you asked about <strong>{sourceTitle}</strong>, JoeAI compared shared themes,
+              character dynamics, world design, tone, and your personal library signals—not just surface genres.
+            </p>
+
+            {item.deepDive && (
+              <details className="joeaiTechnicalNotes">
+                <summary>Technical Genome notes</summary>
+                <pre>{item.deepDive}</pre>
+              </details>
+            )}
+          </div>
+
+          <div className="joeaiRecActions joeaiPremiumActions">
             <button type="button" onClick={() => toggleRecommendationWhy(id)}>
-              {isExpanded ? 'Hide Why' : 'Why?'}
+              {isExpanded ? 'Hide Explanation' : '🧠 Explain Match'}
             </button>
-            <button type="button" onClick={() => addAnimeToLibrary({ title: name, status: 'Watching', selectedAnime: item })} disabled={isAdding || !updateAnime}>
-              {isAdding ? 'Adding...' : item.owned ? 'Update Status' : '+ Add'}
+            <button
+              type="button"
+              className="primary"
+              onClick={() => addAnimeToLibrary({ title: name, status: 'Watching', selectedAnime: item })}
+              disabled={isAdding || !updateAnime}
+            >
+              {isAdding ? 'Saving...' : item.owned ? '📚 Update Library Entry' : '+ Add to Library'}
             </button>
           </div>
         </div>
       </article>
     );
+  }
+
+  const joeAIStats = useMemo(() => {
+    const completed = anime.filter(
+      (item) => String(item.status || '').toLowerCase() === 'completed'
+    ).length;
+
+    const rewatches = anime.reduce(
+      (sum, item) => sum + Number(item.rewatches || 0),
+      0
+    );
+
+    const favorites = anime.filter((item) => item.favorite);
+    const episodes = anime.reduce(
+      (sum, item) => sum + Number(item.episodeCount || item.episodes || 0),
+      0
+    );
+
+    const genreRows = countBy(anime.flatMap((item) => item.genres || [])).slice(0, 6);
+    const maxGenre = genreRows[0]?.[1] || 1;
+
+    return {
+      completed,
+      rewatches,
+      favorites,
+      episodes,
+      genreRows,
+      maxGenre
+    };
+  }, [anime]);
+
+  const joeAIPick = useMemo(() => {
+    const libraryIds = new Set(
+      anime.flatMap((item) => [
+        item.malId ? `mal:${item.malId}` : '',
+        item.title ? `title:${String(item.title).toLowerCase()}` : ''
+      ]).filter(Boolean)
+    );
+
+    const topGenres = new Set(
+      joeAIStats.genreRows.slice(0, 4).map(([name]) => String(name).toLowerCase())
+    );
+
+    const candidates = (catalog || [])
+      .filter((item) => {
+        const malKey = item.malId ? `mal:${item.malId}` : '';
+        const titleKey = item.title ? `title:${String(item.title).toLowerCase()}` : '';
+        return !(malKey && libraryIds.has(malKey)) && !(titleKey && libraryIds.has(titleKey));
+      })
+      .map((item) => {
+        const overlap = (item.genres || []).filter((genre) =>
+          topGenres.has(String(genre).toLowerCase())
+        ).length;
+
+        const community = Number(item.communityScore || item.malScore || item.score || 0);
+        return {
+          item,
+          value: overlap * 20 + community * 4,
+          confidence: Math.max(62, Math.min(98, Math.round(66 + overlap * 7 + community)))
+        };
+      })
+      .sort((a, b) => b.value - a.value);
+
+    return candidates[0] || null;
+  }, [anime, catalog, joeAIStats.genreRows]);
+
+  const joeAIThought = useMemo(() => {
+    const topGenre = joeAIStats.genreRows[0]?.[0] || 'Adventure';
+    const comfortCount = joeAIStats.favorites.length;
+
+    if (joeAIStats.rewatches >= 8) {
+      return {
+        eyebrow: 'JoeAI noticed a comfort pattern',
+        headline: `${topGenre} keeps pulling you back.`,
+        body: `${joeAIStats.rewatches} rewatches and ${comfortCount} comfort anchors suggest you value familiar worlds and long-term attachment—not just novelty.`
+      };
+    }
+
+    return {
+      eyebrow: 'JoeAI found your strongest signal',
+      headline: `${topGenre} is leading your Anime DNA.`,
+      body: `${joeAIStats.completed} completed titles are shaping this pattern. Ratings, rewatches, favorites, and rejected picks will keep making it sharper.`
+    };
+  }, [joeAIStats]);
+
+  const quickPrompts = [
+    'what should I watch next?',
+    'recommend something like Bleach',
+    'show me a hidden gem',
+    'give me a movie for tonight',
+    'why do I like long adventures?',
+    'what changed in my Anime DNA?'
+  ];
+
+  function runPrompt(prompt) {
+    setText(prompt);
+    void ask(prompt);
   }
 
   function renderMessage(message, index) {
@@ -1078,26 +1332,186 @@ export function Assistant({ anime, catalog = [], updateAnime }) {
   }
 
   return (
-    <section className="panel assistant-page">
-      <div className="assistant-log">
-        {log.map((message, index) => renderMessage(message, index))}
-      </div>
+    <section className="joeAICommandCenter">
+      <section className="joeAIHero">
+        <div className="joeAIHeroCopy">
+          <div className="joeAIHeroTitle">
+            <span className="joeAIHeroIcon">✦</span>
+            <div>
+              <p>JoeAnimeDB Intelligence</p>
+              <h1>JoeAI</h1>
+            </div>
+          </div>
 
-      <div className="assistant-input joeaiChatInput">
-        <textarea
-          placeholder={'Ask JoeAI... try: add Frieren as completed\nOr: add these as completed: Bleach, Naruto, One Piece'}
-          value={text}
-          rows={2}
-          onChange={(event) => setText(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' && !event.shiftKey) {
-              event.preventDefault();
-              ask();
-            }
-          }}
-        />
-        <button onClick={ask}>Ask</button>
-      </div>
+          <span className="joeAIEyebrow">{joeAIThought.eyebrow}</span>
+          <h2>{joeAIThought.headline}</h2>
+          <p className="joeAIHeroBody">{joeAIThought.body}</p>
+
+          <button
+            type="button"
+            className="joeAIAnalysisLink"
+            onClick={() => runPrompt('explain my current Anime DNA and strongest taste patterns')}
+          >
+            Explain how you read my library →
+          </button>
+        </div>
+
+        <div className="joeAIHeroBrain" aria-hidden="true">
+          <img src={joeAIHologramBrain} alt="" />
+        </div>
+
+        <aside className="joeAIHeroStats">
+          <div>
+            <span>▤</span>
+            <strong>{joeAIStats.episodes.toLocaleString()}</strong>
+            <small>Episodes Tracked</small>
+          </div>
+          <div>
+            <span>↻</span>
+            <strong>{joeAIStats.rewatches}</strong>
+            <small>Total Rewatches</small>
+          </div>
+          <div>
+            <span>♡</span>
+            <strong>{joeAIStats.favorites.length}</strong>
+            <small>Comfort Anchors</small>
+          </div>
+        </aside>
+      </section>
+
+      <section className="joeAIOverviewGrid">
+        <article className="joeAIPickCard">
+          <header>
+            <span>☆</span>
+            <h2>JoeAI Pick of the Day</h2>
+          </header>
+
+          {joeAIPick ? (
+            <div className="joeAIPickInner">
+              <Poster anime={joeAIPick.item} className="joeAIPickPoster" mode="thumb" />
+              <div>
+                <div className="joeAIPickHeading">
+                  <h3>{joeAIPick.item.officialTitle || joeAIPick.item.title}</h3>
+                  <strong>{joeAIPick.confidence}% Match</strong>
+                </div>
+
+                <div className="joeAIPickTags">
+                  {(joeAIPick.item.genres || []).slice(0, 4).map((genre) => (
+                    <span key={genre}>{genre}</span>
+                  ))}
+                </div>
+
+                <p>
+                  This overlaps with the strongest genres and patterns already visible in your library.
+                </p>
+
+                <div className="joeAIPickActions">
+                  <button
+                    type="button"
+                    className="primary"
+                    onClick={() => runPrompt(`tell me why you recommend ${joeAIPick.item.title}`)}
+                  >
+                    Why This?
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => runPrompt(`add ${joeAIPick.item.title} as watching`)}
+                  >
+                    + Watching
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => runPrompt(`recommend something else instead of ${joeAIPick.item.title}`)}
+                  >
+                    Another Pick
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <p className="joeAIEmptyCard">Add more catalog titles and JoeAI will choose a daily pick.</p>
+          )}
+        </article>
+
+        <article className="joeAIDNACard">
+          <header>
+            <span>⌬</span>
+            <h2>Your Anime DNA</h2>
+          </header>
+
+          <div className="joeAIDNARows">
+            {joeAIStats.genreRows.map(([name, count]) => (
+              <button
+                type="button"
+                key={name}
+                onClick={() => runPrompt(`explain why ${name} is part of my Anime DNA`)}
+              >
+                <span>{name}</span>
+                <i>
+                  <b style={{ width: `${Math.max(8, Math.round((count / joeAIStats.maxGenre) * 100))}%` }} />
+                </i>
+                <strong>{Math.round((count / joeAIStats.maxGenre) * 100)}%</strong>
+              </button>
+            ))}
+          </div>
+        </article>
+
+        <article className="joeAIActivityCard">
+          <header>
+            <span>◷</span>
+            <h2>JoeAI Knows</h2>
+          </header>
+
+          <div className="joeAIActivityRows">
+            <div><span>✓</span><strong>{joeAIStats.completed} completed</strong><small>analyzed</small></div>
+            <div><span>↻</span><strong>{joeAIStats.rewatches} rewatches</strong><small>comfort signal</small></div>
+            <div><span>♡</span><strong>{joeAIStats.favorites.length} favorites</strong><small>strong anchors</small></div>
+            <div><span>✦</span><strong>{catalog.length} catalog titles</strong><small>available to recommend</small></div>
+          </div>
+        </article>
+      </section>
+
+      <section className="joeAIChatShell">
+        <header className="joeAIChatHeader">
+          <div>
+            <span>💬</span>
+            <div>
+              <p>Talk to your anime brain</p>
+              <h2>Ask JoeAI</h2>
+            </div>
+          </div>
+          <small>Understands recommendations, library actions, bulk adds, ratings, and Anime DNA.</small>
+        </header>
+
+        <div className="joeAIStarterChips">
+          {quickPrompts.map((prompt) => (
+            <button type="button" key={prompt} onClick={() => runPrompt(prompt)}>
+              {prompt}
+            </button>
+          ))}
+        </div>
+
+        <div ref={conversationRef} className="assistant-log joeAIConversation">
+          {log.map((message, index) => renderMessage(message, index))}
+        </div>
+
+        <div className="assistant-input joeaiChatInput joeAIComposer">
+          <textarea
+            placeholder={'Ask JoeAI anything...\nTry: recommend something dark under 24 episodes'}
+            value={text}
+            rows={2}
+            onChange={(event) => setText(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                ask();
+              }
+            }}
+          />
+          <button onClick={() => ask()}>Ask JoeAI</button>
+        </div>
+      </section>
+
     </section>
   );
 }

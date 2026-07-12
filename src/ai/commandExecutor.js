@@ -469,6 +469,90 @@ function topList(items, label) {
 function answerConversationalQuestion({ text = '', anime = [], catalog = [], brain }) {
   const lower = String(text).toLowerCase();
 
+  // Dashboard and chat DNA explanations must be handled before any
+  // recommendation fallback. Examples: "explain Action", "explain Fantasy".
+  const dnaExplainMatch = String(text || '').trim().match(
+    /^(?:please\s+)?explain(?:\s+why)?\s+(action|adventure|fantasy|isekai|romance|comedy|drama|horror|mecha|sports|mystery|sci[- ]?fi|supernatural|shounen|seinen)\b/i
+  );
+
+  if (dnaExplainMatch) {
+    const requested = dnaExplainMatch[1];
+    const normalizedRequested = requested.toLowerCase().replace(/[-\s]+/g, '');
+
+    const matching = anime.filter((item) =>
+      (item.genres || []).some((genre) =>
+        String(genre || '').toLowerCase().replace(/[-\s]+/g, '') === normalizedRequested
+      )
+    );
+
+    const rated = matching
+      .map((item) => ({
+        item,
+        score: Number(item.joeScore ?? item.score ?? item.finalScore ?? item.rating ?? 0)
+      }))
+      .filter(({ score }) => Number.isFinite(score) && score > 0);
+
+    const average = rated.length
+      ? (rated.reduce((sum, entry) => sum + entry.score, 0) / rated.length).toFixed(2)
+      : null;
+
+    const topTitles = [...matching]
+      .sort((a, b) =>
+        Number(b.rewatches || 0) - Number(a.rewatches || 0) ||
+        Number(b.joeScore ?? b.score ?? b.finalScore ?? b.rating ?? 0) -
+        Number(a.joeScore ?? a.score ?? a.finalScore ?? a.rating ?? 0)
+      )
+      .slice(0, 5);
+
+    const companionGenres = localCountBy(
+      matching.flatMap((item) =>
+        (item.genres || []).filter((genre) =>
+          String(genre || '').toLowerCase().replace(/[-\s]+/g, '') !== normalizedRequested
+        )
+      )
+    ).slice(0, 4);
+
+    const rewatches = matching.reduce((sum, item) => sum + Number(item.rewatches || 0), 0);
+    const favorites = matching.filter((item) => item.favorite).length;
+    const label = requested
+      .replace(/sci[- ]?fi/i, 'Sci-Fi')
+      .replace(/^./, (char) => char.toUpperCase());
+
+    if (!matching.length) {
+      return makeTextResult([
+        `🧬 Why ${label} is not leading your Anime DNA yet`,
+        '',
+        `I could not find any ${label} titles in your current library metadata.`,
+        '',
+        'Run metadata refresh on titles missing genres, then ask again.'
+      ].join('\n'));
+    }
+
+    return makeTextResult([
+      `🧬 Why ${label} leads your Anime DNA`,
+      '',
+      `${label} appears in ${matching.length} title${matching.length === 1 ? '' : 's'} in your library${average ? ` with an average personal score of ${average}` : ''}.`,
+      rewatches ? `You also have ${rewatches} total rewatch${rewatches === 1 ? '' : 'es'} reinforcing this signal.` : '',
+      favorites ? `${favorites} of those titles ${favorites === 1 ? 'is' : 'are'} marked as a favorite.` : '',
+      '',
+      topTitles.length ? 'Strongest evidence:' : '',
+      ...topTitles.map((item) => {
+        const score = Number(item.joeScore ?? item.score ?? item.finalScore ?? item.rating ?? 0);
+        const extras = [
+          Number.isFinite(score) && score > 0 ? `★ ${score.toFixed(1)}` : '',
+          Number(item.rewatches || 0) > 0 ? `↻ ${item.rewatches}x` : '',
+          item.favorite ? 'favorite' : ''
+        ].filter(Boolean).join(' · ');
+        return `• ${item.officialTitle || item.title}${extras ? ` — ${extras}` : ''}`;
+      }),
+      '',
+      companionGenres.length ? `What usually makes ${label} work for you:` : '',
+      ...companionGenres.map(([genre, count]) => `• ${genre} overlaps in ${count} title${count === 1 ? '' : 's'}`),
+      '',
+      `JoeAI's read: ${label} is not winning by itself. It becomes one of your strongest signals when it is paired with ${companionGenres.slice(0, 3).map(([genre]) => genre.toLowerCase()).join(', ') || 'the character and story patterns you repeatedly return to'}.`
+    ].filter(Boolean).join('\n'));
+  }
+
   const conversationAnswer = routeJoeAIConversation({ text, anime, catalog });
   if (conversationAnswer) {
     return conversationAnswer;
