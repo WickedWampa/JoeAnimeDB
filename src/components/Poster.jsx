@@ -27,13 +27,27 @@ export function Poster({ anime, className = 'poster', mode = 'fill' }) {
   const classes = [
     className,
     mode === 'thumb' ? 'posterThumb' : '',
+    mode === 'library' ? 'posterLibrary' : '',
     src ? 'hasImage' : ''
   ].filter(Boolean).join(' ');
 
   return (
-    <div className={classes}>
+    <div className={classes} style={mode === 'library' && src ? { '--library-poster-backdrop': `url("${src}")` } : undefined}>
       {src ? (
-        <img src={src} alt={`${anime.title} poster`} loading="lazy" onError={handleImageError} />
+        <img
+          src={src}
+          alt={`${anime.title} poster`}
+          loading="lazy"
+          onError={handleImageError}
+          style={mode === 'library'
+            ? {
+                objectFit: 'contain',
+                objectPosition: 'center top',
+                width: '100%',
+                height: '100%'
+              }
+            : undefined}
+        />
       ) : (
         <span>{initials(anime.title)}</span>
       )}

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Poster } from './Poster';
 import { hasUserScore, score, scoreLabel } from '../utils/animeUtils';
+import '../styles/library-collector-cards.css';
 
 function rankTierClass(rank, totalCount = 0) {
   const total = Math.max(Number(totalCount || 0), rank || 0, 1);
@@ -45,7 +46,7 @@ export function AnimeCard({ anime, setSelected, updateAnime, displayRank, totalC
       onClick={openDetails}
       onKeyDown={handleKeyDown}
     >
-      <Poster anime={anime} className="animePoster" />
+      <Poster anime={anime} className="animePoster" mode="library" />
 
       <button
         className="favoriteButton"
