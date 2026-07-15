@@ -4,6 +4,7 @@ import joeAnimeSplashHero from '../assets/joeanime-splash-hero.png';
 import joeAIHologramBrain from '../assets/joeai-hologram-brain.png';
 import '../styles/joeai-command-center.css';
 import { Poster } from '../components/Poster';
+import { AnimeCard } from '../components/AnimeCard';
 import { score, countBy } from '../utils/animeUtils';
 import { exportBackup, resetData } from '../services/storage';
 import { createAnimeBrain } from '../engine/animeBrain'; import { fetchMetadata } from '../services/metadata'; import { maybeKnowledgeFirstRecommendation } from '../ai/knowledgeFirstRecommender'; import { parseJoeAIIntent } from '../ai/intentParser'; import { executeJoeAICommand } from '../ai/commandExecutor'; import { routeJoeAIRecommendation } from '../ai/joeAIRecommendationRouter';
@@ -1516,30 +1517,357 @@ export function Assistant({ anime, catalog = [], updateAnime, initialPrompt = ''
   );
 }
 
-export function Analytics({ anime }) {
-  const studios = countBy(anime.map((item) => item.studio)).slice(0, 12);
-  const genres = countBy(anime.flatMap((item) => item.genres || [])).slice(0, 12);
+export function Analytics({ anime, setSelected, updateAnime }) {
+  const [selectedFilters, setSelectedFilters] = useState({ studio: null, genre: null });
+  const [studioLimit, setStudioLimit] = useState(12);
+  const [genreLimit, setGenreLimit] = useState(12);
+  const [resultQuery, setResultQuery] = useState('');
+  const [resultSort, setResultSort] = useState('score');
+  const [resultLimit, setResultLimit] = useState(24);
+  const resultsRef = useRef(null);
+
+  function normalizedName(value) {
+    if (value && typeof value === 'object') {
+      return String(value.name || value.title || value.label || '').trim();
+    }
+    return String(value || '').trim();
+  }
+
+  function uniqueNames(values = []) {
+    const seen = new Set();
+    return values
+      .map(normalizedName)
+      .filter(Boolean)
+      .filter((name) => {
+        const key = name.toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+  }
+
+  function studiosFor(item = {}) {
+    const plural = [
+      ...(Array.isArray(item.studios) ? item.studios : []),
+      ...(Array.isArray(item.productionStudios) ? item.productionStudios : []),
+      ...(Array.isArray(item.animationStudios) ? item.animationStudios : [])
+    ];
+
+    // Older entries use one `studio` string; newer metadata can carry an array.
+    // Keep both paths and de-duplicate so Analytics never silently drops a studio.
+    const legacyStudioNames = String(item.studio || '')
+      .split(/\s+\/\s+|\s*;\s*|\s*\|\s*/)
+      .map((value) => value.trim())
+      .filter(Boolean);
+
+    return uniqueNames([...plural, ...legacyStudioNames]);
+  }
+
+  function genresFor(item = {}) {
+    const raw = Array.isArray(item.genres)
+      ? item.genres
+      : String(item.genres || '')
+          .split(',')
+          .map((value) => value.trim());
+    return uniqueNames(raw);
+  }
+
+  const studioIndex = useMemo(() => {
+    const map = new Map();
+    anime.forEach((item) => {
+      studiosFor(item).forEach((studio) => {
+        const key = studio.toLowerCase();
+        const current = map.get(key) || { name: studio, items: [] };
+        current.items.push(item);
+        map.set(key, current);
+      });
+    });
+    return [...map.values()].sort((a, b) => b.items.length - a.items.length || a.name.localeCompare(b.name));
+  }, [anime]);
+
+  const genreIndex = useMemo(() => {
+    const map = new Map();
+    anime.forEach((item) => {
+      genresFor(item).forEach((genre) => {
+        const key = genre.toLowerCase();
+        const current = map.get(key) || { name: genre, items: [] };
+        current.items.push(item);
+        map.set(key, current);
+      });
+    });
+    return [...map.values()].sort((a, b) => b.items.length - a.items.length || a.name.localeCompare(b.name));
+  }, [anime]);
+
+  const studios = studioIndex.map((entry) => [entry.name, entry.items.length]);
+  const genres = genreIndex.map((entry) => [entry.name, entry.items.length]);
+  const rated = anime.filter((item) => Number(item.joeScore || item.score || item.finalScore || item.rating || 0) > 0);
+  const favorites = anime.filter((item) => item.favorite).length;
+  const rewatches = anime.reduce((sum, item) => sum + Number(item.rewatches || 0), 0);
+  const averageScore = rated.length
+    ? (rated.reduce((sum, item) => sum + Number(item.joeScore || item.score || item.finalScore || item.rating || 0), 0) / rated.length).toFixed(2)
+    : '—';
+  const topGenre = genres[0]?.[0] || 'Your taste';
+  const topStudio = studios[0]?.[0] || 'Studios';
+  const missingStudioCount = anime.filter((item) => studiosFor(item).length === 0).length;
+  const missingGenreCount = anime.filter((item) => genresFor(item).length === 0).length;
+
+  const liveRankMap = useMemo(() => {
+    const ranked = [...anime].sort((a, b) => {
+      const aScore = Number(a.joeScore ?? a.rating ?? a.predictedScore ?? 0);
+      const bScore = Number(b.joeScore ?? b.rating ?? b.predictedScore ?? 0);
+      if (bScore !== aScore) return bScore - aScore;
+      return String(a.title || '').localeCompare(String(b.title || ''));
+    });
+    return new Map(ranked.map((item, index) => [String(item.id), index + 1]));
+  }, [anime]);
+
+  const hasActiveFilters = Boolean(selectedFilters.studio || selectedFilters.genre);
+
+  const selectedItems = useMemo(() => {
+    if (!hasActiveFilters) return [];
+    return anime.filter((item) => {
+      const studioMatch = !selectedFilters.studio || studiosFor(item).some((name) => name.toLowerCase() === selectedFilters.studio.toLowerCase());
+      const genreMatch = !selectedFilters.genre || genresFor(item).some((name) => name.toLowerCase() === selectedFilters.genre.toLowerCase());
+      return studioMatch && genreMatch;
+    });
+  }, [anime, selectedFilters, hasActiveFilters]);
+
+  const filteredResults = useMemo(() => {
+    const query = resultQuery.trim().toLowerCase();
+    const rows = selectedItems.filter((item) => !query || String(item.title || '').toLowerCase().includes(query));
+
+    return [...rows].sort((a, b) => {
+      if (resultSort === 'title') return String(a.title || '').localeCompare(String(b.title || ''));
+      if (resultSort === 'year') return Number(b.year || 0) - Number(a.year || 0) || String(a.title || '').localeCompare(String(b.title || ''));
+      return (liveRankMap.get(String(a.id)) || 999999) - (liveRankMap.get(String(b.id)) || 999999);
+    });
+  }, [selectedItems, resultQuery, resultSort, liveRankMap]);
+
+  const insight = useMemo(() => {
+    if (!hasActiveFilters) return null;
+    const scores = selectedItems
+      .map((item) => Number(item.joeScore || item.score || item.finalScore || item.rating || 0))
+      .filter((value) => value > 0);
+    const avg = scores.length ? scores.reduce((sum, value) => sum + value, 0) / scores.length : null;
+    const libraryScores = anime
+      .map((item) => Number(item.joeScore || item.score || item.finalScore || item.rating || 0))
+      .filter((value) => value > 0);
+    const libraryAvg = libraryScores.length ? libraryScores.reduce((sum, value) => sum + value, 0) / libraryScores.length : null;
+    const favoritesInSelection = selectedItems.filter((item) => item.favorite).length;
+    const rewatchesInSelection = selectedItems.reduce((sum, item) => sum + Number(item.rewatches || 0), 0);
+    return { avg, libraryAvg, favoritesInSelection, rewatchesInSelection, ratedCount: scores.length };
+  }, [anime, selectedItems, hasActiveFilters]);
+
+  function openSignal(type, name) {
+    setSelectedFilters((current) => ({
+      ...current,
+      [type]: current[type]?.toLowerCase() === name.toLowerCase() ? null : name
+    }));
+    setResultQuery('');
+    setResultSort('score');
+    setResultLimit(24);
+    requestAnimationFrame(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  }
+
+  function clearFilter(type) {
+    setSelectedFilters((current) => ({ ...current, [type]: null }));
+    setResultLimit(24);
+  }
+
   return (
-    <section className="grid2">
-      <BarPanel title="Studios" data={studios} />
-      <BarPanel title="Genres" data={genres} />
+    <section className="analyticsLabPage">
+      <section className="analyticsLabHero">
+        <div className="analyticsLabBackdrop" aria-hidden="true" />
+        <div className="analyticsLabShade" aria-hidden="true" />
+
+        <div className="analyticsLabCopy">
+          <div>
+            <p className="analyticsLabEyebrow">JoeAI Research Division</p>
+            <h1>Analytics</h1>
+            <p className="analyticsLabLead">
+              JoeAI is decoding the patterns behind your collection—studios, genres, ratings, rewatches, and the signals that define your Anime DNA.
+            </p>
+            <p className="analyticsLabInsight">
+              <span>Analysis signal</span>
+              <strong>{topGenre}</strong> leads your taste profile, while <strong>{topStudio}</strong> is your most represented studio.
+            </p>
+          </div>
+
+          <div className="analyticsLabStats">
+            <div><span>▤</span><strong>{anime.length}</strong><small>Titles Scanned</small></div>
+            <div><span>★</span><strong>{averageScore}</strong><small>Average Score</small></div>
+            <div><span>♡</span><strong>{favorites}</strong><small>Favorites</small></div>
+            <div><span>↻</span><strong>{rewatches}</strong><small>Rewatches</small></div>
+          </div>
+        </div>
+      </section>
+
+      <section className="analyticsCoverageStrip">
+        <div><strong>{studioIndex.length}</strong><span>Studios detected</span></div>
+        <div><strong>{genreIndex.length}</strong><span>Genres detected</span></div>
+        <div className={missingStudioCount ? 'needsAttention' : ''}><strong>{missingStudioCount}</strong><span>Titles missing studio data</span></div>
+        <div className={missingGenreCount ? 'needsAttention' : ''}><strong>{missingGenreCount}</strong><span>Titles missing genre data</span></div>
+      </section>
+
+      <section className="analyticsLabGrid">
+        <BarPanel
+          title="Studio DNA"
+          subtitle="Click a studio to open its titles below"
+          data={studios}
+          icon="▦"
+          type="studio"
+          limit={studioLimit}
+          setLimit={setStudioLimit}
+          onSelect={openSignal}
+          activeFilters={selectedFilters}
+        />
+        <BarPanel
+          title="Genre DNA"
+          subtitle="Click a genre to open its titles below"
+          data={genres}
+          icon="⌬"
+          type="genre"
+          limit={genreLimit}
+          setLimit={setGenreLimit}
+          onSelect={openSignal}
+          activeFilters={selectedFilters}
+        />
+      </section>
+
+      <section ref={resultsRef} className={`analyticsSignalResults ${hasActiveFilters ? 'isOpen' : ''}`}>
+        {hasActiveFilters ? (
+          <>
+            <header className="analyticsResultsHeader">
+              <div>
+                <p>Interactive Collection Browser</p>
+                <h2>{[selectedFilters.studio, selectedFilters.genre].filter(Boolean).join(' × ')}</h2>
+                <span>{selectedItems.length} matching title{selectedItems.length === 1 ? '' : 's'} in your library</span>
+              </div>
+              <button type="button" onClick={() => setSelectedFilters({ studio: null, genre: null })}>Clear all</button>
+            </header>
+
+            <div className="analyticsFilterChips" aria-label="Active analytics filters">
+              {selectedFilters.studio && (
+                <button type="button" onClick={() => clearFilter('studio')}>Studio: {selectedFilters.studio} <span>×</span></button>
+              )}
+              {selectedFilters.genre && (
+                <button type="button" onClick={() => clearFilter('genre')}>Genre: {selectedFilters.genre} <span>×</span></button>
+              )}
+              {(!selectedFilters.studio || !selectedFilters.genre) && (
+                <small>Click a {selectedFilters.studio ? 'genre' : 'studio'} above to stack another filter.</small>
+              )}
+            </div>
+
+            {insight && (
+              <aside className="analyticsJoeInsight">
+                <div><span>✦</span><strong>JoeAI Insight</strong></div>
+                <p>
+                  This selection contains <b>{selectedItems.length}</b> title{selectedItems.length === 1 ? '' : 's'}
+                  {insight.avg ? <> with an average rating of <b>{insight.avg.toFixed(2)}</b></> : ''}.
+                  {insight.avg && insight.libraryAvg ? (insight.avg >= insight.libraryAvg
+                    ? <> That is <b>{(insight.avg - insight.libraryAvg).toFixed(2)}</b> above your library average.</>
+                    : <> That is <b>{(insight.libraryAvg - insight.avg).toFixed(2)}</b> below your library average.</>) : ''}
+                  {insight.favoritesInSelection ? <> It includes <b>{insight.favoritesInSelection}</b> favorite{insight.favoritesInSelection === 1 ? '' : 's'}.</> : ''}
+                  {insight.rewatchesInSelection ? <> You have logged <b>{insight.rewatchesInSelection}</b> rewatch{insight.rewatchesInSelection === 1 ? '' : 'es'} here.</> : ''}
+                </p>
+              </aside>
+            )}
+
+            <div className="analyticsResultsToolbar">
+              <input
+                type="search"
+                placeholder={`Search matching titles...`}
+                value={resultQuery}
+                onChange={(event) => { setResultQuery(event.target.value); setResultLimit(24); }}
+              />
+              <select value={resultSort} onChange={(event) => setResultSort(event.target.value)}>
+                <option value="score">Your Rank</option>
+                <option value="title">Title A–Z</option>
+                <option value="year">Newest Year</option>
+              </select>
+              <span>{filteredResults.length} shown</span>
+            </div>
+
+            <div className="analyticsCardGrid">
+              {filteredResults.slice(0, resultLimit).map((item) => (
+                <AnimeCard
+                  key={item.id}
+                  anime={item}
+                  displayRank={liveRankMap.get(String(item.id))}
+                  totalCount={anime.length}
+                  setSelected={setSelected}
+                  updateAnime={updateAnime}
+                />
+              ))}
+            </div>
+
+            {!filteredResults.length && <p className="analyticsNoResults">No titles match this filter combination.</p>}
+
+            {resultLimit < filteredResults.length && (
+              <button className="analyticsShowMoreCards" type="button" onClick={() => setResultLimit((current) => current + 24)}>
+                Show 24 more
+              </button>
+            )}
+          </>
+        ) : (
+          <div className="analyticsResultsEmpty">
+            <span>⌁</span>
+            <h2>Explore your Anime DNA</h2>
+            <p>Click a studio or genre above. Then click the other column to stack filters and narrow the cards without leaving Analytics.</p>
+          </div>
+        )}
+      </section>
     </section>
   );
 }
 
-function BarPanel({ title, data }) {
+function BarPanel({ title, subtitle, data, icon, type, limit, setLimit, onSelect, activeFilters }) {
   const max = data[0]?.[1] || 1;
+  const visibleData = data.slice(0, limit);
+  const showingAll = limit >= data.length;
+
   return (
-    <div className="panel">
-      <h2>{title}</h2>
-      {data.map(([name, count]) => (
-        <div className="barRow" key={name}>
-          <strong>{name}</strong>
-          <div className="bar"><div style={{ width: `${(count / max) * 100}%` }} /></div>
-          <span>{count}</span>
+    <article className="analyticsDataPanel">
+      <header>
+        <span>{icon}</span>
+        <div>
+          <p>JoeAI Analysis</p>
+          <h2>{title}</h2>
+          <small>{subtitle}</small>
         </div>
-      ))}
-    </div>
+      </header>
+
+      <div className="analyticsDataRows">
+        {visibleData.map(([name, count], index) => {
+          const isActive = activeFilters?.[type]?.toLowerCase() === name.toLowerCase();
+          return (
+            <button
+              type="button"
+              className={`analyticsDataRow ${isActive ? 'active' : ''}`}
+              key={name}
+              onClick={() => onSelect(type, name)}
+            >
+              <span className="analyticsDataRank">{String(index + 1).padStart(2, '0')}</span>
+              <strong title={name}>{name}</strong>
+              <span className="analyticsDataBar"><i style={{ width: `${Math.max(5, (count / max) * 100)}%` }} /></span>
+              <b>{count}</b>
+              <em>View titles →</em>
+            </button>
+          );
+        })}
+        {!data.length && <p className="analyticsEmpty">Add more anime metadata to reveal this signal.</p>}
+      </div>
+
+      {data.length > 12 && (
+        <button
+          type="button"
+          className="analyticsPanelToggle"
+          onClick={() => setLimit(showingAll ? 12 : data.length)}
+        >
+          {showingAll ? 'Show top 12' : `Show all ${data.length}`}
+        </button>
+      )}
+    </article>
   );
 }
 
@@ -1585,7 +1913,8 @@ export function SettingsPage({
   newUserMode,
   enableNewUserMode,
   exitNewUserMode,
-  resetNewUserMode
+  resetNewUserMode,
+  onOpenIntegrity
 }) {
   const [genomeUpdateStatus, setGenomeUpdateStatus] = React.useState('');
 
@@ -1638,6 +1967,15 @@ export function SettingsPage({
             </>
           )}
         </div>
+      </section>
+
+      <section className="settingsIntegrityCard">
+        <div>
+          <p className="eyebrow">JoeAI Library Maintenance</p>
+          <h2>🛠 Library Integrity</h2>
+          <p>Scan for duplicate seasons and incomplete metadata, then safely merge or repair affected titles.</p>
+        </div>
+        <button type="button" onClick={onOpenIntegrity}>Open Integrity Scan</button>
       </section>
 
       {genomeUpdateStatus && <p className="settingsStatus">{genomeUpdateStatus}</p>}

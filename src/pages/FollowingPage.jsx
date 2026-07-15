@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Bell, Search, CalendarClock } from 'lucide-react';
+import { Bell, Search, CalendarClock, Radio, Radar } from 'lucide-react';
 import { Poster } from '../components/Poster';
 import '../styles/following.css';
 
@@ -48,15 +48,26 @@ export function FollowingPage({ catalog = [], setSelected, updateCatalogAnime })
   return (
     <section className="followingPage">
       <header className="followingHero">
-        <div>
-          <p>Release Watch</p>
-          <h1><Bell /> Following</h1>
+        <div className="followingHeroContent">
+          <p>JoeAI Watch Network</p>
+          <h1><Bell /> Release Watch</h1>
           <span>
-            Titles you care about live here. Future release checks and alerts will only scan this list.
+            JoeAI is watching the horizon for new episodes, trailers, announcements, and release updates.
           </span>
-        </div>
 
-        <strong>{followed.length}</strong>
+          <div className="followingHeroStats" aria-label="Release watch status">
+            <div>
+              <Radio />
+              <strong>{followed.length}</strong>
+              <small>Being Watched</small>
+            </div>
+            <div>
+              <Radar />
+              <strong>Online</strong>
+              <small>Watch Network</small>
+            </div>
+          </div>
+        </div>
       </header>
 
       <label className="followingSearch">

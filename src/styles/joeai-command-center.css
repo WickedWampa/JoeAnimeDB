@@ -3,8 +3,48 @@
 .joeAICommandCenter * {
   box-sizing: border-box;
 }
+/* JoeAI Core themed environments */
+.theme-neon .joeAICommandCenter {
+  --joeai-hero-image: url('../assets/themes/joeai/joeai-neon.webp');
+  --joeai-world-accent: #25e6ff;
+  --joeai-world-accent-2: #ff4fd8;
+}
+
+.theme-sakura .joeAICommandCenter {
+  --joeai-hero-image: url('../assets/themes/joeai/joeai-sakura.webp');
+  --joeai-world-accent: #ff8bc8;
+  --joeai-world-accent-2: #ffd0e8;
+}
+
+.theme-vapor .joeAICommandCenter {
+  --joeai-hero-image: url('../assets/themes/joeai/joeai-vapor.webp');
+  --joeai-world-accent: #b06cff;
+  --joeai-world-accent-2: #32dcff;
+}
+
+.theme-ramen .joeAICommandCenter {
+  --joeai-hero-image: url('../assets/themes/joeai/joeai-ramen.webp');
+  --joeai-world-accent: #ffc447;
+  --joeai-world-accent-2: #ff7b32;
+}
+
+.theme-inferno .joeAICommandCenter {
+  --joeai-hero-image: url('../assets/themes/joeai/joeai-inferno.webp');
+  --joeai-world-accent: #ffb12f;
+  --joeai-world-accent-2: #ff3d2e;
+}
+
+.theme-amoled .joeAICommandCenter {
+  --joeai-hero-image: url('../assets/themes/joeai/joeai-amoled.webp');
+  --joeai-world-accent: #57dcff;
+  --joeai-world-accent-2: #d35cff;
+}
+
 
 .joeAICommandCenter {
+  --joeai-hero-image: url('../assets/themes/joeai/joeai-neon.webp');
+  --joeai-world-accent: var(--cyan);
+  --joeai-world-accent-2: var(--pink);
   display: grid;
   gap: 18px;
   width: min(100%, 1500px);
@@ -26,14 +66,23 @@
   display: grid;
   grid-template-columns: minmax(340px, .9fr) minmax(360px, 1.15fr) 250px;
   align-items: center;
-  min-height: 430px;
+  min-height: 540px;
   overflow: hidden;
   border-color: color-mix(in srgb, var(--pink) 48%, var(--cyan));
   border-radius: 26px;
+  /* Fit the complete artwork from top to bottom and pin it to the right.
+     `auto 100%` preserves the original aspect ratio without cropping or zooming. */
   background:
-    radial-gradient(circle at 54% 45%, color-mix(in srgb, var(--pink) 15%, transparent), transparent 31%),
-    radial-gradient(circle at 68% 54%, color-mix(in srgb, var(--cyan) 13%, transparent), transparent 34%),
-    linear-gradient(135deg, #06111c, #08101f 58%, #130d1d);
+    linear-gradient(90deg,
+      rgba(2, 7, 14, .98) 0%,
+      rgba(2, 7, 14, .94) 20%,
+      rgba(2, 7, 14, .78) 34%,
+      rgba(2, 7, 14, .34) 49%,
+      rgba(2, 7, 14, .08) 64%,
+      rgba(2, 7, 14, .02) 100%
+    ),
+    var(--joeai-hero-image) right center / auto 100% no-repeat,
+    #050914;
 }
 
 .joeAIHero::after {
@@ -41,12 +90,10 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
-  opacity: .18;
-  background-image:
-    linear-gradient(rgba(36,214,255,.22) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(36,214,255,.22) 1px, transparent 1px);
-  background-size: 42px 42px;
-  mask-image: linear-gradient(90deg, transparent, black 38%, black 80%, transparent);
+  opacity: 1;
+  background:
+    radial-gradient(circle at 56% 48%, color-mix(in srgb, var(--joeai-world-accent-2) 10%, transparent), transparent 28%),
+    linear-gradient(90deg, rgba(0,0,0,.18), transparent 55%, rgba(0,0,0,.10));
 }
 
 .joeAIHeroCopy {
@@ -91,7 +138,7 @@
 
 .joeAIEyebrow {
   display: block;
-  color: var(--cyan);
+  color: var(--joeai-world-accent);
   font-size: 11px;
   font-weight: 1000;
   letter-spacing: .14em;
@@ -119,7 +166,7 @@
   border: 0;
   padding: 0;
   background: transparent;
-  color: var(--pink);
+  color: var(--joeai-world-accent-2);
   font: inherit;
   font-weight: 950;
   cursor: pointer;
@@ -129,17 +176,19 @@
   position: relative;
   z-index: 1;
   align-self: stretch;
-  min-height: 400px;
+  min-height: 500px;
   overflow: hidden;
+  pointer-events: none;
 }
 
 .joeAIHeroBrain img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
+  opacity: .16;
   mix-blend-mode: screen;
-  filter: saturate(1.18) contrast(1.06);
-  mask-image: radial-gradient(ellipse 70% 72% at 50% 50%, black 43%, rgba(0,0,0,.78) 67%, transparent 100%);
+  filter: saturate(1.25) contrast(1.08) blur(.2px);
+  mask-image: radial-gradient(ellipse 58% 62% at 50% 50%, black 25%, rgba(0,0,0,.55) 58%, transparent 78%);
   animation: joeAIFloat 5.5s ease-in-out infinite;
 }
 
@@ -157,7 +206,7 @@
   padding: 18px;
   border: 1px solid color-mix(in srgb, var(--line) 82%, var(--pink));
   border-radius: 21px;
-  background: rgba(4,8,18,.72);
+  background: rgba(3,7,15,.80);
   backdrop-filter: blur(12px);
 }
 
@@ -946,5 +995,215 @@ main::-webkit-scrollbar-thumb:hover,
 
   .joeAIConversation {
     min-height: 460px;
+  }
+}
+
+/* ===== JoeAI themed Core environments — final cascade ===== */
+.joeAICommandCenter .joeAIHero {
+  min-height: 540px;
+  border-color: color-mix(in srgb, var(--joeai-world-accent-2) 48%, var(--joeai-world-accent));
+  background:
+    linear-gradient(90deg, rgba(2, 7, 14, .94) 0%, rgba(2, 7, 14, .80) 23%, rgba(2, 7, 14, .42) 43%, rgba(2, 7, 14, .08) 68%, rgba(2, 7, 14, .17) 100%),
+    linear-gradient(180deg, rgba(0, 0, 0, .03), rgba(0, 0, 0, .25)),
+    var(--joeai-hero-image) center / cover no-repeat,
+    #050914;
+}
+
+.joeAICommandCenter .joeAIHero::after {
+  opacity: 1;
+  background:
+    radial-gradient(circle at 56% 48%, color-mix(in srgb, var(--joeai-world-accent-2) 10%, transparent), transparent 28%),
+    linear-gradient(90deg, rgba(0,0,0,.16), transparent 58%, rgba(0,0,0,.10));
+}
+
+.joeAICommandCenter .joeAIHeroIcon,
+.joeAICommandCenter .joeAIHeroStats span {
+  color: var(--joeai-world-accent);
+  border-color: var(--joeai-world-accent);
+}
+
+.joeAICommandCenter .joeAIHeroStats strong,
+.joeAICommandCenter .joeAIAnalysisLink {
+  color: var(--joeai-world-accent-2);
+}
+
+.joeAICommandCenter .joeAIHeroBrain {
+  min-height: 500px;
+  margin: -18px -30px -18px -42px;
+  opacity: .16;
+  overflow: hidden;
+  pointer-events: none;
+  mask-image: radial-gradient(ellipse 62% 68% at 50% 50%, black 24%, rgba(0,0,0,.50) 58%, transparent 80%);
+}
+
+.joeAICommandCenter .joeAIHeroBrain::before {
+  background: transparent;
+  opacity: 0;
+}
+
+.joeAICommandCenter .joeAIHeroBrain img {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  opacity: 1;
+  mix-blend-mode: screen;
+  filter: saturate(1.3) contrast(1.08);
+  mask-image: radial-gradient(ellipse 58% 62% at 50% 50%, black 25%, rgba(0,0,0,.58) 58%, transparent 78%);
+}
+
+.joeAICommandCenter .joeAIHeroStats {
+  background: rgba(3, 7, 15, .82);
+  border-color: color-mix(in srgb, var(--joeai-world-accent-2) 40%, var(--line));
+}
+
+@media (max-width: 1180px) {
+  .joeAICommandCenter .joeAIHero {
+    background-position: 58% center;
+  }
+}
+
+@media (max-width: 760px) {
+  .joeAICommandCenter .joeAIHero {
+    min-height: auto;
+    background-position: 62% center;
+  }
+
+  .joeAICommandCenter .joeAIHeroBrain {
+    min-height: 260px;
+    margin: -24px 0;
+    opacity: .12;
+  }
+}
+
+/* ===== JoeAI hero artwork sizing — definitive override =====
+   Put the themed art on its own layer so background shorthands cannot force cover/zoom. */
+.joeAICommandCenter .joeAIHero {
+  isolation: isolate;
+  background: #050914 !important;
+}
+
+.joeAICommandCenter .joeAIHero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(
+      90deg,
+      rgba(2, 7, 14, .96) 0%,
+      rgba(2, 7, 14, .88) 18%,
+      rgba(2, 7, 14, .58) 34%,
+      rgba(2, 7, 14, .18) 53%,
+      rgba(2, 7, 14, .04) 74%,
+      rgba(2, 7, 14, .10) 100%
+    ),
+    var(--joeai-hero-image);
+  background-repeat: no-repeat, no-repeat;
+  background-position: center, right center;
+  background-size: 100% 100%, auto 100%;
+}
+
+/* Keep every real hero element above the dedicated artwork layer. */
+.joeAICommandCenter .joeAIHeroCopy,
+.joeAICommandCenter .joeAIHeroBrain,
+.joeAICommandCenter .joeAIHeroStats {
+  position: relative;
+  z-index: 2;
+}
+
+/* The decorative scan/glow remains above the art but below the content. */
+.joeAICommandCenter .joeAIHero::after {
+  z-index: 1;
+}
+
+@media (max-width: 760px) {
+  .joeAICommandCenter .joeAIHero::before {
+    background-position: center, right center;
+    background-size: 100% 100%, auto 100%;
+  }
+}
+
+/* ===== JoeAI hero layout — copy and tracker stay in the left control column ===== */
+@media (min-width: 901px) {
+  .joeAICommandCenter .joeAIHero {
+    grid-template-columns: minmax(410px, 510px) minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+    align-items: start;
+  }
+
+  .joeAICommandCenter .joeAIHeroCopy {
+    grid-column: 1;
+    grid-row: 1;
+    align-self: start;
+    padding: 26px 0 8px 38px;
+  }
+
+  .joeAICommandCenter .joeAIHeroTitle {
+    margin-bottom: 14px;
+  }
+
+  .joeAICommandCenter .joeAIHeroCopy > h2 {
+    margin-top: 8px;
+    margin-bottom: 12px;
+  }
+
+  .joeAICommandCenter .joeAIHeroBody {
+    line-height: 1.48;
+  }
+
+  .joeAICommandCenter .joeAIAnalysisLink {
+    margin-top: 14px;
+  }
+
+  .joeAICommandCenter .joeAIHeroBrain {
+    grid-column: 2;
+    grid-row: 1 / 3;
+    align-self: stretch;
+    min-width: 0;
+  }
+
+  .joeAICommandCenter .joeAIHeroStats {
+    grid-column: 1;
+    grid-row: 2;
+    align-self: start;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 7px;
+    width: auto;
+    max-width: 455px;
+    margin: 8px 0 24px 38px;
+    padding: 9px;
+    border-radius: 17px;
+    backdrop-filter: blur(10px);
+  }
+
+  .joeAICommandCenter .joeAIHeroStats div {
+    grid-template-columns: 27px minmax(0, 1fr);
+    column-gap: 7px;
+    padding: 8px 5px;
+  }
+
+  .joeAICommandCenter .joeAIHeroStats span {
+    font-size: 20px;
+  }
+
+  .joeAICommandCenter .joeAIHeroStats strong {
+    font-size: 19px;
+    line-height: 1.05;
+  }
+
+  .joeAICommandCenter .joeAIHeroStats small {
+    font-size: 9px;
+    line-height: 1.15;
+  }
+}
+
+@media (max-width: 900px) {
+  .joeAICommandCenter .joeAIHeroStats {
+    order: 3;
+    margin: 0 22px 24px;
   }
 }

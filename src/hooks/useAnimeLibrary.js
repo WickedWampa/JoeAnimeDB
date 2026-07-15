@@ -3,7 +3,7 @@ import { countBy, filterAnime, score } from '../utils/animeUtils';
 import { isRemoteCover, needsArtworkRepair, sleep } from '../services/metadata';
 import { fetchMetadataFromProvider, hasManualMetadataOverride } from '../services/metadataProvider';
 import { animeRepository } from '../repositories/animeRepository';
-import { updateCatalogMetadata, fetchMoreCatalogTitles as fetchMoreCatalogPage } from '../services/catalogService';
+import { updateCatalogMetadata, fetchMoreCatalogTitles as fetchMoreCatalogPage, fetchLiveDiscoverCatalog } from '../services/catalogService';
 import seedData from '../data/animeSeed.json';
 import { createNewUserDemoDatabase } from '../services/newUserMode';
 
@@ -177,7 +177,13 @@ export function useAnimeLibrary() {
     return demo;
   }
 
-  async function updateData(next) {
+  async function updateData(nextOrUpdater) {
+    const current = dataRef.current || data;
+    const next = typeof nextOrUpdater === 'function'
+      ? nextOrUpdater(current)
+      : nextOrUpdater;
+
+    dataRef.current = next;
     setData(next);
 
     if (newUserMode) {
@@ -185,6 +191,7 @@ export function useAnimeLibrary() {
     }
 
     const saved = await animeRepository.saveDatabase(next);
+    dataRef.current = saved;
     setData(saved);
     return saved;
   }
@@ -331,6 +338,30 @@ export function useAnimeLibrary() {
       percent: 50 + catalogPercent,
       current: title
     });
+  }
+
+  async function refreshLiveDiscover({ limitPerFeed = 25 } = {}) {
+    const current = dataRef.current || data;
+    const result = await fetchLiveDiscoverCatalog({
+      library: current.anime || [],
+      catalog: current.catalog || [],
+      limitPerFeed
+    });
+
+    let saved;
+
+    if (newUserMode) {
+      saved = { ...current, catalog: result.catalog };
+      dataRef.current = saved;
+      setData(saved);
+    } else {
+      saved = await animeRepository.importCatalog(result.catalog);
+      dataRef.current = saved;
+      setData(saved);
+    }
+
+    localStorage.setItem('joeanime-discover-live-synced-at', result.syncedAt);
+    return { ...result, saved };
   }
 
   async function fetchMoreCatalogTitles({ limit = 25 } = {}) {
@@ -594,6 +625,7 @@ export function useAnimeLibrary() {
     updateCatalogAnime,
     deleteAnime,
     fetchMoreCatalogTitles,
+    refreshLiveDiscover,
     syncMetadata
   };
 }

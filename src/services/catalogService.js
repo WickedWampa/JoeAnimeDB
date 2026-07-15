@@ -1,7 +1,10 @@
 import catalogSeed from '../data/animeCatalogSeed.json';
 import { fetchMetadata, needsArtworkRepair, sleep } from './metadata';
+import { fetchKitsuCatalogPage, fetchKitsuLiveDiscoverFeeds } from './kitsuProvider';
 
 const JIKAN_TOP_ANIME_URL = 'https://api.jikan.moe/v4/top/anime';
+const JIKAN_CURRENT_SEASON_URL = 'https://api.jikan.moe/v4/seasons/now';
+const JIKAN_UPCOMING_SEASON_URL = 'https://api.jikan.moe/v4/seasons/upcoming';
 
 function titleKey(title = '') {
   return String(title)
@@ -207,45 +210,58 @@ export async function fetchMoreCatalogTitles({
 } = {}) {
   const safePage = Math.max(1, Number(page || 1));
   const safeLimit = Math.max(1, Math.min(25, Number(limit || 25)));
-
-  let response;
+  let providerResult;
 
   try {
-    response = await fetch(`${JIKAN_TOP_ANIME_URL}?page=${safePage}&limit=${safeLimit}`, {
+    const response = await fetch(`${JIKAN_TOP_ANIME_URL}?page=${safePage}&limit=${safeLimit}`, {
       signal,
       headers: { Accept: 'application/json' }
     });
-  } catch (error) {
-    if (error?.name === 'AbortError') throw error;
-    throw new Error('Jikan could not be reached. Try again in a minute.');
-  }
 
-  if (!response.ok) {
-    if ([429, 500, 502, 503, 504].includes(response.status)) {
-      throw new Error(`Jikan is temporarily unavailable (${response.status}). Try again shortly.`);
+    if (!response.ok) {
+      if ([429, 500, 502, 503, 504].includes(response.status)) {
+        throw new Error(`Jikan is temporarily unavailable (${response.status}).`);
+      }
+      throw new Error(`Catalog fetch failed (${response.status}).`);
     }
-    throw new Error(`Catalog fetch failed (${response.status}).`);
+
+    const payload = await response.json();
+    const remoteTitles = Array.isArray(payload?.data) ? payload.data : [];
+    providerResult = {
+      rows: remoteTitles.map(normalizeTopAnime),
+      page: safePage,
+      nextPage: payload?.pagination?.has_next_page === false ? 1 : safePage + 1,
+      received: remoteTitles.length,
+      source: 'jikan'
+    };
+  } catch (jikanError) {
+    if (jikanError?.name === 'AbortError') throw jikanError;
+    console.warn('Jikan catalog page failed; trying Kitsu fallback.', jikanError);
+
+    try {
+      providerResult = await fetchKitsuCatalogPage({ page: safePage, limit: safeLimit });
+    } catch (kitsuError) {
+      console.warn('Kitsu catalog fallback failed.', kitsuError);
+      throw new Error('Neither Jikan nor Kitsu could fetch more Discover titles right now.');
+    }
   }
 
-  const payload = await response.json();
-  const remoteTitles = Array.isArray(payload?.data) ? payload.data : [];
   const blockedKeys = makeIdentitySet([...library, ...catalog]);
   const added = [];
 
-  for (const remote of remoteTitles) {
-    const normalized = normalizeTopAnime(remote);
+  for (const normalized of providerResult.rows || []) {
     const keys = identityKeys(normalized);
     if ([...keys].some((key) => blockedKeys.has(key))) continue;
-
     keys.forEach((key) => blockedKeys.add(key));
     added.push(normalized);
   }
 
   return {
     added,
-    page: safePage,
-    nextPage: payload?.pagination?.has_next_page === false ? 1 : safePage + 1,
-    received: remoteTitles.length,
+    page: providerResult.page || safePage,
+    nextPage: providerResult.nextPage || safePage + 1,
+    received: providerResult.received || 0,
+    provider: providerResult.source || 'unknown',
     catalog: mergeCatalogEntries({
       library,
       catalog: [...catalog, ...added],
@@ -253,3 +269,248 @@ export async function fetchMoreCatalogTitles({
     })
   };
 }
+
+function normalizeSeasonAnime(match = {}, bucket = 'current') {
+  const normalized = normalizeTopAnime(match);
+  const airedFrom = match.aired?.from || '';
+  const airedTo = match.aired?.to || '';
+  const broadcastDay = match.broadcast?.day || '';
+  const broadcastTime = match.broadcast?.time || '';
+
+  return {
+    ...normalized,
+    id: `catalog-mal-${match.mal_id}`,
+    status: match.status || '',
+    season: match.season || '',
+    year: match.year || normalized.year || '',
+    airedFrom,
+    airedTo,
+    broadcastDay,
+    broadcastTime,
+    trailerUrl: match.trailer?.url || '',
+    discoverBucket: bucket,
+    discoverSource: bucket === 'current' ? 'Jikan Current Season' : 'Jikan Upcoming Season',
+    discoverSyncedAt: new Date().toISOString(),
+    catalogSource: bucket === 'current' ? 'Jikan Current Season' : 'Jikan Upcoming Season'
+  };
+}
+
+function retryDelay(attempt, response) {
+  const retryAfter = Number(response?.headers?.get?.('retry-after') || 0);
+  if (Number.isFinite(retryAfter) && retryAfter > 0) {
+    return Math.min(15000, retryAfter * 1000);
+  }
+
+  return Math.min(12000, 1200 * (2 ** attempt)) + Math.round(Math.random() * 350);
+}
+
+async function fetchJikanPage(url, {
+  signal,
+  retries = 3,
+  timeoutMs = 18000,
+  label = 'Jikan feed'
+} = {}) {
+  let lastError = null;
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const timeoutController = new AbortController();
+    const timeout = setTimeout(() => timeoutController.abort(), timeoutMs);
+
+    const abortFromParent = () => timeoutController.abort();
+    signal?.addEventListener?.('abort', abortFromParent, { once: true });
+
+    let response;
+
+    try {
+      response = await fetch(url, {
+        signal: timeoutController.signal,
+        headers: {
+          Accept: 'application/json',
+          'Cache-Control': 'no-cache'
+        }
+      });
+
+      if (response.ok) {
+        const payload = await response.json();
+        return Array.isArray(payload?.data) ? payload.data : [];
+      }
+
+      const retryable = [429, 500, 502, 503, 504].includes(response.status);
+      lastError = new Error(`${label} returned ${response.status}.`);
+
+      if (!retryable || attempt >= retries) break;
+    } catch (error) {
+      if (signal?.aborted) throw error;
+
+      lastError = error?.name === 'AbortError'
+        ? new Error(`${label} timed out.`)
+        : new Error(`${label} could not be reached.`);
+
+      if (attempt >= retries) break;
+    } finally {
+      clearTimeout(timeout);
+      signal?.removeEventListener?.('abort', abortFromParent);
+    }
+
+    await sleep(retryDelay(attempt, response));
+  }
+
+  throw lastError || new Error(`${label} is temporarily unavailable.`);
+}
+
+async function fetchJikanFeedWithFallback({
+  primaryUrl,
+  fallbackUrl,
+  signal,
+  label
+}) {
+  try {
+    return {
+      rows: await fetchJikanPage(primaryUrl, { signal, label }),
+      source: 'season'
+    };
+  } catch (primaryError) {
+    console.warn(`${label} primary endpoint failed; trying fallback.`, primaryError);
+
+    try {
+      return {
+        rows: await fetchJikanPage(fallbackUrl, {
+          signal,
+          label: `${label} fallback`,
+          retries: 2
+        }),
+        source: 'top'
+      };
+    } catch (fallbackError) {
+      console.warn(`${label} fallback endpoint failed.`, fallbackError);
+      return {
+        rows: [],
+        source: 'cache',
+        error: fallbackError?.message || primaryError?.message || `${label} failed.`
+      };
+    }
+  }
+}
+
+export async function fetchLiveDiscoverCatalog({
+  library = [],
+  catalog = [],
+  limitPerFeed = 25,
+  signal
+} = {}) {
+  const safeLimit = Math.max(1, Math.min(25, Number(limitPerFeed || 25)));
+  const cachedCurrent = (catalog || []).filter((item) => item?.discoverBucket === 'current');
+  const cachedUpcoming = (catalog || []).filter((item) => item?.discoverBucket === 'upcoming');
+
+  const currentResult = await fetchJikanFeedWithFallback({
+    primaryUrl: `${JIKAN_CURRENT_SEASON_URL}?limit=${safeLimit}&sfw=true`,
+    fallbackUrl: `${JIKAN_TOP_ANIME_URL}?filter=airing&limit=${safeLimit}&sfw=true`,
+    signal,
+    label: 'Current-season feed'
+  });
+
+  await sleep(1400);
+
+  const upcomingResult = await fetchJikanFeedWithFallback({
+    primaryUrl: `${JIKAN_UPCOMING_SEASON_URL}?limit=${safeLimit}&sfw=true`,
+    fallbackUrl: `${JIKAN_TOP_ANIME_URL}?filter=upcoming&limit=${safeLimit}&sfw=true`,
+    signal,
+    label: 'Upcoming-season feed'
+  });
+
+  let currentRows = currentResult.rows.map((item) => normalizeSeasonAnime(item, 'current'));
+  let upcomingRows = upcomingResult.rows.map((item) => normalizeSeasonAnime(item, 'upcoming'));
+  const warnings = [currentResult.error, upcomingResult.error].filter(Boolean);
+  const sources = {
+    current: currentRows.length ? `jikan-${currentResult.source}` : 'none',
+    upcoming: upcomingRows.length ? `jikan-${upcomingResult.source}` : 'none'
+  };
+
+  if (!currentRows.length || !upcomingRows.length) {
+    try {
+      const kitsu = await fetchKitsuLiveDiscoverFeeds({ limit: Math.min(safeLimit, 20) });
+      if (!currentRows.length && kitsu.current.length) {
+        currentRows = kitsu.current;
+        sources.current = 'kitsu';
+      }
+      if (!upcomingRows.length && kitsu.upcoming.length) {
+        upcomingRows = kitsu.upcoming;
+        sources.upcoming = 'kitsu';
+      }
+    } catch (kitsuError) {
+      warnings.push(`Kitsu fallback failed: ${kitsuError?.message || kitsuError}`);
+    }
+  }
+
+  const usedCachedCurrent = !currentRows.length && cachedCurrent.length > 0;
+  const usedCachedUpcoming = !upcomingRows.length && cachedUpcoming.length > 0;
+  if (usedCachedCurrent) sources.current = 'cache';
+  if (usedCachedUpcoming) sources.upcoming = 'cache';
+
+  const incoming = [...currentRows, ...upcomingRows];
+
+  if (!incoming.length && !usedCachedCurrent && !usedCachedUpcoming) {
+    throw new Error('Jikan and Kitsu are both unavailable, and no cached live Discover titles exist yet.');
+  }
+
+  const existingByProviderId = new Map();
+  (catalog || []).forEach((item) => {
+    if (item?.malId || item?.mal_id) existingByProviderId.set(`mal:${item.malId || item.mal_id}`, item);
+    if (item?.kitsuId) existingByProviderId.set(`kitsu:${item.kitsuId}`, item);
+  });
+
+  const mergedIncoming = incoming.map((item) => {
+    const key = item.malId ? `mal:${item.malId}` : item.kitsuId ? `kitsu:${item.kitsuId}` : '';
+    const current = key ? existingByProviderId.get(key) : null;
+    return current ? { ...current, ...item, id: current.id || item.id } : item;
+  });
+
+  // mergeCatalogEntries intentionally keeps the richest metadata record. A live
+  // Jikan/Kitsu row can be less complete than an existing catalog record, though,
+  // which previously caused discoverBucket/source fields to be discarded. The
+  // status message still reported 20 fetched titles, but Discover could not find
+  // any rows tagged as current/upcoming. Re-apply the live feed fields after the
+  // metadata merge so the richer record is retained and the live classification
+  // remains available to the UI.
+  const liveFieldsByTitle = new Map(
+    mergedIncoming.map((item) => [titleKey(item.title), item])
+  );
+
+  const nextCatalog = incoming.length
+    ? mergeCatalogEntries({ library, catalog: [...catalog, ...mergedIncoming], seed: [] })
+        .map((item) => {
+          const live = liveFieldsByTitle.get(titleKey(item.title));
+          if (!live) return item;
+
+          return {
+            ...item,
+            discoverBucket: live.discoverBucket,
+            discoverSource: live.discoverSource,
+            discoverSyncedAt: live.discoverSyncedAt,
+            catalogSource: live.catalogSource || item.catalogSource,
+            status: live.status || item.status,
+            season: live.season || item.season,
+            airedFrom: live.airedFrom || item.airedFrom,
+            airedTo: live.airedTo || item.airedTo,
+            broadcastDay: live.broadcastDay || item.broadcastDay,
+            broadcastTime: live.broadcastTime || item.broadcastTime,
+            trailerUrl: live.trailerUrl || item.trailerUrl,
+            kitsuId: live.kitsuId || item.kitsuId,
+            malId: live.malId || item.malId
+          };
+        })
+    : catalog;
+
+  return {
+    catalog: nextCatalog,
+    currentCount: currentRows.length || cachedCurrent.length,
+    upcomingCount: upcomingRows.length || cachedUpcoming.length,
+    received: incoming.length,
+    syncedAt: new Date().toISOString(),
+    warnings,
+    partial: warnings.length > 0 || Object.values(sources).includes('cache'),
+    usedCache: usedCachedCurrent || usedCachedUpcoming,
+    sources
+  };
+}
+

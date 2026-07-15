@@ -2,7 +2,6 @@ import React, { useMemo, useState } from 'react';
 import { AnimeCard } from '../components/AnimeCard';
 import { Poster } from '../components/Poster';
 import { score } from '../utils/animeUtils';
-import libraryNeonArchive from '../assets/library-neon-archive-clean.jpg';
 import {
   animeIdFromTitle,
   findDuplicateAnime,
@@ -537,6 +536,36 @@ export function LibraryPage({ anime, allAnime, mode, setSelected, title, updateA
   const [addingAnime, setAddingAnime] = useState(false);
   const libraryForDupes = useMemo(() => allAnime || anime || [], [allAnime, anime]);
 
+  // finalRank is legacy persisted data, so it can become stale whenever a score changes.
+  // Build the visible ranking from the current Joe scores on every render instead.
+  const liveRankMap = useMemo(() => {
+    const ranked = [...libraryForDupes].sort((a, b) => {
+      const aRated = a.joeScore !== undefined && a.joeScore !== null && a.joeScore !== '';
+      const bRated = b.joeScore !== undefined && b.joeScore !== null && b.joeScore !== '';
+
+      if (aRated !== bRated) return aRated ? -1 : 1;
+
+      const scoreDifference = score(b) - score(a);
+      if (scoreDifference !== 0) return scoreDifference;
+
+      const legacyRankDifference = Number(a.finalRank || 999999) - Number(b.finalRank || 999999);
+      if (legacyRankDifference !== 0) return legacyRankDifference;
+
+      return String(a.title || '').localeCompare(String(b.title || ''));
+    });
+
+    return new Map(ranked.map((item, index) => [String(item.id), index + 1]));
+  }, [libraryForDupes]);
+
+  const rankedAnime = useMemo(
+    () => [...anime].sort((a, b) => {
+      const aRank = liveRankMap.get(String(a.id)) || Number.MAX_SAFE_INTEGER;
+      const bRank = liveRankMap.get(String(b.id)) || Number.MAX_SAFE_INTEGER;
+      return aRank - bRank;
+    }),
+    [anime, liveRankMap]
+  );
+
   async function handleFavoriteClick(event, item) {
     event.stopPropagation();
     await updateAnime({
@@ -552,12 +581,7 @@ export function LibraryPage({ anime, allAnime, mode, setSelected, title, updateA
       <section
         className={`pageHeader libraryHeader libraryArchiveHeroLive ${title === 'Favorites' ? 'favoritesArchiveHero' : ''}`}
       >
-        <img
-          className="libraryArchiveLiveArt"
-          src={libraryNeonArchive}
-          alt=""
-          aria-hidden="true"
-        />
+        <div className="libraryArchiveLiveArt" aria-hidden="true" />
         <div className="libraryArchiveLiveCopy">
           <p className="eyebrow">
             {title === 'Favorites' ? 'Your Anime Hall of Fame' : 'Your Anime Archive'}
@@ -613,7 +637,7 @@ export function LibraryPage({ anime, allAnime, mode, setSelected, title, updateA
         )}
       </section>
 
-      {anime.length === 0 && emptyMessage ? (
+      {rankedAnime.length === 0 && emptyMessage ? (
         <section className="emptyState">
           <h2>Nothing here yet</h2>
           <p>{emptyMessage}</p>
@@ -635,7 +659,7 @@ export function LibraryPage({ anime, allAnime, mode, setSelected, title, updateA
               </tr>
             </thead>
             <tbody>
-              {anime.map((item, index) => (
+              {rankedAnime.map((item) => (
                 <tr key={item.id} onClick={() => setSelected(item)}>
                   <td>
                     <button
@@ -647,7 +671,7 @@ export function LibraryPage({ anime, allAnime, mode, setSelected, title, updateA
                       {item.favorite ? '❤️' : '🤍'}
                     </button>
                   </td>
-                  <td>{index + 1}</td>
+                  <td>{liveRankMap.get(String(item.id)) || '—'}</td>
                   <td className="titleCell"><Poster anime={item} className="thumb" />{item.title}</td>
                   <td>★ {score(item).toFixed(1)}</td>
                   <td>{item.studio}</td>
@@ -661,7 +685,16 @@ export function LibraryPage({ anime, allAnime, mode, setSelected, title, updateA
         </section>
       ) : (
         <section className="posterGrid libraryPosterGrid">
-          {anime.map((item, index) => <AnimeCard key={item.id} anime={item} displayRank={index + 1} totalCount={anime.length} setSelected={setSelected} updateAnime={updateAnime} />)}
+          {rankedAnime.map((item) => (
+            <AnimeCard
+              key={item.id}
+              anime={item}
+              displayRank={liveRankMap.get(String(item.id))}
+              totalCount={libraryForDupes.length}
+              setSelected={setSelected}
+              updateAnime={updateAnime}
+            />
+          ))}
         </section>
       )}
 

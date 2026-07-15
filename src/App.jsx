@@ -13,6 +13,9 @@ import './styles/joeai-cards.css';
 import './styles/joeai-recommendations.css';
 import './styles/progress-overlay.css';
 import './styles/joeanime-home-v2.css';
+import './styles/analytics-lab.css';
+import './styles/library-cleanup.css';
+import './styles/library-integrity.css';
 import React, { useMemo, useState } from 'react';
 
 import { Sidebar } from './components/Sidebar';
@@ -20,8 +23,10 @@ import { SearchBar } from './components/SearchBar';
 import { DetailModal } from './components/DetailModal';
 import { Dashboard } from './pages/Dashboard';
 import { LibraryPage } from './pages/LibraryPage';
+import { FavoritesPage } from './pages/FavoritesPage';
 import { Discover } from './pages/Discover';
 import { FollowingPage } from './pages/FollowingPage';
+import { LibraryCleanup } from './pages/LibraryCleanup';
 import { Universe, Assistant, Analytics, Timeline, BleachShrine, SettingsPage } from './pages/PlaceholderPages';
 import { useAnimeLibrary } from './hooks/useAnimeLibrary';
 
@@ -86,7 +91,7 @@ export function App() {
     exitNewUserMode,
     resetNewUserMode,
 
-    updateAnime, updateCatalogAnime, deleteAnime, fetchMoreCatalogTitles
+    updateData, updateAnime, updateCatalogAnime, deleteAnime, fetchMoreCatalogTitles, refreshLiveDiscover
   } = library;
 
   const favoriteAnime = useMemo(
@@ -171,10 +176,17 @@ export function App() {
             updateAnime={handleUpdateAnime}
             updateCatalogAnime={updateCatalogAnime}
             fetchMoreCatalogTitles={fetchMoreCatalogTitles}
+            refreshLiveDiscover={refreshLiveDiscover}
           />
         )}
         {view === 'favorites' && (
-          <LibraryPage anime={favoriteAnime} allAnime={anime} mode={mode} setSelected={setSelected} updateAnime={handleUpdateAnime} title="Favorites" emptyMessage="No favorites yet. Click a heart on any anime to add it here." />
+          <FavoritesPage
+            anime={favoriteAnime}
+            allAnime={anime}
+            mode={mode}
+            setSelected={setSelected}
+            updateAnime={handleUpdateAnime}
+          />
         )}
         {view === 'universe' && <Universe anime={anime} setQuery={setQuery} setView={setView} />}
         {view === 'assistant' && <Assistant anime={anime} catalog={catalog} updateAnime={handleUpdateAnime} />}
@@ -188,6 +200,15 @@ export function App() {
         {view === 'analytics' && <Analytics anime={anime} />}
         {view === 'timeline' && <Timeline anime={anime} setSelected={setSelected} />}
         {view === 'bleach' && <BleachShrine anime={anime} setSelected={setSelected} />}
+        {view === 'library-integrity' && (
+          <LibraryCleanup
+            anime={anime}
+            updateData={updateData}
+            setSelected={setSelected}
+            syncMetadata={syncMetadata}
+            onBack={() => setView('settings')}
+          />
+        )}
         {view === 'settings' && (
           <SettingsPage
             data={data}
@@ -197,6 +218,7 @@ export function App() {
             enableNewUserMode={enableNewUserMode}
             exitNewUserMode={exitNewUserMode}
             resetNewUserMode={resetNewUserMode}
+            onOpenIntegrity={() => setView('library-integrity')}
           />
         )}
       </section>

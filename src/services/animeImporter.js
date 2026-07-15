@@ -1,5 +1,7 @@
+import { animeIdentityKeys } from './titleIdentity';
 import { fetchMetadataFromProvider, getManualMetadataForAnime, applyMetadataToAnime } from './metadataProvider';
 import { cleanTitle } from './metadata';
+import { searchKitsuAnime } from './kitsuProvider';
 import { enrichAnimeKnowledge } from '../ai/knowledge/knowledgeRegistry';
 
 const BLOCKED_TYPES = new Set(['Music', 'CM', 'PV', 'Unknown']);
@@ -167,19 +169,23 @@ export function animeIdFromTitle(item) {
 
 export function findDuplicateAnime(library = [], candidate = {}) {
   const candidateMalId = candidate.malId || candidate.mal_id;
-  const candidateKeys = new Set(allCandidateTitleKeys(candidate));
+  const candidateKeys = new Set([
+    ...allCandidateTitleKeys(candidate),
+    ...animeIdentityKeys(candidate)
+  ]);
 
   return library.find((item) => {
     const itemMalId = item.malId || item.mal_id;
     if (candidateMalId && itemMalId && String(candidateMalId) === String(itemMalId)) return true;
 
-    const itemKeys = allCandidateTitleKeys(item);
+    const itemKeys = [
+      ...allCandidateTitleKeys(item),
+      ...animeIdentityKeys(item)
+    ];
     if (itemKeys.some((key) => candidateKeys.has(key))) return true;
 
-    // Do not collapse franchise entries by prefix here.
-    // Example: "Trigun Stampede" must not silently update "Trigun".
-    // Fuzzy / shorthand decisions are handled by findLocalTitleMatches() so the UI can ask the user.
-
+    // Deliberately no generic prefix matching: separate franchise entries such
+    // as Trigun and Trigun Stampede must remain separate.
     return false;
   });
 }
@@ -398,30 +404,50 @@ function localEntryHasUsableMetadata(item = {}) {
 export async function searchAnimeCandidates(title, { limit = 8 } = {}) {
   const clean = cleanTitle(title);
   const q = encodeURIComponent(clean);
-  const res = await fetch(`https://api.jikan.moe/v4/anime?q=${q}&limit=15&sfw=true`);
 
-  if (!res.ok) throw new Error(`Jikan ${res.status}`);
+  try {
+    const res = await fetch(`https://api.jikan.moe/v4/anime?q=${q}&limit=15&sfw=true`);
+    if (!res.ok) throw new Error(`Jikan ${res.status}`);
 
-  const payload = await res.json();
+    const payload = await res.json();
+    return (payload.data || [])
+      .filter((item) => !BLOCKED_TYPES.has(item.type))
+      .map((item) => {
+        const ranked = rankResult(item, clean);
+        const normalized = normalizeJikanAnime(item, { importScore: ranked.score, metadataSource: 'jikan' });
+        return {
+          ...normalized,
+          importLabel: ranked.label,
+          importConfidence: confidenceFromScore(ranked.score, ranked.label)
+        };
+      })
+      .sort((a, b) => {
+        if (labelWeight(b.importLabel) !== labelWeight(a.importLabel)) {
+          return labelWeight(b.importLabel) - labelWeight(a.importLabel);
+        }
+        return Number(b.importScore || 0) - Number(a.importScore || 0);
+      })
+      .slice(0, limit);
+  } catch (jikanError) {
+    console.warn('Jikan search failed; trying Kitsu fallback:', jikanError);
 
-  return (payload.data || [])
-    .filter((item) => !BLOCKED_TYPES.has(item.type))
-    .map((item) => {
-      const ranked = rankResult(item, clean);
-      const normalized = normalizeJikanAnime(item, { importScore: ranked.score });
-      return {
-        ...normalized,
-        importLabel: ranked.label,
-        importConfidence: confidenceFromScore(ranked.score, ranked.label)
-      };
-    })
-    .sort((a, b) => {
-      if (labelWeight(b.importLabel) !== labelWeight(a.importLabel)) {
-        return labelWeight(b.importLabel) - labelWeight(a.importLabel);
-      }
-      return Number(b.importScore || 0) - Number(a.importScore || 0);
-    })
-    .slice(0, limit);
+    const kitsuResults = await searchKitsuAnime(clean, { limit: Math.max(limit, 8) });
+    return kitsuResults
+      .map((item) => {
+        const label = classifyResult(item, clean);
+        const score = labelWeight(label) + (label === 'Exact Match' ? 120 : 0);
+        return {
+          ...item,
+          importScore: score,
+          importLabel: label,
+          importConfidence: confidenceFromScore(score, label),
+          metadataSource: 'kitsu',
+          metadataNeedsRefresh: true
+        };
+      })
+      .sort((a, b) => Number(b.importScore || 0) - Number(a.importScore || 0))
+      .slice(0, limit);
+  }
 }
 
 export async function importAnimeByTitle({ title, status = 'Watching', library = [] }) {

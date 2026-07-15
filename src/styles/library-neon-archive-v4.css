@@ -379,3 +379,364 @@
     font-size: 58px;
   }
 }
+
+/* =========================================================
+   v5 themed Library rooms
+   Each app theme owns a full Library environment. The image
+   stays clear; contrast is concentrated behind the live copy.
+   ========================================================= */
+.theme-neon {
+  --library-room: url('../assets/themes/library/library-room-neon.webp');
+}
+
+.theme-sakura {
+  --library-room: url('../assets/themes/library/library-room-sakura.webp');
+}
+
+.theme-vapor {
+  --library-room: url('../assets/themes/library/library-room-vapor.webp');
+}
+
+.theme-ramen {
+  --library-room: url('../assets/themes/library/library-room-ramen.webp');
+}
+
+.theme-inferno {
+  --library-room: url('../assets/themes/library/library-room-inferno.webp');
+}
+
+.theme-amoled {
+  --library-room: url('../assets/themes/library/library-room-amoled.webp');
+}
+
+.libraryArchiveHeroLive {
+  min-height: 420px;
+  background: #02050a;
+}
+
+.libraryArchiveLiveArt {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background-image: var(--library-room, url('../assets/themes/library/library-room-neon.webp'));
+  background-repeat: no-repeat;
+  background-position: center center;
+  background-size: cover;
+  transform: none;
+  filter: saturate(1.04) contrast(1.025) brightness(.96);
+  transition: background-image .2s ease, filter .2s ease;
+}
+
+.theme-sakura .libraryArchiveLiveArt {
+  filter: saturate(1.03) contrast(1.01) brightness(.98);
+}
+
+.theme-vapor .libraryArchiveLiveArt {
+  filter: saturate(1.08) contrast(1.04) brightness(.94);
+}
+
+.theme-ramen .libraryArchiveLiveArt {
+  filter: saturate(1.02) contrast(1.02) brightness(.96);
+}
+
+.theme-inferno .libraryArchiveLiveArt {
+  filter: saturate(1.06) contrast(1.045) brightness(.93);
+}
+
+.theme-amoled .libraryArchiveLiveArt {
+  filter: saturate(1.02) contrast(1.05) brightness(.96);
+}
+
+.libraryArchiveHeroLive::before {
+  background:
+    linear-gradient(
+      90deg,
+      rgba(2, 8, 15, .97) 0%,
+      rgba(2, 8, 15, .93) 18%,
+      rgba(2, 8, 15, .76) 31%,
+      rgba(2, 8, 15, .38) 44%,
+      rgba(2, 8, 15, .10) 57%,
+      rgba(2, 8, 15, 0) 72%
+    ),
+    linear-gradient(0deg, rgba(2, 7, 13, .25), transparent 30%);
+}
+
+.libraryArchiveHeroLive::after {
+  box-shadow:
+    inset 0 0 28px rgba(0, 0, 0, .18),
+    inset 0 0 1px color-mix(in srgb, var(--cyan) 62%, white);
+}
+
+.libraryArchiveLiveCopy {
+  width: min(690px, 52%);
+  padding: 44px 42px 36px;
+}
+
+@media (max-width: 1180px) {
+  .libraryArchiveHeroLive {
+    min-height: 380px;
+  }
+
+  .libraryArchiveLiveArt {
+    background-position: 58% center;
+    transform: none;
+  }
+
+  .libraryArchiveLiveCopy {
+    width: 60%;
+  }
+}
+
+@media (max-width: 760px) {
+  .libraryArchiveHeroLive {
+    min-height: 440px;
+  }
+
+  .libraryArchiveLiveArt {
+    height: 100%;
+    background-position: 66% center;
+  }
+
+  .libraryArchiveHeroLive::before {
+    background:
+      linear-gradient(
+        0deg,
+        rgba(2, 8, 15, .98) 0%,
+        rgba(2, 8, 15, .90) 46%,
+        rgba(2, 8, 15, .25) 78%,
+        rgba(2, 8, 15, .05) 100%
+      );
+  }
+
+  .libraryArchiveLiveCopy {
+    width: 100%;
+    padding: 178px 22px 28px;
+  }
+}
+
+/* =========================================================
+   Library room showcase — preserve the full 16:9 artwork
+   ========================================================= */
+@media (min-width: 761px) {
+  .libraryArchiveHeroLive {
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    aspect-ratio: 16 / 9;
+  }
+
+  .libraryArchiveLiveArt {
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    background-size: cover;
+    background-position: center center;
+  }
+
+  .libraryArchiveLiveCopy {
+    align-self: center;
+  }
+
+  .libraryArchiveHeroLive::before {
+    background:
+      linear-gradient(
+        90deg,
+        rgba(2, 8, 15, .98) 0%,
+        rgba(2, 8, 15, .95) 20%,
+        rgba(2, 8, 15, .82) 34%,
+        rgba(2, 8, 15, .58) 46%,
+        rgba(2, 8, 15, .30) 58%,
+        rgba(2, 8, 15, .10) 69%,
+        rgba(2, 8, 15, 0) 80%
+      ),
+      linear-gradient(0deg, rgba(2, 7, 13, .16), transparent 24%);
+    clip-path: polygon(
+      0 0,
+      86% 0,
+      78% 18%,
+      69% 38%,
+      61% 58%,
+      54% 78%,
+      48% 100%,
+      0 100%
+    );
+  }
+}
+
+/* =========================================================
+   Library room showcase — soft hourglass opacity layers
+   Keeps artwork intact: dark only behind top copy + bottom stats.
+   ========================================================= */
+@media (min-width: 761px) {
+  .libraryArchiveHeroLive {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .libraryArchiveHeroLive::before {
+    clip-path: none;
+    background:
+      /* Top-left text cloud: broad at the top, quickly disappears */
+      radial-gradient(
+        ellipse 74% 62% at 0% 0%,
+        rgba(2, 7, 13, .99) 0%,
+        rgba(2, 7, 13, .97) 30%,
+        rgba(2, 7, 13, .82) 44%,
+        rgba(2, 7, 13, .42) 57%,
+        rgba(2, 7, 13, .10) 68%,
+        rgba(2, 7, 13, 0) 78%
+      ),
+      /* Bottom-left stats cloud: widens again near the floor */
+      radial-gradient(
+        ellipse 72% 48% at 0% 100%,
+        rgba(2, 7, 13, .99) 0%,
+        rgba(2, 7, 13, .95) 31%,
+        rgba(2, 7, 13, .72) 47%,
+        rgba(2, 7, 13, .30) 61%,
+        rgba(2, 7, 13, .07) 72%,
+        rgba(2, 7, 13, 0) 82%
+      ),
+      /* Tiny permanent left seam; no dark wash through the middle */
+      linear-gradient(
+        90deg,
+        rgba(2, 7, 13, .96) 0%,
+        rgba(2, 7, 13, .86) 5%,
+        rgba(2, 7, 13, .34) 10%,
+        rgba(2, 7, 13, .06) 15%,
+        rgba(2, 7, 13, 0) 20%
+      );
+  }
+
+  .libraryArchiveLiveCopy {
+    align-self: stretch;
+    display: flex;
+    flex-direction: column;
+    width: min(720px, 54%);
+    height: 100%;
+    padding: clamp(34px, 3.1vw, 58px) clamp(34px, 3.6vw, 66px) clamp(28px, 2.8vw, 48px);
+  }
+
+  .libraryArchiveLiveCopy .eyebrow {
+    margin-top: 0;
+  }
+
+  .libraryArchiveLiveTagline {
+    max-width: 620px;
+  }
+
+  .libraryArchiveLiveStats {
+    margin-top: auto;
+    margin-bottom: 0;
+  }
+}
+
+/* =========================================================
+   v5 Library hero typography + stat palette polish
+   Each room gets its own title gradient, glow, eyebrow, and
+   coordinated stat colors without changing the JSX.
+   ========================================================= */
+.theme-neon {
+  --library-title-gradient: linear-gradient(100deg, #28efff 0%, #6edfff 34%, #a78cff 66%, #ff55dc 100%);
+  --library-title-glow-a: rgba(40, 239, 255, .20);
+  --library-title-glow-b: rgba(255, 85, 220, .16);
+  --library-eyebrow: #37ecff;
+  --library-stat-1: #39ecff;
+  --library-stat-2: #ff58d6;
+  --library-stat-3: #38ddff;
+  --library-stat-4: #ff67d9;
+}
+
+.theme-sakura {
+  --library-title-gradient: linear-gradient(100deg, #fff5fb 0%, #ffd5eb 26%, #ff8ecb 62%, #ffb28f 100%);
+  --library-title-glow-a: rgba(255, 142, 203, .22);
+  --library-title-glow-b: rgba(255, 178, 143, .14);
+  --library-eyebrow: #ffb4d8;
+  --library-stat-1: #ffd7ea;
+  --library-stat-2: #ff72bd;
+  --library-stat-3: #f1b8dc;
+  --library-stat-4: #ff9dca;
+}
+
+.theme-vapor {
+  --library-title-gradient: linear-gradient(100deg, #7ef5ff 0%, #b88cff 30%, #ff56dd 67%, #ff8be7 100%);
+  --library-title-glow-a: rgba(126, 245, 255, .18);
+  --library-title-glow-b: rgba(255, 86, 221, .24);
+  --library-eyebrow: #c987ff;
+  --library-stat-1: #72f0ff;
+  --library-stat-2: #ff62dc;
+  --library-stat-3: #8fddff;
+  --library-stat-4: #c77cff;
+}
+
+.theme-ramen {
+  --library-title-gradient: linear-gradient(100deg, #fff1c7 0%, #ffd36f 30%, #ff9a32 66%, #fff0bc 100%);
+  --library-title-glow-a: rgba(255, 183, 64, .22);
+  --library-title-glow-b: rgba(255, 112, 24, .15);
+  --library-eyebrow: #ffc45c;
+  --library-stat-1: #ffd166;
+  --library-stat-2: #ff8a38;
+  --library-stat-3: #f5c75a;
+  --library-stat-4: #ff9f6e;
+}
+
+.theme-inferno {
+  --library-title-gradient: linear-gradient(100deg, #fff0c2 0%, #ffb342 26%, #ff5a2e 61%, #ffd060 100%);
+  --library-title-glow-a: rgba(255, 90, 46, .25);
+  --library-title-glow-b: rgba(255, 200, 72, .16);
+  --library-eyebrow: #ff7748;
+  --library-stat-1: #ffc247;
+  --library-stat-2: #ff4938;
+  --library-stat-3: #ff9b2f;
+  --library-stat-4: #ff684b;
+}
+
+.theme-amoled {
+  --library-title-gradient: linear-gradient(100deg, #ffffff 0%, #dce7ff 34%, #b9a4ff 70%, #f3efff 100%);
+  --library-title-glow-a: rgba(255, 255, 255, .12);
+  --library-title-glow-b: rgba(166, 130, 255, .18);
+  --library-eyebrow: #d6c7ff;
+  --library-stat-1: #eaf5ff;
+  --library-stat-2: #c08dff;
+  --library-stat-3: #d7f4ff;
+  --library-stat-4: #c9a5ff;
+}
+
+.libraryArchiveHeroLive .eyebrow {
+  color: var(--library-eyebrow, var(--cyan));
+  text-shadow: 0 0 16px color-mix(in srgb, var(--library-eyebrow, var(--cyan)) 48%, transparent);
+}
+
+.libraryArchiveHeroLive h1 {
+  background: var(--library-title-gradient, linear-gradient(100deg, #18e6ff, #ff54dc));
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter:
+    drop-shadow(0 0 14px var(--library-title-glow-a, rgba(24, 230, 255, .12)))
+    drop-shadow(0 0 20px var(--library-title-glow-b, rgba(255, 84, 220, .10)));
+}
+
+.libraryArchiveLiveStats > div:nth-child(1) span,
+.libraryArchiveLiveStats > div:nth-child(1) strong {
+  color: var(--library-stat-1, var(--cyan));
+}
+
+.libraryArchiveLiveStats > div:nth-child(2) span,
+.libraryArchiveLiveStats > div:nth-child(2) strong {
+  color: var(--library-stat-2, var(--pink));
+}
+
+.libraryArchiveLiveStats > div:nth-child(3) span,
+.libraryArchiveLiveStats > div:nth-child(3) strong {
+  color: var(--library-stat-3, var(--cyan));
+}
+
+.libraryArchiveLiveStats > div:nth-child(4) span,
+.libraryArchiveLiveStats > div:nth-child(4) strong {
+  color: var(--library-stat-4, var(--pink));
+}
+
+.libraryArchiveLiveStats > div:nth-child(1) span { text-shadow: 0 0 18px color-mix(in srgb, var(--library-stat-1, var(--cyan)) 58%, transparent); }
+.libraryArchiveLiveStats > div:nth-child(2) span { text-shadow: 0 0 18px color-mix(in srgb, var(--library-stat-2, var(--pink)) 58%, transparent); }
+.libraryArchiveLiveStats > div:nth-child(3) span { text-shadow: 0 0 18px color-mix(in srgb, var(--library-stat-3, var(--cyan)) 58%, transparent); }
+.libraryArchiveLiveStats > div:nth-child(4) span { text-shadow: 0 0 18px color-mix(in srgb, var(--library-stat-4, var(--pink)) 58%, transparent); }

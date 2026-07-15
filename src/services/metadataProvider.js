@@ -1,6 +1,7 @@
 import { getManualMetadata, normalizeManualMetadataKey } from '../data/manualMetadataOverrides';
 import { manualMetadataToAnime } from './metadataResolver';
 import { fetchMetadata as fetchJikanMetadata } from './metadata';
+import { fetchKitsuMetadata } from './kitsuProvider';
 
 export function applyMetadataToAnime(item = {}, metadata = {}) {
   return {
@@ -37,16 +38,27 @@ export async function fetchMetadataFromProvider(item = {}) {
     return manualMetadataToAnime(item, manual);
   }
 
-  const fetched = await fetchJikanMetadata(item);
+  let fetched;
+  let provider = 'jikan';
+
+  try {
+    fetched = await fetchJikanMetadata(item);
+  } catch (jikanError) {
+    console.warn('Jikan metadata lookup failed; trying Kitsu fallback:', item?.title, jikanError);
+    fetched = await fetchKitsuMetadata(item);
+    provider = 'kitsu';
+  }
 
   return {
     ...fetched,
-    metadataSource: fetched.metadataSource || 'jikan',
+    metadataSource: fetched.metadataSource || provider,
+    metadataNeedsRefresh: provider === 'kitsu' ? true : Boolean(fetched.metadataNeedsRefresh),
     syncStatus: {
       ...(fetched.syncStatus || item.syncStatus || {}),
       metadata: true,
+      metadataSource: provider,
       manualOverride: false,
-      dirty: false,
+      dirty: provider === 'kitsu',
       lastMetadataSync: new Date().toISOString()
     }
   };

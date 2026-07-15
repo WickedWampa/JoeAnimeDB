@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Compass,
   Sparkles,
@@ -16,9 +16,17 @@ import {
   Heart,
   Brain,
   Film,
-  Flame
+  Flame,
+  Radio,
+  CalendarClock,
+  RefreshCw,
+  Grid2X2,
+  List,
+  Bookmark
 } from 'lucide-react';
 import { Poster } from '../components/Poster';
+import { sameAnimeIdentity } from '../services/titleIdentity';
+import { buildDiscoverPlan } from '../services/recommendationEngineV3';
 import '../styles/discover.css';
 
 const titleOf = (item = {}) => item.officialTitle || item.title || 'Unknown title';
@@ -253,14 +261,30 @@ function cardKey(item = {}) {
   return String(item.malId || item.id || normalizeTitle(titleOf(item)));
 }
 
-function DiscoverCard({ item, onOpen, onAddWatching, onToggleFollow, adding = false, following = false }) {
+function franchiseKey(item = {}) {
+  const words = normalizedWords(titleOf(item)).filter((word) => ![
+    'season', 'part', 'movie', 'film', 'final', 'special', 'ova', 'ona',
+    'episode', 'episodes', 'cour', 'arc', 'chapter', 'the', 'a', 'an'
+  ].includes(word) && !/^\d+$/.test(word));
+
+  // Three distinctive words are enough to group obvious franchise entries
+  // without collapsing unrelated titles that share one generic word.
+  return words.slice(0, 3).join('|') || cardKey(item);
+}
+
+function DiscoverCard({ item, onOpen, onAddWatching, onToggleFollow, onToggleWishlist, adding = false, following = false, wishlisted = false, showRelease = false }) {
   const score = numericScore(item);
+  const releaseDate = item.airedFrom ? new Date(item.airedFrom) : null;
+  const releaseText = releaseDate && !Number.isNaN(releaseDate.getTime())
+    ? releaseDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+    : (item.status || item.season || 'Date TBA');
 
   return (
     <article className="discoverCard" onClick={() => onOpen(item)}>
       <div className="discoverPosterWrap">
         <Poster anime={item} className="discoverPoster" mode="thumb" />
         {score > 0 && <span className="discoverScore">★ {score.toFixed(2)}</span>}
+        {showRelease && <span className="discoverReleaseBadge"><CalendarClock /> {releaseText}</span>}
       </div>
 
       <div className="discoverCardCopy">
@@ -294,13 +318,26 @@ function DiscoverCard({ item, onOpen, onAddWatching, onToggleFollow, adding = fa
           >
             {following ? '🔔 Following' : '🔔 Follow'}
           </button>
+
+          {onToggleWishlist && (
+            <button
+              type="button"
+              className={`discoverWishlistButton ${wishlisted ? 'active' : ''}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                onToggleWishlist(item);
+              }}
+            >
+              <Bookmark /> {wishlisted ? 'Wishlisted' : 'Wishlist'}
+            </button>
+          )}
         </div>
       </div>
     </article>
   );
 }
 
-function Shelf({ icon, title, subtitle, items, onOpen, onBrowse, onAddWatching, onToggleFollow, addingKey }) {
+function Shelf({ icon, title, subtitle, items, onOpen, onBrowse, onAddWatching, onToggleFollow, onToggleWishlist, addingKey }) {
   const railRef = useRef(null);
 
   function slide(direction) {
@@ -347,12 +384,143 @@ function Shelf({ icon, title, subtitle, items, onOpen, onBrowse, onAddWatching, 
               onOpen={onOpen}
               onAddWatching={onAddWatching}
               onToggleFollow={onToggleFollow}
+              onToggleWishlist={onToggleWishlist}
               following={Boolean(item.followed)}
+              wishlisted={Boolean(item.wishlisted)}
               adding={addingKey === cardKey(item)}
             />
           ))}
         </div>
       </div>
+    </section>
+  );
+}
+
+function LiveDiscoverBrowser({
+  mode,
+  items,
+  studios,
+  genres,
+  onBack,
+  onOpen,
+  onAddWatching,
+  onToggleFollow,
+  onToggleWishlist,
+  addingKey
+}) {
+  const [query, setQuery] = useState('');
+  const [sort, setSort] = useState(mode === 'upcoming' ? 'release' : 'score');
+  const [studio, setStudio] = useState('');
+  const [genre, setGenre] = useState('');
+  const [viewMode, setViewMode] = useState('poster');
+
+  const filtered = useMemo(() => {
+    let results = [...items];
+    const clean = query.trim().toLowerCase();
+
+    if (clean) {
+      results = results.filter((item) => [
+        titleOf(item),
+        item.studio,
+        ...(item.genres || [])
+      ].filter(Boolean).join(' ').toLowerCase().includes(clean));
+    }
+
+    if (studio) results = results.filter((item) => item.studio === studio || (item.studios || []).includes(studio));
+    if (genre) results = results.filter((item) => (item.genres || []).includes(genre));
+
+    if (sort === 'release') {
+      results.sort((a, b) => new Date(a.airedFrom || '9999-12-31') - new Date(b.airedFrom || '9999-12-31'));
+    } else if (sort === 'popularity') {
+      results.sort((a, b) => memberCount(b) - memberCount(a));
+    } else if (sort === 'studio') {
+      results.sort((a, b) => String(a.studio || '').localeCompare(String(b.studio || '')) || titleOf(a).localeCompare(titleOf(b)));
+    } else {
+      results.sort((a, b) => numericScore(b) - numericScore(a));
+    }
+
+    return results;
+  }, [items, query, sort, studio, genre]);
+
+  return (
+    <section className="discoverLiveHub">
+      <header className="discoverLiveHeader">
+        <div>
+          <p className="discoverEyebrow">Live Discover</p>
+          <h2>{mode === 'airing' ? <><Radio /> Airing Now</> : <><CalendarClock /> Coming Soon</>}</h2>
+          <span>{filtered.length} title{filtered.length === 1 ? '' : 's'} · Jikan/Kitsu live catalog</span>
+        </div>
+        <button type="button" className="discoverBackButton" onClick={onBack}>← Recommendations</button>
+      </header>
+
+      <div className="discoverLiveToolbar">
+        <label className="discoverSearch">
+          <Search />
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search live titles..." />
+        </label>
+
+        <select value={genre} onChange={(event) => setGenre(event.target.value)}>
+          <option value="">All genres</option>
+          {genres.map(([name]) => <option key={name} value={name}>{name}</option>)}
+        </select>
+
+        <select value={studio} onChange={(event) => setStudio(event.target.value)}>
+          <option value="">All studios</option>
+          {studios.map(([name]) => <option key={name} value={name}>{name}</option>)}
+        </select>
+
+        <select value={sort} onChange={(event) => setSort(event.target.value)}>
+          <option value="release">Release date</option>
+          <option value="score">Score</option>
+          <option value="popularity">Popularity</option>
+          <option value="studio">Studio</option>
+        </select>
+
+        <div className="discoverViewToggle">
+          <button type="button" className={viewMode === 'poster' ? 'active' : ''} onClick={() => setViewMode('poster')}><Grid2X2 /> Poster</button>
+          <button type="button" className={viewMode === 'list' ? 'active' : ''} onClick={() => setViewMode('list')}><List /> List</button>
+        </div>
+      </div>
+
+      {viewMode === 'poster' ? (
+        <div className="discoverLiveGrid">
+          {filtered.map((item) => (
+            <DiscoverCard
+              key={cardKey(item)}
+              item={item}
+              onOpen={onOpen}
+              onAddWatching={onAddWatching}
+              onToggleFollow={onToggleFollow}
+              onToggleWishlist={onToggleWishlist}
+              following={Boolean(item.followed)}
+              wishlisted={Boolean(item.wishlisted)}
+              adding={addingKey === cardKey(item)}
+              showRelease
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="discoverLiveList">
+          {filtered.map((item) => (
+            <article key={cardKey(item)} onClick={() => onOpen(item)}>
+              <Poster anime={item} className="discoverLiveListPoster" mode="thumb" />
+              <div>
+                <h3>{titleOf(item)}</h3>
+                <p>{[item.studio, (item.genres || []).slice(0, 3).join(' • ')].filter(Boolean).join(' · ')}</p>
+                <small>{item.airedFrom ? new Date(item.airedFrom).toLocaleDateString() : (item.status || 'Date TBA')}</small>
+              </div>
+              <strong>{numericScore(item) ? `★ ${numericScore(item).toFixed(2)}` : 'Unscored'}</strong>
+              <div className="discoverLiveListActions">
+                <button type="button" onClick={(event) => { event.stopPropagation(); onAddWatching(item); }}>+ Watching</button>
+                <button type="button" className={item.followed ? 'active' : ''} onClick={(event) => { event.stopPropagation(); onToggleFollow(item); }}>{item.followed ? '🔔 Following' : '🔔 Follow'}</button>
+                <button type="button" className={item.wishlisted ? 'active' : ''} onClick={(event) => { event.stopPropagation(); onToggleWishlist(item); }}><Bookmark /> {item.wishlisted ? 'Wishlisted' : 'Wishlist'}</button>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+
+      {!filtered.length && <div className="discoverEmpty">No live titles matched these filters.</div>}
     </section>
   );
 }
@@ -366,6 +534,7 @@ function CatalogBrowser({
   onOpenTitle,
   onAddWatching,
   onToggleFollow,
+  onToggleWishlist,
   addingKey
 }) {
   const [query, setQuery] = useState('');
@@ -487,7 +656,9 @@ function CatalogBrowser({
               onOpen={onOpenTitle}
               onAddWatching={onAddWatching}
               onToggleFollow={onToggleFollow}
+              onToggleWishlist={onToggleWishlist}
               following={Boolean(item.followed)}
+              wishlisted={Boolean(item.wishlisted)}
               adding={addingKey === cardKey(item)}
             />
           ))}
@@ -503,34 +674,50 @@ function CatalogBrowser({
   );
 }
 
-export function Discover({ anime = [], catalog = [], setSelected, setView, updateAnime, updateCatalogAnime, fetchMoreCatalogTitles }) {
+export function Discover({ anime = [], catalog = [], setSelected, setView, updateAnime, updateCatalogAnime, fetchMoreCatalogTitles, refreshLiveDiscover }) {
   const [catalogBrowser, setCatalogBrowser] = useState(null);
   const [addingKey, setAddingKey] = useState('');
   const [fetchingMore, setFetchingMore] = useState(false);
+  const [refreshingLive, setRefreshingLive] = useState(false);
   const [catalogMessage, setCatalogMessage] = useState('');
+  const [hubMode, setHubMode] = useState('recommendations');
+
+  useEffect(() => {
+    if (!refreshLiveDiscover) return;
+
+    const lastSync = new Date(
+      localStorage.getItem('joeanime-discover-live-synced-at') || 0
+    ).getTime();
+    const oneDay = 24 * 60 * 60 * 1000;
+
+    if (!Number.isFinite(lastSync) || Date.now() - lastSync > oneDay) {
+      void refreshLive();
+    }
+  }, []);
 
   const libraryLookup = useMemo(() => {
     const malIds = new Set();
+    const allFingerprints = new Set();
     const legacyFingerprints = new Set();
     const legacyTitles = [];
 
     anime.forEach((item) => {
       const ids = inferredMalIds(item);
+      ids.forEach((id) => malIds.add(String(id)));
 
-      if (ids.length) {
-        ids.forEach((id) => malIds.add(String(id)));
-        return;
-      }
-
-      // Title matching remains only for old records that have not acquired
-      // a MAL ID yet. Update Database will progressively eliminate these.
+      // Always retain exact title fingerprints. Some older library rows and
+      // catalog rows disagree on MAL IDs even though they are the same title.
       rawTitles(item).forEach((title) => {
-        legacyTitles.push(title);
-        titleFingerprints(title).forEach((key) => legacyFingerprints.add(key));
+        titleFingerprints(title).forEach((key) => allFingerprints.add(key));
+
+        if (!ids.length) {
+          legacyTitles.push(title);
+          titleFingerprints(title).forEach((key) => legacyFingerprints.add(key));
+        }
       });
     });
 
-    return { malIds, legacyFingerprints, legacyTitles };
+    return { malIds, allFingerprints, legacyFingerprints, legacyTitles };
   }, [anime]);
 
   const unseenCatalog = useMemo(() => {
@@ -548,19 +735,30 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
         return false;
       }
 
-      // If both sides have MAL IDs and they differ, they are different anime.
-      // Do not collapse legitimate sequels merely because names look similar.
-      if (catalogMalIds.length) return true;
-
       const catalogTitles = rawTitles(item);
 
-      const fingerprintMatch = catalogTitles.some((title) =>
+      // Exact/canonical title fingerprints are checked even when the catalog
+      // has a MAL ID. This catches legacy imports whose stored MAL ID is absent,
+      // stale, or represented by a local anime-* ID.
+      const exactTitleMatch = catalogTitles.some((title) =>
+        [...titleFingerprints(title)].some((key) =>
+          libraryLookup.allFingerprints.has(key)
+        )
+      );
+
+      if (exactTitleMatch) return false;
+
+      // If the catalog entry has an unmatched MAL ID, preserve legitimate
+      // sequels. Broader fuzzy matching is only needed for ID-less legacy rows.
+      if (catalogMalIds.length) return true;
+
+      const legacyFingerprintMatch = catalogTitles.some((title) =>
         [...titleFingerprints(title)].some((key) =>
           libraryLookup.legacyFingerprints.has(key)
         )
       );
 
-      if (fingerprintMatch) return false;
+      if (legacyFingerprintMatch) return false;
 
       return !catalogTitles.some((catalogTitle) =>
         libraryLookup.legacyTitles.some((libraryTitle) =>
@@ -569,6 +767,30 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
       );
     });
   }, [catalog, libraryLookup]);
+
+  const airingNow = useMemo(
+    () => [...unseenCatalog]
+      .filter((item) => item.discoverBucket === 'current')
+      .sort((a, b) => {
+        const scoreDifference = numericScore(b) - numericScore(a);
+        if (scoreDifference !== 0) return scoreDifference;
+        return memberCount(b) - memberCount(a);
+      })
+      .slice(0, 24),
+    [unseenCatalog]
+  );
+
+  const comingSoon = useMemo(
+    () => [...unseenCatalog]
+      .filter((item) => item.discoverBucket === 'upcoming')
+      .sort((a, b) => {
+        const left = new Date(a.airedFrom || '9999-12-31').getTime();
+        const right = new Date(b.airedFrom || '9999-12-31').getTime();
+        return left - right || numericScore(b) - numericScore(a);
+      })
+      .slice(0, 24),
+    [unseenCatalog]
+  );
 
   const highestRated = useMemo(
     () => [...unseenCatalog]
@@ -635,147 +857,44 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
       .map((entry) => entry.item);
   }, [anime, unseenCatalog]);
 
-  const tasteAnchors = useMemo(
-    () => [...anime]
-      .filter((item) => personalScore(item) > 0)
-      .sort((a, b) =>
-        personalScore(b) - personalScore(a) ||
-        Number(b.rewatches || 0) - Number(a.rewatches || 0)
-      )
-      .slice(0, 6),
-    [anime]
-  );
-
-  const primaryAnchor = tasteAnchors[0] || null;
-
-  const personalizedMatches = useMemo(() => {
-    return [...unseenCatalog]
-      .map((item) => {
-        let value = numericScore(item) * 4;
-        const reasons = new Set();
-
-        tasteAnchors.forEach((anchorItem, index) => {
-          const weight = Math.max(1, 6 - index);
-          const shared = sharedGenres(item, anchorItem);
-
-          if (shared.length) {
-            value += shared.length * weight * 4;
-            reasons.add(`${shared.slice(0, 2).join(' + ')} like ${titleOf(anchorItem)}`);
-          }
-
-          if (item.studio && anchorItem.studio && item.studio === anchorItem.studio) {
-            value += weight * 5;
-            reasons.add(`${item.studio} studio signal`);
-          }
-        });
-
-        return {
-          item,
-          value,
-          confidence: Math.max(58, Math.min(98, Math.round(56 + value / 8))),
-          reasons: [...reasons].slice(0, 3)
-        };
-      })
-      .sort((a, b) => b.value - a.value);
-  }, [unseenCatalog, tasteAnchors]);
-
-  const dailyPick = useMemo(() => {
-    const pool = personalizedMatches.slice(0, 10);
-    return pool.length ? pool[daySeed() % pool.length] : null;
-  }, [personalizedMatches]);
-
-  const becauseYouLoved = useMemo(() => {
-    if (!primaryAnchor) return [];
-
-    return [...unseenCatalog]
-      .map((item) => ({
-        item,
-        overlap: sharedGenres(item, primaryAnchor).length,
-        sameStudio: Boolean(item.studio && primaryAnchor.studio && item.studio === primaryAnchor.studio),
-        score: numericScore(item)
-      }))
-      .filter((entry) => entry.overlap > 0 || entry.sameStudio)
-      .sort((a, b) =>
-        b.overlap - a.overlap ||
-        Number(b.sameStudio) - Number(a.sameStudio) ||
-        b.score - a.score
-      )
-      .slice(0, 24)
-      .map((entry) => entry.item);
-  }, [unseenCatalog, primaryAnchor]);
-
-  const mindBenders = useMemo(
-    () => [...unseenCatalog]
-      .filter((item) => {
-        const genres = (item.genres || []).map((genre) => String(genre).toLowerCase());
-        return genres.some((genre) =>
-          ['psychological', 'mystery', 'sci-fi', 'suspense', 'supernatural'].includes(genre)
-        );
-      })
-      .sort((a, b) => numericScore(b) - numericScore(a))
-      .slice(0, 24),
-    [unseenCatalog]
-  );
-
-  const movieNight = useMemo(
-    () => [...unseenCatalog]
-      .filter((item) => String(item.type || '').toLowerCase().includes('movie'))
-      .sort((a, b) => numericScore(b) - numericScore(a))
-      .slice(0, 24),
-    [unseenCatalog]
-  );
-
-  const emotionalDamage = useMemo(
-    () => [...unseenCatalog]
-      .filter((item) => {
-        const genres = (item.genres || []).map((genre) => String(genre).toLowerCase());
-        return genres.includes('drama') && (
-          genres.includes('romance') ||
-          genres.includes('award winning') ||
-          genres.includes('slice of life')
-        );
-      })
-      .sort((a, b) => numericScore(b) - numericScore(a))
-      .slice(0, 24),
-    [unseenCatalog]
-  );
+  const genres = useMemo(() => {
+    const counts = new Map();
+    unseenCatalog.forEach((item) => (item.genres || []).forEach((genre) => counts.set(genre, (counts.get(genre) || 0) + 1)));
+    return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  }, [unseenCatalog]);
 
   const studios = useMemo(() => {
-    const map = new Map();
-
+    const counts = new Map();
     unseenCatalog.forEach((item) => {
-      if (!item.studio) return;
-      map.set(item.studio, (map.get(item.studio) || 0) + 1);
+      const names = [item.studio, ...(item.studios || [])].filter(Boolean);
+      [...new Set(names)].forEach((name) => counts.set(name, (counts.get(name) || 0) + 1));
     });
-
-    return [...map.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 30);
+    return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
   }, [unseenCatalog]);
 
-  const genres = useMemo(() => {
-    const map = new Map();
+  const engineV3 = useMemo(() => buildDiscoverPlan({
+    library: anime,
+    candidates: unseenCatalog,
+    daySeed: daySeed()
+  }), [anime, unseenCatalog]);
 
-    unseenCatalog.forEach((item) => {
-      (item.genres || []).forEach((genre) => {
-        map.set(genre, (map.get(genre) || 0) + 1);
-      });
-    });
+  const dailyPick = engineV3.dailyPick;
+  const primaryAnchor = engineV3.anchor;
+  const topStudioName = engineV3.topStudio;
+  const topStudioDisplay = studios.find(([name]) => name.toLowerCase() === topStudioName)?.[0] || topStudioName || 'Studio';
 
-    return [...map.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 30);
-  }, [unseenCatalog]);
-
-  const studioSpotlight = useMemo(() => {
-    const topStudio = studios[0]?.[0];
-    if (!topStudio) return [];
-
-    return unseenCatalog
-      .filter((item) => item.studio === topStudio)
-      .sort((a, b) => numericScore(b) - numericScore(a))
-      .slice(0, 24);
-  }, [studios, unseenCatalog]);
+  const recommendationPlan = {
+    airingNow: engineV3.airingNow,
+    comingSoon: engineV3.comingSoon,
+    becauseYouLoved: engineV3.becauseYouLoved,
+    joeAIPicks: engineV3.bestMatches,
+    highestRated: engineV3.highestRated,
+    hiddenGems: engineV3.hiddenGems,
+    mindBenders: engineV3.mindBenders,
+    emotionalDamage: engineV3.emotionalDamage,
+    movieNight: engineV3.movieNight,
+    studioSpotlight: engineV3.studioSpotlight
+  };
 
   async function addWatching(item) {
     if (!updateAnime || !item) return;
@@ -785,6 +904,31 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
     setCatalogMessage('');
 
     try {
+      const existing = anime.find((libraryItem) => sameAnimeIdentity(libraryItem, item));
+
+      if (existing) {
+        await updateAnime({
+          ...existing,
+          officialTitle: existing.officialTitle || item.officialTitle || titleOf(item),
+          malId: existing.malId || existing.mal_id || item.malId || item.mal_id,
+          cover: existing.cover || existing.imageUrl || item.cover || item.imageUrl,
+          imageUrl: existing.imageUrl || existing.cover || item.imageUrl || item.cover,
+          synopsis: existing.synopsis || item.synopsis,
+          studio: existing.studio || item.studio,
+          studios: (existing.studios?.length ? existing.studios : item.studios) || [],
+          genres: (existing.genres?.length ? existing.genres : item.genres) || [],
+          episodeCount: existing.episodeCount || existing.episodes || item.episodeCount || item.episodes,
+          episodes: existing.episodes || existing.episodeCount || item.episodes || item.episodeCount,
+          communityScore: existing.communityScore || existing.malScore || item.communityScore || item.malScore,
+          malScore: existing.malScore || existing.communityScore || item.malScore || item.communityScore,
+          status: 'Watching',
+          listUpdatedAt: new Date().toISOString()
+        });
+
+        setCatalogMessage(`✓ ${existing.title || titleOf(item)} was already in your Library — marked as Watching.`);
+        return;
+      }
+
       await updateAnime({
         ...item,
         id: item.malId ? `anime-${item.malId}` : `anime-${normalizeTitle(titleOf(item))}`,
@@ -826,6 +970,44 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
     );
   }
 
+  async function toggleWishlist(item) {
+    if (!updateCatalogAnime || !item) return;
+
+    const wishlisted = !Boolean(item.wishlisted);
+    await updateCatalogAnime({
+      ...item,
+      wishlisted,
+      ignored: false,
+      wishlistedAt: wishlisted ? (item.wishlistedAt || new Date().toISOString()) : '',
+      listUpdatedAt: new Date().toISOString()
+    });
+
+    setCatalogMessage(wishlisted ? `🔖 Added ${titleOf(item)} to your wishlist.` : `Removed ${titleOf(item)} from your wishlist.`);
+  }
+
+  async function refreshLive() {
+    if (!refreshLiveDiscover || refreshingLive) return;
+
+    setRefreshingLive(true);
+    setCatalogMessage('Checking Jikan, with Kitsu ready as backup...');
+
+    try {
+      const result = await refreshLiveDiscover({ limitPerFeed: 25 });
+      const cacheNote = result.usedCache ? ' Cached titles were kept where both providers were unavailable.' : '';
+      const providerNote = result.sources ? ` Sources: current ${result.sources.current}, upcoming ${result.sources.upcoming}.` : '';
+      const partialNote = result.partial ? ' One or more feeds used a fallback or cache.' : '';
+
+      setCatalogMessage(
+        `✓ Live Discover ready: ${result.currentCount} current-season and ${result.upcomingCount} upcoming titles.${partialNote}${cacheNote}${providerNote}`
+      );
+    } catch (error) {
+      console.warn('Live Discover refresh failed:', error);
+      setCatalogMessage(error?.message || 'Could not refresh live anime right now.');
+    } finally {
+      setRefreshingLive(false);
+    }
+  }
+
   async function fetchMore() {
     if (!fetchMoreCatalogTitles || fetchingMore) return;
 
@@ -837,10 +1019,10 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
 
       setCatalogMessage(
         result.added.length
-          ? `✓ Added ${result.added.length} new catalog title${result.added.length === 1 ? '' : 's'}.`
+          ? `✓ Added ${result.added.length} new catalog title${result.added.length === 1 ? '' : 's'} from ${result.provider || 'the live provider'}.`
           : result.received
             ? 'That page only contained titles already in your library or catalog. Try Fetch More again.'
-            : 'Jikan returned no titles for that page.'
+            : 'Neither provider returned titles for that page.'
       );
     } catch (error) {
       console.warn('Fetch more catalog titles failed:', error);
@@ -868,8 +1050,21 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
           <p>Browse unseen anime from the catalog JoeAI uses to find your next favorite.</p>
 
           <div className="discoverHeroActions">
-            <button type="button" className="primary" onClick={() => browse()}>
-              <LibraryBig /> Browse Entire Catalog
+            <button type="button" className={hubMode === 'recommendations' ? 'primary' : ''} onClick={() => setHubMode('recommendations')}>
+              <Sparkles /> Recommendations
+            </button>
+            <button type="button" className={hubMode === 'airing' ? 'primary' : ''} onClick={() => setHubMode('airing')}>
+              <Radio /> Airing Now <b>{airingNow.length}</b>
+            </button>
+            <button type="button" className={hubMode === 'upcoming' ? 'primary' : ''} onClick={() => setHubMode('upcoming')}>
+              <CalendarClock /> Coming Soon <b>{comingSoon.length}</b>
+            </button>
+            <button type="button" onClick={() => browse()}>
+              <LibraryBig /> Browse Catalog
+            </button>
+            <button type="button" onClick={refreshLive} disabled={refreshingLive}>
+              <RefreshCw className={refreshingLive ? 'discoverSpin' : ''} />
+              {refreshingLive ? 'Checking providers...' : 'Refresh Live Anime'}
             </button>
             <button type="button" onClick={fetchMore} disabled={fetchingMore}>
               <LibraryBig /> {fetchingMore ? 'Fetching...' : 'Fetch More Titles'}
@@ -890,6 +1085,48 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
           <span><strong>{studios.length}</strong>Studios</span>
         </div>
       </section>
+
+      {hubMode !== 'recommendations' && (
+        <LiveDiscoverBrowser
+          mode={hubMode}
+          items={hubMode === 'airing' ? airingNow : comingSoon}
+          studios={studios}
+          genres={genres}
+          onBack={() => setHubMode('recommendations')}
+          onOpen={setSelected}
+          onAddWatching={addWatching}
+          onToggleFollow={toggleFollow}
+          onToggleWishlist={toggleWishlist}
+          addingKey={addingKey}
+        />
+      )}
+
+      {hubMode === 'recommendations' && (<>
+      <Shelf
+        icon={<Radio />}
+        title="Airing Now"
+        subtitle="Current-season anime from Jikan, with Kitsu fallback, filtered against your library."
+        items={recommendationPlan.airingNow}
+        onOpen={setSelected}
+        onAddWatching={addWatching}
+        onToggleFollow={toggleFollow}
+        onToggleWishlist={toggleWishlist}
+        addingKey={addingKey}
+        onBrowse={() => browse('all', 'Entire Catalog')}
+      />
+
+      <Shelf
+        icon={<CalendarClock />}
+        title="Coming Soon"
+        subtitle="Upcoming anime JoeAI can start matching against your taste before they air."
+        items={recommendationPlan.comingSoon}
+        onOpen={setSelected}
+        onAddWatching={addWatching}
+        onToggleFollow={toggleFollow}
+        onToggleWishlist={toggleWishlist}
+        addingKey={addingKey}
+        onBrowse={() => browse('all', 'Entire Catalog')}
+      />
 
       {dailyPick && (
         <section className="dailyPickHero">
@@ -941,15 +1178,16 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
         </section>
       )}
 
-      {primaryAnchor && becauseYouLoved.length > 0 && (
+      {primaryAnchor && recommendationPlan.becauseYouLoved.length > 0 && (
         <Shelf
           icon={<Heart />}
           title={`Because You Loved ${titleOf(primaryAnchor)}`}
           subtitle={`Built from shared genres, studio signals, and your ${personalScore(primaryAnchor).toFixed(1)} rating.`}
-          items={becauseYouLoved}
+          items={recommendationPlan.becauseYouLoved}
           onOpen={setSelected}
           onAddWatching={addWatching}
           onToggleFollow={toggleFollow}
+          onToggleWishlist={toggleWishlist}
           addingKey={addingKey}
           onBrowse={() => browse('genre', (primaryAnchor.genres || [])[0] || 'Entire Catalog')}
         />
@@ -961,10 +1199,11 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
         subtitle={anime.length
           ? 'Matched to the genres, studios, ratings, and patterns already visible in your library.'
           : 'Strong starting picks while JoeAI waits to learn your personal taste.'}
-        items={joeAIPicks.length ? joeAIPicks : highestRated}
+        items={recommendationPlan.joeAIPicks}
         onOpen={setSelected}
         onAddWatching={addWatching}
         onToggleFollow={toggleFollow}
+        onToggleWishlist={toggleWishlist}
         addingKey={addingKey}
         onBrowse={() => browse('all', 'JoeAI Picks')}
       />
@@ -973,10 +1212,11 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
         icon={<Trophy />}
         title="Highest Rated"
         subtitle="Top community-rated anime you have not added yet."
-        items={highestRated}
+        items={recommendationPlan.highestRated}
         onOpen={setSelected}
         onAddWatching={addWatching}
         onToggleFollow={toggleFollow}
+        onToggleWishlist={toggleWishlist}
         addingKey={addingKey}
         onBrowse={() => browse('all', 'Entire Catalog')}
       />
@@ -985,10 +1225,11 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
         icon={<Gem />}
         title="Hidden Gems"
         subtitle="Well-rated titles with a genuinely smaller audience."
-        items={hiddenGems}
+        items={recommendationPlan.hiddenGems}
         onOpen={setSelected}
         onAddWatching={addWatching}
         onToggleFollow={toggleFollow}
+        onToggleWishlist={toggleWishlist}
         addingKey={addingKey}
         onBrowse={() => browse('hidden', 'Hidden Gems')}
       />
@@ -997,10 +1238,11 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
         icon={<Brain />}
         title="Mind Melters"
         subtitle="Psychological, mystery, supernatural, and sci-fi picks that make you work for it."
-        items={mindBenders}
+        items={recommendationPlan.mindBenders}
         onOpen={setSelected}
         onAddWatching={addWatching}
         onToggleFollow={toggleFollow}
+        onToggleWishlist={toggleWishlist}
         addingKey={addingKey}
         onBrowse={() => browse('genre', 'Psychological')}
       />
@@ -1009,10 +1251,11 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
         icon={<Flame />}
         title="Prepare for Emotional Damage"
         subtitle="Drama-heavy picks for when apparently feeling okay was getting boring."
-        items={emotionalDamage}
+        items={recommendationPlan.emotionalDamage}
         onOpen={setSelected}
         onAddWatching={addWatching}
         onToggleFollow={toggleFollow}
+        onToggleWishlist={toggleWishlist}
         addingKey={addingKey}
         onBrowse={() => browse('genre', 'Drama')}
       />
@@ -1021,25 +1264,27 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
         icon={<Film />}
         title="Movie Night"
         subtitle="Highly rated unseen anime movies from your catalog."
-        items={movieNight}
+        items={recommendationPlan.movieNight}
         onOpen={setSelected}
         onAddWatching={addWatching}
         onToggleFollow={toggleFollow}
+        onToggleWishlist={toggleWishlist}
         addingKey={addingKey}
         onBrowse={() => browse('all', 'Entire Catalog')}
       />
 
-      {studioSpotlight.length > 0 && (
+      {recommendationPlan.studioSpotlight.length > 0 && (
         <Shelf
           icon={<Building2 />}
-          title={`${studios[0][0]} Spotlight`}
-          subtitle={`Unseen catalog titles from ${studios[0][0]}.`}
-          items={studioSpotlight}
+          title={`${topStudioDisplay} Spotlight`}
+          subtitle={`Unseen catalog titles from ${topStudioDisplay}.`}
+          items={recommendationPlan.studioSpotlight}
           onOpen={setSelected}
           onAddWatching={addWatching}
           onToggleFollow={toggleFollow}
+          onToggleWishlist={toggleWishlist}
           addingKey={addingKey}
-          onBrowse={() => browse('studio', studios[0][0])}
+          onBrowse={() => browse('studio', topStudioDisplay)}
         />
       )}
 
@@ -1082,6 +1327,8 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
         </section>
       )}
 
+      </>)}
+
       {catalogBrowser && (
         <CatalogBrowser
           catalog={unseenCatalog}
@@ -1095,6 +1342,7 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
           }}
           onAddWatching={addWatching}
           onToggleFollow={toggleFollow}
+          onToggleWishlist={toggleWishlist}
           addingKey={addingKey}
         />
       )}
