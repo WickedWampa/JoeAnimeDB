@@ -1,8 +1,8 @@
 {
-  "name": "joeanime-db-4",
-  "version": "4.3.1",
+  "name": "joeanime-db",
+  "version": "5.0.0-beta.1",
   "private": true,
-  "description": "JoeAnimeDB desktop anime library powered by JoeAI",
+  "description": "JoeAnimeDB Desktop \u2014 a personal anime library powered by JoeAI",
   "main": "electron/main.cjs",
   "scripts": {
     "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
@@ -12,7 +12,9 @@
     "preview": "vite preview",
     "pack:win": "npm run build && electron-builder --win nsis",
     "pack:dir": "npm run build && electron-builder --dir",
-    "pack:portable": "npm run build && electron-builder --win portable"
+    "pack:portable": "npm run build && electron-builder --win portable",
+    "installer:win": "npm run build && electron-builder --win nsis --x64",
+    "installer:unpacked": "npm run build && electron-builder --dir --win --x64"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
@@ -32,16 +34,18 @@
     "electron-rebuild": "^3.2.9"
   },
   "build": {
-    "appId": "com.joeanimedb.app",
+    "appId": "com.joeanimedb.desktop",
     "productName": "JoeAnimeDB",
     "directories": {
-      "output": "dist-desktop"
+      "output": "dist-desktop",
+      "buildResources": "installer"
     },
     "files": [
       "dist/**/*",
       "electron/**/*",
       "package.json",
-      "node_modules/sql.js/dist/sql-wasm.wasm"
+      "node_modules/sql.js/dist/sql-wasm.wasm",
+      "installer/joeanime.ico"
     ],
     "win": {
       "target": [
@@ -52,17 +56,32 @@
           ]
         }
       ],
-      "artifactName": "JoeAnimeDB-Setup-${version}.${ext}"
+      "icon": "installer/joeanime.ico",
+      "artifactName": "JoeAnimeDB-5.0-Beta-Setup-${arch}.${ext}",
+      "executableName": "JoeAnimeDB",
+      "publisherName": "JoeAnimeDB"
     },
     "nsis": {
       "oneClick": false,
-      "perMachine": false,
+      "perMachine": true,
+      "allowElevation": true,
       "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
+      "createDesktopShortcut": "always",
       "createStartMenuShortcut": true,
       "shortcutName": "JoeAnimeDB",
-      "runAfterFinish": true
-    }
+      "runAfterFinish": true,
+      "menuCategory": "JoeAnimeDB",
+      "installerIcon": "installer/joeanime.ico",
+      "uninstallerIcon": "installer/joeanime.ico",
+      "installerHeaderIcon": "installer/joeanime.ico",
+      "installerSidebar": "installer/installer-sidebar.bmp",
+      "uninstallerSidebar": "installer/installer-sidebar.bmp",
+      "license": "installer/LICENSE.txt",
+      "deleteAppDataOnUninstall": false,
+      "displayLanguageSelector": false
+    },
+    "copyright": "Copyright \u00a9 2026 JoeAnimeDB",
+    "asar": true
   },
   "allowScripts": {
     "better-sqlite3@12.11.1": true

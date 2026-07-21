@@ -1,8 +1,0 @@
-/* V5 override */
-.libraryPosterGrid .animeCard{height:384px !important;}
-@media (min-width:1650px){
-.libraryPosterGrid .animeCard{height:370px !important;}
-}
-@media (max-width:760px){
-.libraryPosterGrid .animeCard{height:340px !important;}
-}

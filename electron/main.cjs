@@ -112,8 +112,9 @@ function createWindow() {
     height: 950,
     minWidth: 1100,
     minHeight: 720,
-    title: 'JoeAnimeDB 4.3.1 SQLite Foundation',
+    title: 'JoeAnimeDB 5.0 Beta',
     backgroundColor: '#050910',
+    icon: path.join(__dirname, '..', 'installer', 'joeanime.ico'),
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),

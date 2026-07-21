@@ -1,6 +1,0 @@
-
-.repairMetadataButton.followingActive {
-  border-color: color-mix(in srgb, var(--cyan) 74%, transparent);
-  background: color-mix(in srgb, var(--cyan) 16%, var(--panel));
-  color: var(--cyan);
-}

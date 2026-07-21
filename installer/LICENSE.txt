@@ -1,0 +1,7 @@
+JoeAnimeDB 5.0 Beta Test License
+
+This beta build is provided for private testing and evaluation.
+
+The software is provided "as is", without warranty of any kind. Testers should keep backups of any important data. Redistribution, resale, or commercial use is not authorized without permission from the project owner.
+
+By installing this beta build, you acknowledge that unfinished features and defects may be present.
