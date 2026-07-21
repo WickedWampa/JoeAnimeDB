@@ -1042,13 +1042,18 @@
 }
 
 .discoverHero.compact {
-  min-height: clamp(330px, 29vw, 430px);
+  min-height: clamp(540px, 34vw, 590px);
 }
 
 .discoverHero {
+  position: relative;
   isolation: isolate;
-  align-items: end;
-  padding: 30px 34px 26px;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  min-height: 0;
+  max-height: 600px;
+  align-items: center;
+  padding: 34px;
   background: #030711;
   box-shadow: 0 22px 64px rgba(0, 0, 0, .34), inset 0 1px 0 rgba(255, 255, 255, .06);
 }
@@ -1057,44 +1062,44 @@
   content: "";
   position: absolute;
   inset: 0;
-  z-index: -2;
+  z-index: 0;
   pointer-events: none;
   background-image: var(--discover-hero-image);
   background-repeat: no-repeat;
   background-size: cover;
-  background-position: center 48%;
-  filter: saturate(1.04) contrast(1.02);
-  transform: scale(1.002);
+  background-position: center;
+  filter: none;
+  transform: none;
 }
 
-/* Keep the copy readable without fogging the journey artwork. */
+/* Subtle local shadow for readability without covering the artwork. */
 .discoverHero::after {
   content: "";
   position: absolute;
-  inset: 0;
-  z-index: -1;
+  inset: 0 auto 0 0;
+  width: 50%;
+  z-index: 1;
   pointer-events: none;
   background:
-    linear-gradient(90deg,
-      rgba(2, 6, 14, .98) 0%,
-      rgba(2, 6, 14, .94) 22%,
-      rgba(2, 6, 14, .76) 36%,
-      rgba(2, 6, 14, .34) 49%,
-      rgba(2, 6, 14, .08) 60%,
-      rgba(2, 6, 14, 0) 72%),
-    linear-gradient(0deg,
-      rgba(2, 6, 14, .68) 0%,
-      rgba(2, 6, 14, .12) 25%,
-      rgba(2, 6, 14, 0) 48%);
+    radial-gradient(circle at 20% 46%,
+      rgba(0,0,0,.44) 0%,
+      rgba(0,0,0,.18) 48%,
+      transparent 82%);
 }
 
 .discoverHero > div:first-child {
-  align-self: stretch;
+  position: relative;
+  z-index: 2;
+  align-self: center;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  max-width: 720px;
+  width: min(48%, 700px);
+  max-width: 700px;
   padding-right: 18px;
+  text-shadow:
+    0 4px 20px rgba(0,0,0,.86),
+    0 1px 3px rgba(0,0,0,.96);
 }
 
 .discoverHero h1 {
@@ -1114,51 +1119,69 @@
 }
 
 .discoverHeroStats {
+  position: relative;
+  z-index: 2;
   align-self: end;
   margin-bottom: 2px;
 }
 
 .discoverHeroStats span {
-  backdrop-filter: blur(10px);
-  background: color-mix(in srgb, rgba(2, 6, 14, .78) 86%, var(--discover-accent) 14%);
-  border-color: color-mix(in srgb, var(--discover-accent) 26%, rgba(255,255,255,.12));
+  backdrop-filter: blur(8px);
+  background: rgba(2, 6, 14, .48);
+  border-color: color-mix(in srgb, var(--discover-accent) 30%, rgba(255,255,255,.12));
   box-shadow: inset 0 1px 0 rgba(255,255,255,.05);
 }
 
 @media (max-width: 1050px) {
-  .discoverHero.compact {
-    min-height: 440px;
-  }
-
-  .discoverHero::after {
-    background:
-      linear-gradient(90deg, rgba(2,6,14,.96) 0%, rgba(2,6,14,.78) 48%, rgba(2,6,14,.18) 82%),
-      linear-gradient(0deg, rgba(2,6,14,.78) 0%, rgba(2,6,14,.08) 56%);
+  .discoverHero {
+    max-height: 480px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding: 28px;
   }
 
   .discoverHero > div:first-child {
-    justify-content: flex-start;
+    width: min(56%, 620px);
   }
 }
 
 @media (max-width: 680px) {
-  .discoverHero.compact {
-    min-height: 520px;
+  .discoverHero {
+    aspect-ratio: auto;
+    min-height: 500px;
+    max-height: none;
+    grid-template-columns: 1fr;
+    align-items: end;
+    padding: 24px;
   }
 
   .discoverHero::before {
-    background-position: 68% center;
+    background-position: center;
   }
 
   .discoverHero::after {
-    background: linear-gradient(180deg,
-      rgba(2,6,14,.95) 0%,
-      rgba(2,6,14,.77) 48%,
-      rgba(2,6,14,.55) 100%);
+    inset: auto 0 0;
+    width: 100%;
+    height: 72%;
+    background:
+      linear-gradient(0deg,
+        rgba(2,6,14,.82) 0%,
+        rgba(2,6,14,.34) 62%,
+        transparent 100%);
+  }
+
+  .discoverHero > div:first-child {
+    width: 100%;
+    max-width: none;
+    padding-right: 0;
   }
 
   .discoverHero h1 {
     font-size: clamp(42px, 15vw, 58px);
+  }
+
+  .discoverHeroStats {
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -1456,4 +1479,447 @@
   .discoverLiveListActions {
     grid-column: 2;
   }
+}
+
+
+/* Discover cinematic hero clipping repair */
+.discoverHero > div:first-child {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+.discoverHero p:not(.discoverEyebrow) {
+  margin-top: 10px;
+}
+
+.discoverHeroActions {
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.discoverHeroActions button {
+  padding-top: 9px;
+  padding-bottom: 9px;
+}
+
+@media (max-width: 1050px) {
+  .discoverHero.compact {
+    min-height: 570px;
+  }
+
+  .discoverHero {
+    max-height: none;
+  }
+}
+
+@media (max-width: 680px) {
+  .discoverHero.compact {
+    min-height: 620px;
+  }
+}
+
+
+/* =========================================================
+   v5 final Discover hero layout repair
+   Restores a wide Analytics-style copy column and lets every
+   action button wrap naturally without clipping.
+   ========================================================= */
+
+.discoverHero {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 28px;
+  max-height: none;
+}
+
+.discoverHero > div:first-child {
+  flex: 0 1 760px;
+  width: min(760px, 58%) !important;
+  max-width: 760px !important;
+  align-self: center;
+  padding: clamp(30px, 4vw, 58px) !important;
+}
+
+.discoverHero p:not(.discoverEyebrow) {
+  width: 100%;
+  max-width: 620px;
+}
+
+.discoverHeroActions {
+  display: flex !important;
+  flex-flow: row wrap !important;
+  align-items: center;
+  width: 100%;
+  max-width: 760px;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.discoverHeroActions button {
+  flex: 0 0 auto;
+  width: auto !important;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.discoverHeroStats {
+  flex: 0 0 auto;
+  align-self: flex-end;
+  margin: 0 28px 28px 0;
+}
+
+@media (max-width: 1120px) {
+  .discoverHero {
+    align-items: center !important;
+  }
+
+  .discoverHero > div:first-child {
+    width: min(680px, 64%) !important;
+  }
+
+  .discoverHeroStats {
+    margin-right: 20px;
+    margin-bottom: 20px;
+  }
+}
+
+@media (max-width: 820px) {
+  .discoverHero {
+    display: block !important;
+    min-height: 620px;
+    padding: 0 !important;
+  }
+
+  .discoverHero > div:first-child {
+    width: 100% !important;
+    max-width: none !important;
+    padding: 28px !important;
+  }
+
+  .discoverHeroStats {
+    width: auto;
+    margin: 0 28px 28px;
+  }
+}
+
+@media (max-width: 680px) {
+  .discoverHeroActions button {
+    flex: 1 1 190px;
+    justify-content: center;
+  }
+
+  .discoverHeroStats {
+    margin: 0 24px 24px;
+  }
+}
+
+/* =========================================================
+   Final Analytics-title match
+   Typography only: preserves current layout, buttons, stats,
+   artwork, and positioning.
+   ========================================================= */
+
+.discoverHero h1,
+.libraryArchiveHeroLive h1 {
+  margin: 0 !important;
+  width: fit-content !important;
+  font-size: clamp(4.5rem, 7vw, 6.4rem) !important;
+  line-height: .92 !important;
+  letter-spacing: -.055em !important;
+  font-weight: 1000 !important;
+  color: transparent !important;
+  -webkit-text-fill-color: transparent !important;
+  background-clip: text !important;
+  -webkit-background-clip: text !important;
+  text-shadow: none !important;
+}
+
+.discoverHero h1 {
+  background:
+    linear-gradient(
+      100deg,
+      var(--discover-title-a, #35efff) 0%,
+      var(--discover-title-b, #aa72ff) 58%,
+      var(--discover-title-c, #ff5cc8) 100%
+    ) !important;
+  filter:
+    drop-shadow(0 3px 5px rgba(0,0,0,.95))
+    drop-shadow(0 0 22px color-mix(in srgb, var(--discover-title-b, #aa72ff) 42%, transparent)) !important;
+}
+
+.libraryArchiveHeroLive h1 {
+  background:
+    linear-gradient(
+      100deg,
+      var(--library-live-accent, #35efff) 0%,
+      var(--library-live-accent-2, #aa72ff) 58%,
+      var(--library-live-hot, #ff5cc8) 100%
+    ) !important;
+  filter:
+    drop-shadow(0 3px 5px rgba(0,0,0,.95))
+    drop-shadow(0 0 22px color-mix(in srgb, var(--library-live-accent-2, #aa72ff) 42%, transparent)) !important;
+}
+
+@media (max-width: 900px) {
+  .discoverHero h1,
+  .libraryArchiveHeroLive h1 {
+    font-size: clamp(3.6rem, 10vw, 5.4rem) !important;
+  }
+}
+
+@media (max-width: 680px) {
+  .discoverHero h1,
+  .libraryArchiveHeroLive h1 {
+    font-size: clamp(2.9rem, 14vw, 4.2rem) !important;
+  }
+}
+
+/* =========================================================
+   Emergency title rendering repair
+   Electron was painting the gradient as a rectangle because
+   these headings are flex containers. Use solid Analytics-style
+   title color with glow instead of background-clipped text.
+   ========================================================= */
+
+.discoverHero h1,
+.libraryArchiveHeroLive h1 {
+  color: #f7fbff !important;
+  background: none !important;
+  background-image: none !important;
+  background-clip: border-box !important;
+  -webkit-background-clip: border-box !important;
+  -webkit-text-fill-color: #f7fbff !important;
+  filter: none !important;
+  text-shadow:
+    0 3px 5px rgba(0,0,0,.96),
+    0 7px 24px rgba(0,0,0,.72),
+    0 0 22px color-mix(in srgb, var(--cyan) 32%, transparent) !important;
+}
+
+.discoverHero h1 {
+  color: color-mix(in srgb, var(--discover-title-b, #f7fbff) 72%, white) !important;
+  -webkit-text-fill-color: color-mix(in srgb, var(--discover-title-b, #f7fbff) 72%, white) !important;
+}
+
+.discoverHero h1 svg {
+  color: var(--discover-accent) !important;
+  -webkit-text-fill-color: initial !important;
+  filter: drop-shadow(0 0 16px color-mix(in srgb, var(--discover-accent) 52%, transparent)) !important;
+}
+
+.libraryArchiveHeroLive h1 {
+  color: #f7fbff !important;
+  -webkit-text-fill-color: #f7fbff !important;
+}
+
+.theme-sakura .libraryArchiveHeroLive h1,
+.theme-sakura .discoverHero h1 {
+  color: #fff2fa !important;
+  -webkit-text-fill-color: #fff2fa !important;
+}
+
+.theme-vapor .libraryArchiveHeroLive h1,
+.theme-vapor .discoverHero h1 {
+  color: #e9ddff !important;
+  -webkit-text-fill-color: #e9ddff !important;
+}
+
+.theme-ramen .libraryArchiveHeroLive h1,
+.theme-ramen .discoverHero h1 {
+  color: #ffe7b0 !important;
+  -webkit-text-fill-color: #ffe7b0 !important;
+}
+
+.theme-inferno .libraryArchiveHeroLive h1,
+.theme-inferno .discoverHero h1 {
+  color: #ffd27a !important;
+  -webkit-text-fill-color: #ffd27a !important;
+}
+
+.theme-amoled .libraryArchiveHeroLive h1,
+.theme-amoled .discoverHero h1 {
+  color: #eee8ff !important;
+  -webkit-text-fill-color: #eee8ff !important;
+}
+
+
+/* Exact Analytics theme palette */
+.theme-neon {
+  --shared-title-accent: #35efff;
+  --shared-title-accent-2: #aa72ff;
+  --shared-title-hot: #ff5cc8;
+}
+.theme-sakura {
+  --shared-title-accent: #ffd0e7;
+  --shared-title-accent-2: #ff7fbd;
+  --shared-title-hot: #ffb2d7;
+}
+.theme-vapor {
+  --shared-title-accent: #60f4ff;
+  --shared-title-accent-2: #b36cff;
+  --shared-title-hot: #ff64d8;
+}
+.theme-ramen {
+  --shared-title-accent: #ffe0a3;
+  --shared-title-accent-2: #ffb23e;
+  --shared-title-hot: #ff784d;
+}
+.theme-inferno {
+  --shared-title-accent: #ffd166;
+  --shared-title-accent-2: #ff8a2b;
+  --shared-title-hot: #ff3d2e;
+}
+.theme-amoled {
+  --shared-title-accent: #f6f7ff;
+  --shared-title-accent-2: #aa72ff;
+  --shared-title-hot: #7a4dff;
+}
+
+
+/* Analytics-style themed Discover title without flex clipping */
+.discoverHero h1 {
+  display: flex !important;
+  align-items: center;
+  gap: 13px;
+  color: transparent !important;
+  -webkit-text-fill-color: transparent !important;
+  background: none !important;
+  filter: none !important;
+  font-size: 0 !important;
+}
+
+.discoverHero h1::after {
+  content: "Discover";
+  display: inline-block;
+  width: fit-content;
+  font-size: clamp(4.5rem, 7vw, 6.4rem);
+  line-height: .92;
+  letter-spacing: -.055em;
+  font-weight: 1000;
+  background: linear-gradient(
+    100deg,
+    var(--shared-title-accent),
+    var(--shared-title-accent-2) 58%,
+    var(--shared-title-hot)
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  filter: drop-shadow(
+    0 0 22px
+    color-mix(in srgb, var(--shared-title-accent-2) 42%, transparent)
+  );
+}
+
+.discoverHero h1 svg {
+  flex: 0 0 auto;
+  width: .8em;
+  height: .8em;
+  font-size: clamp(4.5rem, 7vw, 6.4rem);
+  color: var(--shared-title-accent) !important;
+  -webkit-text-fill-color: initial !important;
+  filter: drop-shadow(
+    0 0 18px
+    color-mix(in srgb, var(--shared-title-accent) 52%, transparent)
+  ) !important;
+}
+
+@media (max-width: 680px) {
+  .discoverHero h1::after,
+  .discoverHero h1 svg {
+    font-size: clamp(2.9rem, 14vw, 4.2rem);
+  }
+}
+
+/* =========================================================
+   Final title fix — use the exact Settings gradient method.
+   The heading itself is inline-block, so the gradient clips
+   to the letters instead of painting a rectangular area.
+   ========================================================= */
+
+.discoverHero h1,
+.libraryArchiveHeroLive:not(.favoritesArchiveHero) h1 {
+  display: inline-block !important;
+  width: fit-content !important;
+  margin: 0 !important;
+  font-size: clamp(3rem, 7vw, 6.4rem) !important;
+  line-height: .92 !important;
+  letter-spacing: -.055em !important;
+  font-weight: 1000 !important;
+  color: transparent !important;
+  background:
+    linear-gradient(
+      100deg,
+      var(--shared-title-accent),
+      var(--shared-title-accent-2) 58%,
+      var(--shared-title-hot)
+    ) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  filter:
+    drop-shadow(
+      0 0 22px
+      color-mix(in srgb, var(--shared-title-accent-2) 42%, transparent)
+    ) !important;
+  text-shadow: none !important;
+}
+
+/* Disable the pseudo-element workaround from the previous patch. */
+.discoverHero h1::after,
+.libraryArchiveHeroLive:not(.favoritesArchiveHero) h1::after {
+  content: none !important;
+  display: none !important;
+}
+
+/* Discover keeps its compass icon, but no longer uses flex on the h1. */
+.discoverHero h1 svg {
+  display: inline-block !important;
+  width: .8em !important;
+  height: .8em !important;
+  margin-right: 13px;
+  vertical-align: -.06em;
+  color: var(--shared-title-accent) !important;
+  -webkit-text-fill-color: initial !important;
+  filter:
+    drop-shadow(
+      0 0 18px
+      color-mix(in srgb, var(--shared-title-accent) 52%, transparent)
+    ) !important;
+}
+
+@media (max-width: 680px) {
+  .discoverHero h1,
+  .libraryArchiveHeroLive:not(.favoritesArchiveHero) h1 {
+    font-size: clamp(2.7rem, 14vw, 4rem) !important;
+  }
+}
+
+
+/* v5 Discover cleanup — Wishlist removed */
+.discoverCardActions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.discoverCardActions .discoverQuickAdd,
+.discoverCardActions .discoverFollowButton {
+  width: 100%;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.discoverLiveListActions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.discoverLiveListActions button {
+  justify-content: center;
 }

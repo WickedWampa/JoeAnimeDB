@@ -4,7 +4,9 @@ import { Poster } from '../components/Poster';
 import { score } from '../utils/animeUtils';
 import {
   animeIdFromTitle,
+  enrichAnimeCandidate,
   findDuplicateAnime,
+  importAnimeByTitle,
   searchAnimeCandidates
 } from '../services/animeImporter';
 
@@ -54,12 +56,38 @@ function AddAnimeModal({ allAnime = [], updateAnime, setSelected, onClose }) {
     }
   }
 
-  function chooseResult(result) {
-    const existing = findDuplicateAnime(allAnime, result);
+  async function chooseResult(result) {
+    setWorking(true);
+    setMessage(`Finishing metadata for ${result.title}...`);
 
-    setSelectedResult(result);
-    setDuplicate(existing || null);
-    setMessage(existing ? 'Already in your library. You can update the existing entry with this metadata.' : 'Ready to add.');
+    try {
+      const completion = await enrichAnimeCandidate({
+        candidate: result,
+        library: allAnime,
+        status
+      });
+
+      const enriched = completion.candidate || result;
+      const existing = findDuplicateAnime(allAnime, enriched);
+
+      setSelectedResult(enriched);
+      setDuplicate(existing || null);
+      setMessage(
+        existing
+          ? 'Already in your library. You can update the existing entry with this completed metadata.'
+          : completion.metadataEnrichment?.unresolved
+            ? 'Ready to add. A small amount of metadata may still need repair.'
+            : 'Metadata complete — ready to add.'
+      );
+    } catch (error) {
+      console.warn('Add Anime enrichment failed:', result.title, error);
+      const existing = findDuplicateAnime(allAnime, result);
+      setSelectedResult(result);
+      setDuplicate(existing || null);
+      setMessage('Ready to add. Metadata can be repaired later if needed.');
+    } finally {
+      setWorking(false);
+    }
   }
 
   async function upgradeExistingAnime() {
@@ -166,37 +194,70 @@ function AddAnimeModal({ allAnime = [], updateAnime, setSelected, onClose }) {
       setMessage(`Importing ${index + 1}/${titles.length}: ${rawTitle}`);
 
       try {
-        const matches = await searchAnimeCandidates(rawTitle, { limit: 5 });
-        const best = matches[0];
+        const result = await importAnimeByTitle({
+          title: rawTitle,
+          status,
+          library: liveLibrary
+        });
 
-        if (!best) {
+        if (result.duplicate) {
+          skipped.push({
+            title: rawTitle,
+            match: result.duplicate.title,
+            reason: 'Already in library'
+          });
+          continue;
+        }
+
+        const matches = result.results || [];
+        const candidate = result.candidate;
+
+        if (!candidate) {
           failed.push({ title: rawTitle, reason: 'No match found' });
           continue;
         }
 
-        const existing = findDuplicateAnime(liveLibrary, best);
-        if (existing) {
-          skipped.push({ title: rawTitle, match: existing.title, reason: 'Already in library' });
-          continue;
-        }
+        const best = matches[0] || candidate;
+        const bestConfidence = Number(
+          best.importConfidence ||
+          candidate.importConfidence ||
+          0
+        );
+        const secondConfidence = Number(matches[1]?.importConfidence || 0);
+        const confidenceGap = bestConfidence - secondConfidence;
+        const exactIdentity = String(
+          best.importLabel ||
+          candidate.importLabel ||
+          ''
+        ).toLowerCase() === 'exact match';
+        const strongIdentity = exactIdentity || bestConfidence >= 86;
+        const genuinelyAmbiguous = Boolean(
+          candidate.metadataNeedsReview ||
+          (
+            matches.length > 1 &&
+            !strongIdentity &&
+            bestConfidence < 78 &&
+            confidenceGap < 8
+          )
+        );
 
-        const confident = Number(best.importConfidence || 0) >= 90;
-        const closeSecond = matches[1] && Number(best.importConfidence || 0) - Number(matches[1].importConfidence || 0) < 8;
-        const weakMatch = !confident && Number(best.importConfidence || 0) < 82;
-
-        if (closeSecond || weakMatch) {
+        if (genuinelyAmbiguous && !result.metadataLookupFailed) {
           review.push({ title: rawTitle, matches });
           continue;
         }
 
         const next = {
-          ...best,
-          id: animeIdFromTitle(best),
+          ...candidate,
+          id: candidate.id || animeIdFromTitle(candidate),
           status,
           favorite: false,
           rewatches: 0,
           finalRank: liveLibrary.length + 1,
-          notes: 'Added from bulk import.'
+          notes:
+            candidate.notes ||
+            (result.metadataLookupFailed
+              ? 'Added from bulk import. Metadata refresh may still be needed.'
+              : 'Added from bulk import.')
         };
 
         const saved = await updateAnime(next);
@@ -208,13 +269,86 @@ function AddAnimeModal({ allAnime = [], updateAnime, setSelected, onClose }) {
         failed.push({ title: rawTitle, reason: error.message || 'Import failed' });
       }
 
-      // Gentle pacing for Jikan rate limits.
-      await new Promise((resolve) => setTimeout(resolve, 850));
+      // Provider code already owns retry/backoff. Keep only a short UI yield.
+      await new Promise((resolve) => setTimeout(resolve, 40));
+    }
+
+    // Revisit incomplete additions after the whole batch exists. This gives
+    // franchise inheritance and Wikidata the same full-library context as the
+    // manual metadata repair tool.
+    const repairedAdded = [];
+
+    for (let index = 0; index < added.length; index += 1) {
+      const item = added[index];
+      const needsCompletion = Boolean(
+        !item.studio ||
+        !Array.isArray(item.genres) ||
+        !item.genres.length
+      );
+
+      if (!needsCompletion) {
+        repairedAdded.push(item);
+        continue;
+      }
+
+      setBulkProgress({
+        processed: index + 1,
+        total: added.length,
+        current: item.title
+      });
+      setMessage(
+        `Final metadata pass ${index + 1}/${added.length}: ${item.title}`
+      );
+
+      try {
+        const completion = await enrichAnimeCandidate({
+          candidate: item,
+          library: liveLibrary,
+          status: item.status || status
+        });
+
+        const repaired = {
+          ...item,
+          ...completion.candidate,
+          id: item.id,
+          title: item.title,
+          status: item.status || status,
+          favorite: Boolean(item.favorite),
+          rewatches: Number(item.rewatches || 0),
+          notes:
+            item.notes ||
+            completion.candidate?.notes ||
+            'Added from bulk import.'
+        };
+
+        const saved = await updateAnime(repaired);
+        liveLibrary = saved.anime || liveLibrary;
+
+        const savedItem = liveLibrary.find(
+          (animeItem) => String(animeItem.id) === String(repaired.id)
+        ) || repaired;
+
+        repairedAdded.push(savedItem);
+      } catch (error) {
+        console.warn('Bulk final metadata pass failed:', item.title, error);
+        repairedAdded.push(item);
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 80));
     }
 
     setLastBulkAddedIds(addedIds);
-    setBulkSummary({ added, skipped, review, failed });
-    setMessage('Bulk import complete.');
+    setBulkSummary({
+      added: repairedAdded,
+      skipped,
+      review,
+      failed
+    });
+    setMessage(
+      review.length
+        ? `Bulk import complete — ${review.length} title${review.length === 1 ? '' : 's'} genuinely need identity review.`
+        : 'Bulk import complete — metadata finalization finished.'
+    );
     setWorking(false);
   }
 

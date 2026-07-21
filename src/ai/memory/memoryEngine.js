@@ -6,7 +6,8 @@ import {
   loadMemoryProfile,
   appendMemoryJournal,
   loadMemoryJournal,
-  loadMemoryEvents
+  loadMemoryEvents,
+  clearJoeAIMemoryStorage
 } from './memoryStorage';
 
 export function buildJoeAIMemory(library = [], options = {}) {
@@ -28,8 +29,14 @@ export function buildJoeAIMemory(library = [], options = {}) {
   const journalEntry = buildMemoryJournal(library, previousProfile, profile);
 
   if (options.persist) {
-    saveMemoryProfile(profile);
-    appendMemoryJournal(journalEntry);
+    if (library.length === 0) {
+      // A clean install or Reset Local Data should never inherit another
+      // user's JoeAI profile, journal, events, or prediction history.
+      clearJoeAIMemoryStorage();
+    } else {
+      saveMemoryProfile(profile);
+      appendMemoryJournal(journalEntry);
+    }
   }
 
   return {
@@ -37,8 +44,12 @@ export function buildJoeAIMemory(library = [], options = {}) {
     journalEntry,
     reflections: (journalEntry.events || []).filter((event) => ['daily_thought', 'self_reflection', 'uncertainty', 'prediction_ready'].includes(event.type)),
     events: journalEntry.events || [],
-    journal: options.persist ? loadMemoryJournal() : [journalEntry],
-    eventFeed: options.persist ? loadMemoryEvents() : (journalEntry.events || [])
+    journal: options.persist
+      ? (library.length ? loadMemoryJournal() : [])
+      : [journalEntry],
+    eventFeed: options.persist
+      ? (library.length ? loadMemoryEvents() : [])
+      : (journalEntry.events || [])
   };
 }
 

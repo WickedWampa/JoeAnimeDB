@@ -1,0 +1,454 @@
+.upcomingPage {
+  --upcoming-hero-art: url('../assets/themes/upcoming/upcoming-neon.webp');
+  --upcoming-hero-position: center 48%;
+  padding: 24px;
+}
+.theme-neon .upcomingPage { --upcoming-hero-art: url('../assets/themes/upcoming/upcoming-neon.webp'); --upcoming-hero-position: center 48%; }
+.theme-sakura .upcomingPage { --upcoming-hero-art: url('../assets/themes/upcoming/upcoming-sakura.webp'); --upcoming-hero-position: center 46%; }
+.theme-vapor .upcomingPage { --upcoming-hero-art: url('../assets/themes/upcoming/upcoming-vapor.webp'); --upcoming-hero-position: center 52%; }
+.theme-ramen .upcomingPage { --upcoming-hero-art: url('../assets/themes/upcoming/upcoming-ramen.webp'); --upcoming-hero-position: center 48%; }
+.theme-inferno .upcomingPage { --upcoming-hero-art: url('../assets/themes/upcoming/upcoming-inferno.webp'); --upcoming-hero-position: center 46%; }
+.theme-amoled .upcomingPage { --upcoming-hero-art: url('../assets/themes/upcoming/upcoming-amoled.webp'); --upcoming-hero-position: center 48%; }
+
+.upcomingHero {
+  position: relative;
+  isolation: isolate;
+  min-height: 440px;
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  padding: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  background: #03060e;
+  box-shadow: 0 18px 55px rgba(0,0,0,.28);
+  overflow: hidden;
+}
+/* Single clean cinematic artwork layer — no blur, no scaling, no duplicate image. */
+.upcomingHero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: var(--upcoming-hero-art);
+  background-size: cover;
+  background-position: var(--upcoming-hero-position);
+  background-repeat: no-repeat;
+  filter: none;
+  transform: none;
+}
+.upcomingHero::after {
+  display: none;
+}
+.upcomingHero > div { position: relative; z-index: 2; width: min(46%, 720px); max-width: 720px; text-shadow: 0 2px 14px rgba(0,0,0,.9); }
+
+.upcomingHero h1 { margin: 4px 0 8px; font-size: clamp(2.2rem, 4vw, 4.3rem); }
+.upcomingHero p { max-width: 680px; color: var(--muted); font-size: 1.05rem; }
+.upcomingHero small { display: block; margin-top: 16px; color: var(--accent); font-weight: 700; }
+.upcomingHero > svg { position: relative; z-index: 2; color: var(--accent); filter: drop-shadow(0 0 18px currentColor); opacity: .72; }
+.upcomingToolbar { display: grid; grid-template-columns: auto minmax(240px, 1fr) auto; gap: 14px; align-items: center; margin: 22px 0; }
+.upcomingTabs { display: flex; gap: 8px; }
+.upcomingTabs button, .upcomingRefresh, .upcomingActions button { border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 12px; padding: 10px 14px; cursor: pointer; }
+.upcomingTabs button.active, .upcomingActions button.active { border-color: var(--accent); color: var(--accent); box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 28%, transparent); }
+.upcomingSearch { min-width: 0; display: flex; align-items: center; gap: 9px; border: 1px solid var(--border); background: var(--panel); border-radius: 12px; padding: 0 13px; }
+.upcomingSearch input { width: 100%; border: 0; outline: 0; background: transparent; color: var(--text); padding: 11px 0; }
+.upcomingRefresh { display: inline-flex; align-items: center; gap: 7px; }
+.upcomingGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 18px; }
+.upcomingCard { overflow: hidden; border: 1px solid var(--border); border-radius: 18px; background: var(--panel); box-shadow: 0 12px 30px rgba(0,0,0,.22); }
+.upcomingPoster { position: relative; display: block; width: 100%; aspect-ratio: 2 / 3; padding: 0; border: 0; background: #080b14; cursor: pointer; overflow: hidden; }
+.upcomingPoster .poster { position: absolute; inset: 0; width: 100%; height: 100%; }
+.upcomingPoster img { width: 100%; height: 100%; object-fit: cover; }
+.upcomingCardBody { padding: 14px; }
+.upcomingDate { color: var(--accent); font-size: .78rem; font-weight: 800; text-transform: uppercase; letter-spacing: .07em; }
+.upcomingCard h3 { margin: 7px 0 6px; font-size: 1.05rem; line-height: 1.25; min-height: 2.5em; }
+.upcomingCardBody > p { margin: 0; color: var(--muted); font-size: .88rem; min-height: 1.3em; }
+.upcomingMeta { display: flex; flex-wrap: wrap; gap: 7px; margin: 11px 0; }
+.upcomingMeta span { background: rgba(255,255,255,.06); border: 1px solid var(--border); border-radius: 999px; padding: 4px 7px; font-size: .72rem; }
+.upcomingActions { display: grid; grid-template-columns: 1fr 1fr auto; gap: 7px; }
+.upcomingActions button { padding: 8px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; font-size: .78rem; }
+.upcomingActions button:disabled { opacity: .55; cursor: default; }
+.upcomingState { min-height: 300px; display: grid; place-items: center; align-content: center; gap: 14px; color: var(--muted); text-align: center; }
+.upcomingState.error { color: #ff9c9c; }
+@media (max-width: 900px) { .upcomingToolbar { grid-template-columns: 1fr; } .upcomingTabs { flex-wrap: wrap; } .upcomingHero > svg { display: none; } }
+
+
+/* Keep every hero illustration fully visible from top to bottom and anchored right. */
+@media (max-width: 1100px) {
+  .upcomingHero {
+    min-height: 400px;
+  }
+  .upcomingHero > div { width: min(54%, 680px); }
+}
+
+@media (max-width: 720px) {
+  .upcomingHero {
+    min-height: 360px;
+    padding: 28px;
+  }
+  .upcomingHero > div { width: 100%; }
+}
+
+
+/* =========================================================
+   JoeAnimeDB v5 — unified cinematic hero typography
+   Analytics-inspired title, eyebrow, lead, and stat language.
+   ========================================================= */
+
+:where(
+  .libraryArchiveHeroLive,
+  .favoritesHero,
+  .followingHero,
+  .upcomingHero,
+  .joeAIHero
+) {
+  border-radius: 28px;
+}
+
+:where(
+  .libraryArchiveLiveCopy,
+  .favoritesHeroCopy,
+  .followingHeroContent,
+  .upcomingHero > div,
+  .joeAIHeroCopy
+) {
+  text-shadow: none;
+}
+
+:where(
+  .libraryArchiveHeroLive .eyebrow,
+  .favoritesEyebrow,
+  .followingHero > .followingHeroContent > p:first-child,
+  .upcomingHero > div > p:first-child,
+  .joeAIEyebrow
+) {
+  margin: 0 0 12px;
+  font-size: .78rem;
+  font-weight: 900;
+  letter-spacing: .18em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  text-shadow: 0 0 18px color-mix(in srgb, var(--hero-unified-accent, var(--cyan)) 55%, transparent);
+}
+
+:where(
+  .libraryArchiveHeroLive h1,
+  .favoritesHero h1,
+  .followingHero h1,
+  .upcomingHero h1,
+  .joeAIHeroCopy > h2
+) {
+  margin: 0;
+  width: fit-content;
+  font-size: clamp(3rem, 7vw, 6.4rem);
+  line-height: .92;
+  letter-spacing: -.055em;
+  font-weight: 1000;
+  color: transparent !important;
+  background:
+    linear-gradient(
+      100deg,
+      var(--hero-unified-accent, var(--cyan)),
+      var(--hero-unified-accent-2, #aa72ff) 58%,
+      var(--hero-unified-hot, var(--pink))
+    ) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  filter: drop-shadow(
+    0 0 22px
+    color-mix(in srgb, var(--hero-unified-accent-2, #aa72ff) 42%, transparent)
+  ) !important;
+  text-shadow: none !important;
+}
+
+:where(
+  .libraryArchiveLiveTagline,
+  .favoritesLead,
+  .followingHeroContent > span,
+  .upcomingHero > div > p:not(:first-child),
+  .joeAIHeroBody
+) {
+  max-width: 610px;
+  margin-top: 22px;
+  color: rgba(242,248,255,.9);
+  font-size: clamp(1rem, 1.35vw, 1.28rem);
+  line-height: 1.65;
+  text-shadow:
+    0 3px 14px rgba(0,0,0,.82),
+    0 1px 2px rgba(0,0,0,.96);
+}
+
+:where(
+  .libraryArchiveLiveStats,
+  .favoritesStats,
+  .followingHeroStats,
+  .joeAIHeroStats
+) {
+  gap: 10px;
+}
+
+:where(
+  .libraryArchiveLiveStats > div,
+  .favoritesStats > div,
+  .followingHeroStats > div,
+  .joeAIHeroStats > div
+) {
+  min-height: 104px;
+  padding: 14px 12px;
+  border: 1px solid color-mix(in srgb, var(--hero-unified-accent, var(--cyan)) 24%, transparent);
+  border-radius: 16px;
+  background: rgba(4,8,14,.72);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
+}
+
+:where(
+  .libraryArchiveLiveStats span,
+  .favoritesStats span,
+  .followingHeroStats svg,
+  .joeAIHeroStats span
+) {
+  color: var(--hero-unified-accent, var(--cyan));
+  text-shadow: 0 0 14px currentColor;
+}
+
+:where(
+  .libraryArchiveLiveStats strong,
+  .favoritesStats strong,
+  .followingHeroStats strong,
+  .joeAIHeroStats strong
+) {
+  color: #fff;
+  font-size: 1.65rem;
+}
+
+:where(
+  .libraryArchiveLiveStats small,
+  .favoritesStats small,
+  .followingHeroStats small,
+  .joeAIHeroStats small
+) {
+  color: rgba(223,233,244,.65);
+  font-size: .72rem;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+@media (max-width: 760px) {
+  :where(
+    .libraryArchiveHeroLive h1,
+    .favoritesHero h1,
+    .followingHero h1,
+    .upcomingHero h1,
+    .joeAIHeroCopy > h2
+  ) {
+    font-size: clamp(2.7rem, 14vw, 4rem);
+  }
+}
+
+
+.upcomingHero {
+  --hero-unified-accent: var(--accent, var(--cyan));
+  --hero-unified-accent-2: #aa72ff;
+  --hero-unified-hot: var(--pink);
+}
+.upcomingHero > div {
+  width: min(760px, 52%);
+  max-width: 760px;
+  padding: clamp(30px, 4vw, 58px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.upcomingHero small {
+  margin-top: 18px;
+  font-size: .78rem;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  text-shadow: 0 2px 10px rgba(0,0,0,.9);
+}
+@media (max-width: 720px) {
+  .upcomingHero > div { width: 100%; }
+}
+
+/* =========================================================
+   JoeAnimeDB v5 — FINAL Analytics hero alignment
+   Uses the exact gradient method that works on Settings.
+   This block intentionally sits last to defeat older stacked
+   hero experiments without touching cards or page content.
+   ========================================================= */
+
+.theme-neon {
+  --cinematic-title-a: #35efff;
+  --cinematic-title-b: #aa72ff;
+  --cinematic-title-c: #ff5cc8;
+}
+.theme-sakura {
+  --cinematic-title-a: #ffd0e7;
+  --cinematic-title-b: #ff7fbd;
+  --cinematic-title-c: #ffb2d7;
+}
+.theme-vapor {
+  --cinematic-title-a: #60f4ff;
+  --cinematic-title-b: #b36cff;
+  --cinematic-title-c: #ff64d8;
+}
+.theme-ramen {
+  --cinematic-title-a: #ffe0a3;
+  --cinematic-title-b: #ffb23e;
+  --cinematic-title-c: #ff784d;
+}
+.theme-inferno {
+  --cinematic-title-a: #ffd166;
+  --cinematic-title-b: #ff8a2b;
+  --cinematic-title-c: #ff3d2e;
+}
+.theme-amoled {
+  --cinematic-title-a: #f6f7ff;
+  --cinematic-title-b: #aa72ff;
+  --cinematic-title-c: #7a4dff;
+}
+
+:where(.discoverHero, .followingHero, .upcomingHero) {
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  min-height: 0;
+  max-height: 620px;
+  overflow: hidden;
+  border-radius: 28px;
+}
+
+:where(.discoverEyebrow, .followingHeroContent > p:first-child, .upcomingHero > div > p:first-child) {
+  margin: 0 0 12px !important;
+  color: var(--cinematic-title-a) !important;
+  font-size: .78rem !important;
+  font-weight: 900 !important;
+  letter-spacing: .18em !important;
+  line-height: 1.2 !important;
+  text-transform: uppercase !important;
+  text-shadow: 0 0 18px color-mix(in srgb, var(--cinematic-title-a) 55%, transparent) !important;
+}
+
+:where(.discoverHero h1, .followingHero h1, .upcomingHero h1) {
+  display: inline-block !important;
+  width: fit-content !important;
+  margin: 0 !important;
+  font-size: clamp(3rem, 7vw, 6.4rem) !important;
+  line-height: .92 !important;
+  letter-spacing: -.055em !important;
+  font-weight: 1000 !important;
+  color: transparent !important;
+  background: linear-gradient(
+    100deg,
+    var(--cinematic-title-a),
+    var(--cinematic-title-b) 58%,
+    var(--cinematic-title-c)
+  ) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  filter: drop-shadow(
+    0 0 22px color-mix(in srgb, var(--cinematic-title-b) 42%, transparent)
+  ) !important;
+  text-shadow: none !important;
+}
+
+:where(.discoverHero h1, .followingHero h1) svg {
+  display: inline-block !important;
+  width: .78em !important;
+  height: .78em !important;
+  margin-right: 13px !important;
+  vertical-align: -.06em !important;
+  color: var(--cinematic-title-a) !important;
+  -webkit-text-fill-color: initial !important;
+  filter: drop-shadow(
+    0 0 18px color-mix(in srgb, var(--cinematic-title-a) 52%, transparent)
+  ) !important;
+}
+
+:where(.discoverHero p:not(.discoverEyebrow), .followingHeroContent > span, .upcomingHero > div > p:not(:first-child)) {
+  width: 100%;
+  max-width: 610px !important;
+  margin-top: 22px !important;
+  color: rgba(242,248,255,.9) !important;
+  font-size: clamp(1rem, 1.35vw, 1.28rem) !important;
+  line-height: 1.65 !important;
+  text-shadow:
+    0 3px 14px rgba(0,0,0,.82),
+    0 1px 2px rgba(0,0,0,.96) !important;
+}
+
+
+.upcomingHero {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  min-height: 0 !important;
+  max-height: 620px !important;
+  padding: 0 !important;
+}
+
+.upcomingHero::after {
+  display: none !important;
+  content: none !important;
+}
+
+.upcomingHero > div {
+  position: relative;
+  z-index: 2;
+  width: min(760px, 54%) !important;
+  max-width: 760px !important;
+  padding: clamp(30px, 4vw, 58px) !important;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  text-shadow: none !important;
+}
+
+.upcomingHero > svg {
+  position: relative;
+  z-index: 2;
+  margin-right: clamp(30px, 4vw, 58px);
+  color: var(--cinematic-title-a) !important;
+  filter: drop-shadow(0 0 18px currentColor) !important;
+  opacity: .72;
+}
+
+.upcomingHero small {
+  margin-top: 18px !important;
+  color: var(--cinematic-title-a) !important;
+  font-size: .78rem;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  text-shadow: 0 2px 10px rgba(0,0,0,.9);
+}
+
+@media (max-width: 760px) {
+  .upcomingHero {
+    aspect-ratio: auto;
+    min-height: 520px !important;
+    max-height: none !important;
+    align-items: flex-end !important;
+  }
+
+  .upcomingHero > div {
+    width: 100% !important;
+    max-width: none !important;
+    padding: 190px 24px 28px !important;
+  }
+
+  .upcomingHero > svg {
+    display: none !important;
+  }
+
+  .upcomingHero h1 {
+    font-size: clamp(2.7rem, 14vw, 4rem) !important;
+  }
+}

@@ -84,30 +84,60 @@ const PRESETS = {
   }
 };
 
-const GENRE_WEIGHTS = {
-  Action: { action: 7, violence: 3 },
-  Adventure: { adventure: 8, worldbuilding: 4 },
-  Comedy: { comedy: 8 },
-  Fantasy: { fantasy: 8, worldbuilding: 3 },
-  Horror: { horror: 9, darkness: 7, mystery: 3 },
-  Mystery: { mystery: 9, mindGames: 4 },
-  Supernatural: { supernatural: 8, mystery: 2 },
-  SciFi: { sciFi: 8, worldbuilding: 3 },
-  'Sci-Fi': { sciFi: 8, worldbuilding: 3 },
-  Psychological: { mindGames: 9, darkness: 5, mystery: 5 },
-  Thriller: { mystery: 6, darkness: 5, mindGames: 4 },
-  Drama: { emotion: 8 },
-  Romance: { romance: 8, emotion: 4 },
-  'Slice of Life': { sliceOfLife: 8, wholesome: 5 },
-  Sports: { sports: 9, strategy: 4 },
-  Music: { music: 9, emotion: 3 },
-  Military: { military: 8, politics: 5, strategy: 5 },
-  Mecha: { sciFi: 6, action: 5, military: 4 },
-  Gore: { violence: 9, horror: 5, darkness: 5, bodyHorror: 5 },
-  Seinen: { darkness: 3, politics: 2, violence: 2, adultCast: 2 },
-  Shounen: { action: 4, adventure: 4, powerFantasy: 4, foundFamily: 3 },
-  Isekai: { fantasy: 7, adventure: 5, powerFantasy: 5, worldbuilding: 4 }
-};
+const SIGNAL_RULES = [
+  // Broad genres
+  [/\baction\b|martial arts?|combat|battle|super power/, { action: 7, violence: 3, powerFantasy: 2 }],
+  [/\badventure\b|journey|exploration|travel/, { adventure: 8, worldbuilding: 4 }],
+  [/\bcomedy\b|parody|gag|humou?r/, { comedy: 8, weirdness: 1 }],
+  [/\bfantasy\b|fantasy world|magic|magical|swordplay|sorcer|witch|wizard/, { fantasy: 8, worldbuilding: 4, supernatural: 2 }],
+  [/\bhorror\b|gore|grotesque|monster horror|vampire|zombie/, { horror: 8, darkness: 7, violence: 4, bodyHorror: 3 }],
+  [/\bmystery\b|detective|investigation|crime mystery|secret/, { mystery: 9, mindGames: 4 }],
+  [/supernatural|demon|devil|ghost|spirit|youkai|curse/, { supernatural: 8, mystery: 3, darkness: 2 }],
+  [/sci[ -]?fi|science fiction|cyberpunk|space|robot|android|future/, { sciFi: 8, worldbuilding: 4 }],
+  [/psychological|mind game|manipulation|death game/, { mindGames: 9, darkness: 5, mystery: 5 }],
+  [/thriller|suspense|survival/, { mystery: 6, darkness: 5, mindGames: 4 }],
+  [/\bdrama\b|tragedy|coming of age/, { emotion: 8 }],
+  [/romance|love triangle|romantic/, { romance: 8, emotion: 4 }],
+  [/slice of life|school life|daily life|iyashikei/, { sliceOfLife: 8, wholesome: 5 }],
+  [/sports?|racing|boxing|football|basketball|volleyball/, { sports: 9, strategy: 4, action: 2 }],
+  [/music|band|idol|singing/, { music: 9, emotion: 3 }],
+
+  // Kitsu-style categories and descriptive signals
+  [/military|army|warfare|soldier|navy|air force/, { military: 8, politics: 5, strategy: 5, action: 2 }],
+  [/politic|government|royal|kingdom|empire|revolution|class conflict/, { politics: 8, strategy: 4, worldbuilding: 3 }],
+  [/mecha|giant robot/, { sciFi: 6, action: 5, military: 4 }],
+  [/isekai|another world|reincarnation|transported/, { fantasy: 7, adventure: 5, powerFantasy: 5, worldbuilding: 5 }],
+  [/plot continuity|long form|serialized|epic/, { worldbuilding: 6, adventure: 3, emotion: 2 }],
+  [/found family|friendship|nakama|guild|crew|teamwork/, { foundFamily: 8, ensembleCast: 4, emotion: 3 }],
+  [/ensemble cast|large cast|multiple protagonists/, { ensembleCast: 8, worldbuilding: 2 }],
+  [/adult cast|workplace|mature cast/, { adultCast: 8, sliceOfLife: 2 }],
+  [/crime|mafia|gang|criminal|heist|underworld/, { crime: 8, gritty: 5, moralGray: 4 }],
+  [/revenge|antihero|morally gray|moral ambiguity/, { moralGray: 7, darkness: 4, emotion: 3 }],
+  [/body horror|mutation|flesh|parasite/, { bodyHorror: 9, horror: 6, violence: 4 }],
+  [/punk|rebellion|counterculture/, { punkEnergy: 8, chaos: 4 }],
+  [/weird|bizarre|surreal|absurd|experimental/, { weirdness: 8, chaos: 4 }],
+  [/chaos|anarchy|madness/, { chaos: 8, weirdness: 3 }],
+  [/wholesome|healing|family friendly|feel good/, { wholesome: 8, emotion: 3 }],
+  [/strategy|tactical|mind battle|board game|gambling/, { strategy: 8, mindGames: 5 }],
+  [/overpowered|strongest|leveling|power progression|game world/, { powerFantasy: 8, action: 3, adventure: 2 }],
+  [/historical|samurai|feudal|edo|ancient|medieval/, { worldbuilding: 5, adventure: 3, politics: 2 }],
+  [/earth|asia|japan|europe|urban|city/, { worldbuilding: 2 }]
+];
+
+function weightsForSignal(signal = '') {
+  const normalized = norm(signal);
+  const weights = {};
+
+  for (const [pattern, ruleWeights] of SIGNAL_RULES) {
+    if (!pattern.test(normalized)) continue;
+
+    for (const [key, value] of Object.entries(ruleWeights)) {
+      weights[key] = Number(weights[key] || 0) + Number(value || 0);
+    }
+  }
+
+  return weights;
+}
 
 function emptyDna() {
   return Object.fromEntries(DNA_KEYS.map((key) => [key, 0]));
@@ -145,8 +175,11 @@ export function buildAnimeDNA(anime = {}) {
   const preset = titlePreset(anime);
   if (preset) addWeights(dna, preset, 1);
 
-  for (const genre of anime.genres || []) {
-    if (GENRE_WEIGHTS[genre]) addWeights(dna, GENRE_WEIGHTS[genre], preset ? 0.35 : 0.85);
+  for (const signal of anime.genres || []) {
+    const weights = weightsForSignal(signal);
+    if (Object.keys(weights).length) {
+      addWeights(dna, weights, preset ? 0.35 : 0.85);
+    }
   }
 
   const text = norm([anime.title, anime.officialTitle, anime.synopsis, anime.studio, ...(anime.genres || [])].join(' '));

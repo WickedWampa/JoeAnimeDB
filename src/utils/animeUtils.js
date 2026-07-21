@@ -1,3 +1,5 @@
+import { getAnimeStudios, getAnimeTasteSignals, productionSearchText } from './metadataAdapters';
+
 export function hasUserScore(anime = {}) {
   return anime.joeScore !== undefined && anime.joeScore !== null && anime.joeScore !== '';
 }
@@ -35,13 +37,14 @@ export function filterAnime(anime, query) {
     .filter((item) => {
       const haystack = [
         item.title,
-        item.studio,
+        productionSearchText(item),
         item.status,
         item.priority,
         item.confidence,
         item.type,
         item.year,
-        ...(item.genres || [])
+        ...getAnimeTasteSignals(item),
+        ...getAnimeStudios(item)
       ].join(' ').toLowerCase();
 
       return !terms.length || terms.every((term) => haystack.includes(term));

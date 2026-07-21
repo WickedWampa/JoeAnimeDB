@@ -1,3 +1,5 @@
+import { getAnimeStudios, getAnimeTasteSignals } from '../utils/metadataAdapters';
+
 const clean = (value = '') => String(value).trim();
 const lower = (value = '') => clean(value).toLowerCase();
 const scoreOf = (item = {}) => Number(item.joeScore ?? item.rating ?? item.finalScore ?? 0) || 0;
@@ -16,14 +18,11 @@ function values(item = {}, fields = []) {
 }
 
 function studiosOf(item = {}) {
-  return [...new Set([
-    ...values(item, ['studio']),
-    ...values(item, ['studios'])
-  ].flatMap((value) => value.split(/\s*\/\s*|\s*,\s*/)).map(clean).filter(Boolean))];
+  return getAnimeStudios(item);
 }
 
 function tagsOf(item = {}) {
-  return [...new Set(values(item, ['genres', 'themes', 'tags', 'demographics']))];
+  return getAnimeTasteSignals(item);
 }
 
 const TRAITS = [
@@ -233,7 +232,20 @@ export function buildDiscoverPlan({ library = [], candidates = [], daySeed = 0 }
   };
 
   const topStudio = profile.topStudios[0]?.[0];
-  const anchor = profile.anchors[0]?.item || null;
+
+  // Rotate deterministically through the user's strongest anchors so the
+  // "Because You Loved..." shelf changes each day without becoming random.
+  // Keep the pool small enough that every selected title is still a genuine
+  // high-confidence taste signal.
+  const anchorPool = profile.anchors
+    .slice(0, 6)
+    .map((entry) => entry.item)
+    .filter(Boolean);
+
+  const anchor = anchorPool.length
+    ? anchorPool[Math.abs(Number(daySeed || 0)) % anchorPool.length]
+    : null;
+
   const anchorTags = new Set(tagsOf(anchor || {}).map(lower));
 
   return {

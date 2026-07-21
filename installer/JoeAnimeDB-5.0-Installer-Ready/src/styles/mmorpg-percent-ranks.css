@@ -1,0 +1,156 @@
+/* MMORPG percent rank card styling
+   Top 10 = gold
+   11 through top 20% = epic purple
+   21-40% = rare blue
+   41-60% = teal
+   61-80% = green
+   81-100% = common gray
+*/
+
+.animeCard {
+  --rank-color: #35f26f;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--rank-color);
+  border-radius: 18px;
+  background: rgba(0, 0, 0, .35);
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,.035) inset,
+    0 18px 45px rgba(0,0,0,.40),
+    0 0 22px color-mix(in srgb, var(--rank-color) 42%, transparent);
+  transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+}
+
+.animeCard:hover {
+  transform: translateY(-3px);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--rank-color) 62%, transparent) inset,
+    0 24px 60px rgba(0,0,0,.52),
+    0 0 34px color-mix(in srgb, var(--rank-color) 58%, transparent);
+}
+
+.animeCard.rank-gold { --rank-color: #ffc400; }
+.animeCard.rank-purple { --rank-color: #d833ff; }
+.animeCard.rank-blue { --rank-color: #1597ff; }
+.animeCard.rank-teal { --rank-color: #00e6d8; }
+.animeCard.rank-green { --rank-color: #36ff62; }
+.animeCard.rank-common { --rank-color: #b9c2cc; }
+
+.rankRibbon {
+  position: absolute;
+  top: 0;
+  left: 12px;
+  z-index: 12;
+  min-width: 48px;
+  min-height: 50px;
+  padding: 6px 10px 10px;
+  display: grid;
+  place-items: center;
+  border-radius: 0 0 12px 12px;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 1000;
+  line-height: 1;
+  text-shadow: 0 2px 3px rgba(0,0,0,.72);
+  border: 1px solid color-mix(in srgb, var(--rank-color) 78%, white 12%);
+  background:
+    linear-gradient(145deg,
+      color-mix(in srgb, var(--rank-color) 92%, white 6%),
+      color-mix(in srgb, var(--rank-color) 56%, black 40%)
+    );
+  box-shadow:
+    0 10px 24px rgba(0,0,0,.42),
+    0 0 22px color-mix(in srgb, var(--rank-color) 72%, transparent);
+}
+
+.rankRibbon::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -10px;
+  width: 20px;
+  height: 20px;
+  transform: translateX(-50%) rotate(45deg);
+  background: color-mix(in srgb, var(--rank-color) 62%, black 34%);
+  border-right: 1px solid color-mix(in srgb, var(--rank-color) 70%, white 10%);
+  border-bottom: 1px solid color-mix(in srgb, var(--rank-color) 70%, white 10%);
+  z-index: -1;
+}
+
+.rankRibbon::before {
+  content: "♛";
+  display: block;
+  font-size: 13px;
+  line-height: 1;
+  opacity: .92;
+  margin-bottom: 4px;
+}
+
+.animeCard.rank-gold .rankRibbon {
+  color: #1b1200;
+  text-shadow: 0 1px 1px rgba(255,255,255,.45);
+}
+
+.animeCard.rank-gold .rankRibbon::before {
+  content: "♕";
+}
+
+.scoreBadge {
+  border-color: color-mix(in srgb, var(--rank-color) 48%, transparent);
+  box-shadow:
+    0 8px 20px rgba(0,0,0,.45),
+    0 0 16px color-mix(in srgb, var(--rank-color) 36%, transparent);
+}
+
+.cardInfo {
+  padding-bottom: 18px;
+}
+
+.cardInfo h3 {
+  text-shadow: 0 2px 8px rgba(0,0,0,.82);
+}
+
+.cardInfo p {
+  opacity: .95;
+  text-shadow: 0 2px 6px rgba(0,0,0,.80);
+}
+
+.metaPills,
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.metaPills span,
+.tags span {
+  border: 1px solid color-mix(in srgb, var(--rank-color) 64%, transparent);
+  background: rgba(0,0,0,.48);
+  color: rgba(255,255,255,.94);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--rank-color) 25%, transparent);
+}
+
+.animeCard.rank-gold .metaPills span,
+.animeCard.rank-gold .tags span {
+  color: #ffeaa0;
+}
+
+.animeCard.rank-purple .metaPills span,
+.animeCard.rank-purple .tags span {
+  color: #f2b7ff;
+}
+
+.animeCard.rank-blue .metaPills span,
+.animeCard.rank-blue .tags span {
+  color: #b9e5ff;
+}
+
+.animeCard.rank-teal .metaPills span,
+.animeCard.rank-teal .tags span {
+  color: #b6fff8;
+}
+
+.animeCard.rank-green .metaPills span,
+.animeCard.rank-green .tags span {
+  color: #c7ffd1;
+}

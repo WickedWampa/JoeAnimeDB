@@ -257,6 +257,25 @@ function predictionReadinessEvents(library = [], previousProfile = null, nextPro
 }
 
 export function buildMemoryJournal(library = [], previousProfile = null, nextProfile = null) {
+  if (!Array.isArray(library) || library.length === 0) {
+    return {
+      createdAt: nowIso(),
+      type: 'memory_onboarding',
+      icon: '🧠',
+      title: 'JoeAI is ready to learn',
+      summary: 'Add or import anime to begin building your Anime DNA and memory timeline.',
+      confidence: 0,
+      previousConfidence: previousProfile?.confidence || null,
+      nextConfidence: 0,
+      events: [],
+      completed: [],
+      watching: [],
+      favorites: [],
+      rewatched: [],
+      learned: []
+    };
+  }
+
   const events = [
     ...milestoneEvents(library, previousProfile, nextProfile),
     ...tasteShiftEvents(previousProfile, nextProfile),

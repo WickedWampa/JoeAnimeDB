@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Poster } from './Poster';
 import { score } from '../utils/animeUtils';
-import { fetchMetadata } from '../services/metadata';
+import { fetchKitsuMetadata } from '../services/kitsuProvider';
+import { enrichMissingMetadata } from '../services/wikidataRepair';
 import { mergeAnimeMetadata } from '../services/animeImporter';
 import '../styles/detail-metadata-repair.css';
 
@@ -33,7 +34,7 @@ function Stars({ value }) {
   );
 }
 
-export function DetailModal({ anime, onClose, updateAnime, updateCatalogAnime, deleteAnime }) {
+export function DetailModal({ anime, library = [], onClose, updateAnime, updateCatalogAnime, deleteAnime }) {
   const [repairingMetadata, setRepairingMetadata] = useState(false);
   const [metadataMessage, setMetadataMessage] = useState('');
   const [metadataMessageType, setMetadataMessageType] = useState('');
@@ -72,76 +73,191 @@ export function DetailModal({ anime, onClose, updateAnime, updateCatalogAnime, d
   async function repairMetadata() {
     if (!updateAnime || repairingMetadata) return;
 
-    const retryDelays = [0, 1200, 2600];
-    let lastError = null;
-
     setRepairingMetadata(true);
     setMetadataMessage('');
     setMetadataMessageType('');
-    setMetadataProgressText('Contacting Jikan…');
+    setMetadataProgressText('Checking Kitsu…');
 
     try {
-      for (let attempt = 0; attempt < retryDelays.length; attempt++) {
-        if (retryDelays[attempt]) {
-          setMetadataProgressText(`Jikan timed out. Retrying ${attempt + 1} of ${retryDelays.length - 1}…`);
-          await new Promise((resolve) => setTimeout(resolve, retryDelays[attempt]));
-        }
+      const repairRunId = `${Date.now()}-${String(anime.id || anime.title)}`;
+      const identity = (item) => ({
+        id: item?.id ?? null,
+        title: item?.title || '',
+        malId: item?.malId ?? item?.mal_id ?? null,
+        kitsuId: item?.kitsuId ?? item?.kitsu_id ?? null
+      });
+      console.group(`[Metadata Repair Debug][Modal][${repairRunId}] ${anime.title}`);
+      console.log('LIBRARY AT REPAIR START', {
+        count: Array.isArray(library) ? library.length : 0,
+        target: identity(anime),
+        recordsSharingProviderIds: (Array.isArray(library) ? library : []).filter((item) => {
+          if (String(item.id) === String(anime.id)) return false;
+          const sameMal = anime.malId != null && String(item.malId ?? item.mal_id ?? '') === String(anime.malId);
+          const sameKitsu = anime.kitsuId != null && String(item.kitsuId ?? item.kitsu_id ?? '') === String(anime.kitsuId);
+          return sameMal || sameKitsu;
+        }).map(identity)
+      });
 
-        try {
-          setMetadataProgressText(attempt === 0 ? 'Contacting Jikan…' : `Retrying metadata lookup (${attempt + 1}/${retryDelays.length})…`);
-          const fetched = await fetchMetadata(anime);
+      let refreshed = { ...anime };
+      let kitsuError = null;
 
-          const hasNewMetadata = Boolean(
-            fetched?.malId ||
-            fetched?.cover ||
-            fetched?.synopsis ||
-            fetched?.studio ||
-            fetched?.year ||
-            fetched?.episodeCount ||
-            fetched?.communityScore ||
-            (Array.isArray(fetched?.genres) && fetched.genres.length)
-          );
-
-          if (!hasNewMetadata) {
-            setMetadataMessage('No metadata match was found for this title.');
-            setMetadataMessageType('warning');
-            setMetadataProgressText('');
-            return;
-          }
-
-          setMetadataProgressText('Updating poster, synopsis, genres, and studio…');
-
-          const merged = mergeAnimeMetadata(anime, fetched, anime.status);
-          await updateAnime({
-            ...merged,
-            metadataNeedsRefresh: false,
-            syncStatus: {
-              ...(anime.syncStatus || {}),
-              metadata: true,
-              poster: Boolean(merged.cover),
-              dirty: false,
-              metadataError: '',
-              lastMetadataSync: new Date().toISOString()
-            }
-          });
-
-          setMetadataMessage('Metadata repaired successfully.');
-          setMetadataMessageType('success');
-          setMetadataProgressText('');
-          return;
-        } catch (error) {
-          lastError = error;
-          console.warn(`Single-title metadata repair attempt ${attempt + 1} failed:`, anime.title, error);
-        }
+      try {
+        const kitsu = await fetchKitsuMetadata(anime);
+        console.log('RAW KITSU RESULT IDENTITY', identity(kitsu));
+        refreshed = mergeAnimeMetadata(anime, kitsu, anime.status);
+        console.log('IDENTITY AFTER KITSU MERGE', {
+          original: identity(anime),
+          refreshed: identity(refreshed),
+          changed: JSON.stringify(identity(anime)) !== JSON.stringify(identity(refreshed))
+        });
+      } catch (error) {
+        kitsuError = error;
+        console.warn('Single-title Kitsu repair failed:', anime.title, error);
       }
 
-      const message = String(lastError?.message || '');
-      const isTimeout = /504|timeout|gateway/i.test(message);
+      setMetadataProgressText('Completing missing metadata with Wikidata…');
 
+      const wikiResult = await enrichMissingMetadata(
+        refreshed,
+        Array.isArray(library) && library.length ? library : [anime]
+      );
+
+      console.log('RAW WIKIDATA RESULT IDENTITY', identity(wikiResult?.item));
+
+      const completed = {
+        ...refreshed,
+        ...(wikiResult?.item || {}),
+        title: anime.title,
+        status: anime.status,
+        favorite: Boolean(anime.favorite),
+        rewatches: Number(anime.rewatches || 0),
+        notes: anime.notes || refreshed.notes || '',
+        metadataNeedsRefresh: Boolean(wikiResult?.unresolved),
+        syncStatus: {
+          ...(anime.syncStatus || {}),
+          ...(refreshed.syncStatus || {}),
+          metadata: true,
+          poster: Boolean((wikiResult?.item || refreshed).cover),
+          genres: Boolean((wikiResult?.item || refreshed).genres?.length),
+          studio: Boolean((wikiResult?.item || refreshed).studio),
+          dirty: Boolean(wikiResult?.unresolved),
+          metadataError: '',
+          metadataSource: wikiResult?.source || refreshed.metadataSource || 'kitsu',
+          lastMetadataSync: new Date().toISOString()
+        }
+      };
+
+      console.log('IDENTITY AFTER ALL PROVIDER MERGES', {
+        original: identity(anime),
+        refreshed: identity(refreshed),
+        completed: identity(completed),
+        changedFromOriginal: JSON.stringify(identity(anime)) !== JSON.stringify(identity(completed))
+      });
+
+      const improved = Boolean(
+        completed.cover !== anime.cover ||
+        completed.synopsis !== anime.synopsis ||
+        completed.studio !== anime.studio ||
+        completed.year !== anime.year ||
+        completed.episodeCount !== anime.episodeCount ||
+        JSON.stringify(completed.genres || []) !== JSON.stringify(anime.genres || [])
+      );
+
+      if (!improved && wikiResult?.unresolved && kitsuError) {
+        throw new Error(
+          `Kitsu: ${kitsuError?.message || kitsuError}; Wikidata could not complete the remaining fields.`
+        );
+      }
+
+      console.groupCollapsed(`[Single Repair Trace] ${anime.title}`);
+      console.log('ORIGINAL RECORD', {
+        id: anime.id,
+        title: anime.title,
+        studio: anime.studio || '',
+        studios: anime.studios || [],
+        productionStudios: anime.productionStudios || [],
+        genres: anime.genres || [],
+        metadataNeedsRefresh: anime.metadataNeedsRefresh,
+        syncStatus: anime.syncStatus
+      });
+      console.log('KITSU MERGED RESULT', {
+        studio: refreshed.studio || '',
+        studios: refreshed.studios || [],
+        productionStudios: refreshed.productionStudios || [],
+        genres: refreshed.genres || [],
+        metadataSource: refreshed.metadataSource,
+        syncStatus: refreshed.syncStatus
+      });
+      console.log('WIKIDATA RESULT', {
+        source: wikiResult?.source || '',
+        fields: wikiResult?.fields || [],
+        unresolved: Boolean(wikiResult?.unresolved),
+        item: wikiResult?.item || null
+      });
+      console.log('FINAL METADATA BEFORE SAVE', {
+        id: completed.id,
+        title: completed.title,
+        studio: completed.studio || '',
+        studios: completed.studios || [],
+        productionStudios: completed.productionStudios || [],
+        genres: completed.genres || [],
+        metadataNeedsRefresh: completed.metadataNeedsRefresh,
+        syncStatus: completed.syncStatus
+      });
+
+      setMetadataProgressText('Saving repaired metadata…');
+      console.log('CALLING updateAnime WITH', identity(completed), completed);
+      const savedDatabase = await updateAnime(completed);
+      console.log('RETURNED DATABASE SUMMARY', {
+        count: Array.isArray(savedDatabase?.anime) ? savedDatabase.anime.length : null,
+        targetMatchesById: (savedDatabase?.anime || []).filter((item) => String(item.id) === String(completed.id)).map(identity),
+        targetMatchesByMalId: completed.malId == null ? [] : (savedDatabase?.anime || []).filter((item) => String(item.malId ?? item.mal_id ?? '') === String(completed.malId)).map(identity)
+      });
+      const savedRecord = (savedDatabase?.anime || []).find((item) =>
+        String(item.id) === String(completed.id)
+      );
+
+      console.log('SAVED RECORD AFTER DATABASE ROUND-TRIP', {
+        id: savedRecord?.id || completed.id,
+        title: savedRecord?.title || completed.title,
+        studio: savedRecord?.studio || '',
+        studios: savedRecord?.studios || [],
+        productionStudios: savedRecord?.productionStudios || [],
+        genres: savedRecord?.genres || [],
+        metadataNeedsRefresh: savedRecord?.metadataNeedsRefresh,
+        syncStatus: savedRecord?.syncStatus
+      });
+      console.groupEnd();
+      console.groupEnd();
+
+      const finalRecord = savedRecord || completed;
+      const missingStudio = !String(finalRecord?.studio || '').trim();
+      const missingGenres = !Array.isArray(finalRecord?.genres) || !finalRecord.genres.length;
+      const remainingFields = [
+        missingStudio ? 'studio' : '',
+        missingGenres ? 'genres' : ''
+      ].filter(Boolean);
+
+      if (remainingFields.length) {
+        setMetadataMessage(
+          improved
+            ? `Metadata partially repaired — ${remainingFields.join(' and ')} still unresolved.`
+            : `No additional metadata was found — ${remainingFields.join(' and ')} still unresolved.`
+        );
+        setMetadataMessageType('warning');
+      } else {
+        setMetadataMessage('Metadata repaired successfully.');
+        setMetadataMessageType('success');
+      }
+
+      setMetadataProgressText('');
+    } catch (error) {
+      console.error('[Metadata Repair Debug] REPAIR FAILED', error);
+      console.groupEnd();
+      const message = String(error?.message || error || 'Unknown error');
+      console.warn('Single-title metadata repair failed:', anime.title, error);
       setMetadataMessage(
-        isTimeout
-          ? 'Jikan is temporarily unavailable or timed out. Your library is safe and nothing was changed. Please try again in a minute.'
-          : `Metadata repair failed${message ? `: ${message}` : '.'} Your library is safe and nothing was changed.`
+        `Metadata repair failed: ${message}. Your library is safe and nothing was changed.`
       );
       setMetadataMessageType('error');
       setMetadataProgressText('');

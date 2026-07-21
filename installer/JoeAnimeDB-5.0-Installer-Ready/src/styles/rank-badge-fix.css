@@ -1,0 +1,74 @@
+/* Rank badge + Not Rated polish */
+.animeCard {
+  position: relative;
+  overflow: hidden;
+}
+
+.rankRibbon {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  z-index: 8;
+  min-width: 40px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 0 12px;
+  background: #ffd447;
+  color: #071018;
+  font-weight: 1000;
+  font-size: 13px;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .35);
+}
+
+.scoreBadge {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 8;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: rgba(0, 0, 0, .62);
+  border: 1px solid rgba(255, 212, 71, .38);
+  color: #ffd447;
+  font-weight: 1000;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .35);
+}
+
+.scoreBadge.notRated {
+  color: rgba(234, 248, 255, .86);
+  border-color: rgba(234, 248, 255, .22);
+  font-size: 12px;
+}
+
+.cardInfo p {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.metaPills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 8px;
+}
+
+.metaPills span {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, .45);
+  border: 1px solid rgba(55, 234, 255, .20);
+  color: rgba(234, 248, 255, .92);
+  font-size: 12px;
+  font-weight: 800;
+}

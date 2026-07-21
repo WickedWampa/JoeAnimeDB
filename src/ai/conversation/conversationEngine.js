@@ -193,6 +193,17 @@ function answerMemorySearch(text, memory) {
   const lower = String(text || '').toLowerCase();
 
   if (/\b(what changed|recent|lately|timeline|memory feed|memories|learned)\b/i.test(lower)) {
+    const total = Number(profile.stats?.total || 0);
+    if (total === 0) {
+      return [
+        '🧠 JoeAI is ready to learn.',
+        '',
+        'Your Anime DNA and memory timeline are empty because there are no anime in your library yet.',
+        '',
+        'Add or import a few titles, then mark ratings, favorites, rewatches, and watch statuses. JoeAI will build a profile from this user’s own history—never from someone else’s library.'
+      ].join('\n');
+    }
+
     const events = (memory.eventFeed || memory.journalEntry?.events || memory.journal || []).slice(0, 8);
     if (!events.length) {
       return '🧠 JoeAI Memory is active, but I do not have many timeline events yet. Update your library or change a status and I will start recording more.';

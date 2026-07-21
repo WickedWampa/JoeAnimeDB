@@ -1,6 +1,7 @@
 import { maybeKnowledgeFirstRecommendation } from './knowledgeFirstRecommender';
 import { maybeGenomeIntentRecommendation } from './joeAIIntentEngine';
 import { ACTIVE_GENOME_REGISTRY, findGenomeCardFromRegistry, findGenomeCardByTitle } from './genome/genomeRegistry';
+import { getAnimeStudios, getAnimeTasteSignals, productionSearchText } from '../utils/metadataAdapters';
 
 function norm(value = '') {
   return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
@@ -66,14 +67,10 @@ function textBlob(item = {}) {
   return norm([
     item.title,
     item.officialTitle,
-    item.studio,
+    productionSearchText(item),
     item.synopsis,
     item.description,
-    ...(item.genres || []),
-    ...(item.themes || []),
-    ...(item.tags || []),
-    ...(item.viewerMotivations || []),
-    ...(item.fantasyPillars || [])
+    ...getAnimeTasteSignals(item)
   ].filter(Boolean).join(' '));
 }
 
@@ -160,7 +157,7 @@ function scoreMoodItem(item = {}, intent = {}, owned = false) {
   const blob = textBlob(item);
   let score = owned ? 8 : 0;
 
-  if (intent.studio && norm(item.studio).includes(norm(intent.studio))) score += 45;
+  if (intent.studio && getAnimeStudios(item).some((studio) => norm(studio).includes(norm(intent.studio)))) score += 45;
   if (intent.id === 'short') {
     const eps = Number(item.episodeCount || item.episodes || 0);
     if (eps > 0 && eps <= 13) score += 42;

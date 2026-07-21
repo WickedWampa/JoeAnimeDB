@@ -1,5 +1,6 @@
 import { generateAnimeDNA } from './animeDNA';
 import { getScore, normalizeText } from './statistics';
+import { getAnimeStudios, getAnimeTasteSignals } from '../utils/metadataAdapters';
 
 const SERIES_STOP_WORDS = new Set([
   'the', 'a', 'an', 'season', 'part', 'final', 'arc', 'episode', 'episodes',
@@ -125,7 +126,7 @@ function getEra(year) {
 
 function hasMetadata(item) {
   return Boolean(
-    item?.studio ||
+    getAnimeStudios(item).length ||
     item?.year ||
     item?.synopsis ||
     getEpisodes(item) ||
@@ -147,17 +148,23 @@ function getStrongTasteAnchors(library = []) {
     .slice(0, 18);
 }
 
-function overlapGenres(a = [], b = []) {
-  const bSet = new Set(asList(b).map(norm));
-  return asList(a).filter((genre) => bSet.has(norm(genre)));
+function overlapGenres(a = {}, b = {}) {
+  const bSet = new Set(getAnimeTasteSignals(b).map(norm));
+  return getAnimeTasteSignals(a).filter((genre) => bSet.has(norm(genre)));
+}
+
+function overlappingStudios(a = {}, b = {}) {
+  const bSet = new Set(getAnimeStudios(b).map(norm));
+  return getAnimeStudios(a).filter((studio) => bSet.has(norm(studio)));
 }
 
 function findClosestAnchor(candidate, anchors = []) {
   let best = null;
 
   for (const anchor of anchors) {
-    const sharedGenres = overlapGenres(anchor.genres, candidate.genres);
-    const sameStudio = norm(anchor.studio) && norm(anchor.studio) === norm(candidate.studio);
+    const sharedGenres = overlapGenres(anchor, candidate);
+    const sharedStudios = overlappingStudios(anchor, candidate);
+    const sameStudio = sharedStudios.length > 0;
     const episodeDistance = Math.abs(getEpisodes(anchor) - getEpisodes(candidate));
     const episodeFit = getEpisodes(anchor) && getEpisodes(candidate)
       ? Math.max(0, 1 - episodeDistance / Math.max(getEpisodes(anchor), getEpisodes(candidate)))
@@ -261,7 +268,7 @@ export function recommendAnime(library = [], catalog = [], options = {}) {
         debug.push('+20 pending metadata starter pick');
       }
 
-      for (const genre of asList(candidate.genres)) {
+      for (const genre of getAnimeTasteSignals(candidate)) {
         const genreStrength = strength(genreScores.get(norm(genre)), maxGenre);
         if (genreStrength > 0) {
           const points = genreStrength * 16;
@@ -271,12 +278,20 @@ export function recommendAnime(library = [], catalog = [], options = {}) {
         }
       }
 
-      const studioStrength = strength(studioScores.get(norm(candidate.studio)), maxStudio);
-      if (studioStrength > 0) {
-        const points = studioStrength * 14;
+      const matchedStudioRows = getAnimeStudios(candidate)
+        .map((studio) => ({
+          studio,
+          value: strength(studioScores.get(norm(studio)), maxStudio)
+        }))
+        .filter((entry) => entry.value > 0)
+        .sort((a, b) => b.value - a.value);
+
+      if (matchedStudioRows.length) {
+        const strongestStudio = matchedStudioRows[0];
+        const points = strongestStudio.value * 14;
         rawScore += points;
-        reasons.push(`${candidate.studio} connects to your studio history`);
-        debug.push(`+${points.toFixed(1)} studio signal`);
+        reasons.push(`${strongestStudio.studio} connects to your studio history`);
+        debug.push(`+${points.toFixed(1)} ${strongestStudio.studio} studio signal`);
       }
 
       const communityScore = getCommunityScore(candidate);
@@ -316,7 +331,8 @@ export function recommendAnime(library = [], catalog = [], options = {}) {
         if (closest.sharedGenres.length >= 2) {
           reasons.push(`shares ${closest.sharedGenres.slice(0, 2).join(' and ')} DNA with ${closest.anchor.title}`);
         } else if (closest.sameStudio) {
-          reasons.push(`connects to ${closest.anchor.title}, one of your strong ${closest.anchor.studio} picks`);
+          const anchorStudio = getAnimeStudios(closest.anchor)[0] || 'studio';
+          reasons.push(`connects to ${closest.anchor.title}, one of your strong ${anchorStudio} picks`);
         } else {
           reasons.push(`similar taste signal to ${closest.anchor.title} (${anchorScore})`);
         }

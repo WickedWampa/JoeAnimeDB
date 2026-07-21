@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import '../styles/joeai-home-v3.css';
 import '../styles/joeai-home-v3-guide.css';
 import { Poster } from '../components/Poster';
@@ -39,7 +39,6 @@ function MiniPoster({ anime, className = '' }) {
   return (
     <div className={`homeV3Poster ${className}`}>
       <Poster anime={anime} mode="thumb" />
-      <span>{initials(titleOf(anime))}</span>
     </div>
   );
 }
@@ -145,8 +144,56 @@ export function StatStrip({ stats, anime }) {
   );
 }
 
-export function Dashboard({ anime = [], stats = {}, setSelected, updateAnime, setView, onQuickAsk, onOpenFilter }) {
+export function Dashboard({
+  anime = [],
+  stats = {},
+  setSelected,
+  updateAnime,
+  setView,
+  onQuickAsk,
+  onOpenFilter,
+  displayName = 'Anime Fan',
+  isNewUser = false,
+  onSaveDisplayName
+}) {
   const [showJoeAIGuide, setShowJoeAIGuide] = useState(false);
+  const [showNameWelcome, setShowNameWelcome] = useState(false);
+  const [nameDraft, setNameDraft] = useState('');
+  const [savingName, setSavingName] = useState(false);
+
+  useEffect(() => {
+    if (isNewUser) setShowNameWelcome(true);
+  }, [isNewUser]);
+
+  async function saveWelcomeName(event) {
+    event?.preventDefault?.();
+    const cleanName = String(nameDraft || '').trim();
+    if (!cleanName || savingName) return;
+
+    setSavingName(true);
+    try {
+      await onSaveDisplayName?.(cleanName);
+      setShowNameWelcome(false);
+    } finally {
+      setSavingName(false);
+    }
+  }
+
+  function sendQuickAsk(prompt) {
+    const cleanPrompt = String(prompt || '').trim();
+    if (!cleanPrompt) return;
+
+    // Persist the prompt before navigating so JoeAI can consume it even when
+    // the parent view router does not currently pass onQuickAsk through.
+    try {
+      localStorage.setItem('joeanime-pending-joeai-prompt', cleanPrompt);
+    } catch (error) {
+      console.warn('Could not store JoeAI Quick Ask prompt:', error);
+    }
+
+    onQuickAsk?.(cleanPrompt);
+    setView?.('assistant');
+  }
   const completed = anime.filter((item) => normalizeStatus(item.status) === 'completed').length;
   const watching = anime.filter((item) => normalizeStatus(item.status) === 'watching');
   const rewatches = anime.reduce((sum, item) => sum + Number(item.rewatches || 0), 0);
@@ -175,6 +222,37 @@ export function Dashboard({ anime = [], stats = {}, setSelected, updateAnime, se
   const topStudio = studioRows[0]?.[0] || 'your favorite studios';
   const topStudioCount = studioRows[0]?.[1] || 0;
   const anchorCount = anchors.length || favorites.length;
+
+  const heroState =
+    completed === 0
+      ? {
+          eyebrow: 'Welcome,',
+          headline: "Let's build your Anime DNA.",
+          body: 'JoeAI learns from every anime you complete, rate, favorite, and rewatch. Add your first titles to unlock personalized recommendations.',
+          primaryLabel: '✨ Add Anime',
+          primaryAction: () => setView?.('library'),
+          secondaryLabel: '🤖 Meet JoeAI',
+          secondaryAction: () => setView?.('assistant')
+        }
+      : completed < 25
+        ? {
+            eyebrow: 'Welcome back,',
+            headline: 'Your Anime DNA is taking shape.',
+            body: 'JoeAI is beginning to recognize the genres, studios, and storytelling patterns that define your taste.',
+            primaryLabel: '🧠 Ask JoeAI',
+            primaryAction: () => setView?.('assistant'),
+            secondaryLabel: '📖 Open Library',
+            secondaryAction: () => setView?.('library')
+          }
+        : {
+            eyebrow: 'Welcome back,',
+            headline: 'JoeAI analyzed your library and found new recommendation patterns.',
+            body: '',
+            primaryLabel: '🧠 Ask JoeAI',
+            primaryAction: () => setView?.('assistant'),
+            secondaryLabel: '📖 Open Library',
+            secondaryAction: () => setView?.('library')
+          };
 
   const joeAIInsight = (() => {
     if (rewatches >= 10 && anchorCount >= 3) {
@@ -213,14 +291,17 @@ export function Dashboard({ anime = [], stats = {}, setSelected, updateAnime, se
           <span className="fx fx6" />
         </div>
         <div className="homeV3HeroCopy">
-          <p className="homeV3Eyebrow">Welcome back,</p>
-          <h1>Joe.</h1>
-          <p className="homeV3Lead">
-            JoeAI analyzed your library and found new recommendation patterns.
-          </p>
+          <p className="homeV3Eyebrow">{heroState.eyebrow}</p>
+          <h1>{displayName}.</h1>
+          <p className="homeV3Lead">{heroState.headline}</p>
+          {heroState.body && <p className="homeV3HeroBody">{heroState.body}</p>}
           <div className="homeV3HeroActions">
-            <button type="button" className="primary" onClick={() => setView?.('assistant')}>🧠 Ask JoeAI</button>
-            <button type="button" onClick={() => setView?.('library')}>📖 Open Library</button>
+            <button type="button" className="primary" onClick={heroState.primaryAction}>
+              {heroState.primaryLabel}
+            </button>
+            <button type="button" onClick={heroState.secondaryAction}>
+              {heroState.secondaryLabel}
+            </button>
           </div>
         </div>
 
@@ -293,10 +374,10 @@ export function Dashboard({ anime = [], stats = {}, setSelected, updateAnime, se
 
         <Panel className="homeV3QuickAsk" icon="⚡" title="Quick Ask" action="Open" onAction={() => setView?.('assistant')}>
           <div className="homeV3PromptList">
-            <PromptButton text="recommend something like Slime" onAsk={onQuickAsk} />
-            <PromptButton text="what should I watch next?" onAsk={onQuickAsk} />
-            <PromptButton text="why do I like Bleach?" onAsk={onQuickAsk} />
-            <PromptButton text="what changed recently?" onAsk={onQuickAsk} />
+            <PromptButton text="recommend something like Slime" onAsk={sendQuickAsk} />
+            <PromptButton text="what should I watch next?" onAsk={sendQuickAsk} />
+            <PromptButton text="why do I like Bleach?" onAsk={sendQuickAsk} />
+            <PromptButton text="what changed recently?" onAsk={sendQuickAsk} />
           </div>
         </Panel>
 
@@ -336,7 +417,7 @@ export function Dashboard({ anime = [], stats = {}, setSelected, updateAnime, se
           </div>
         </Panel>
 
-        <Panel className="homeV3Seed" icon="⭐" title="Tonight's Recommendation" action="Get Rec" onAction={() => onQuickAsk?.('what should I watch next?')}>
+        <Panel className="homeV3Seed" icon="⭐" title="Tonight's Recommendation" action="Get Rec" onAction={() => sendQuickAsk('what should I watch next?')}>
           {tonight ? (
             <div className="homeV3SeedCard homeV3FeaturedRecommendation">
               <MiniPoster anime={tonight} className="large" />
@@ -349,7 +430,7 @@ export function Dashboard({ anime = [], stats = {}, setSelected, updateAnime, se
                 <small>You loved the journey, the momentum, and the emotional payoff. This one should hit nearby notes.</small>
               </div>
               <div className="homeV3SeedActions">
-                <button type="button" onClick={() => onQuickAsk?.(`why did you recommend ${titleOf(tonight)}?`)}>Why this?</button>
+                <button type="button" onClick={() => sendQuickAsk(`why did you recommend ${titleOf(tonight)}?`)}>Why this?</button>
                 <button type="button" className="primary" onClick={() => setSelected?.(tonight)}>Open</button>
               </div>
             </div>
@@ -372,6 +453,32 @@ export function Dashboard({ anime = [], stats = {}, setSelected, updateAnime, se
           </div>
         </Panel>
       </section>
+
+      {showNameWelcome && (
+        <div className="homeV3WelcomeOverlay" role="dialog" aria-modal="true" aria-labelledby="welcome-name-title">
+          <form className="homeV3WelcomeCard" onSubmit={saveWelcomeName}>
+            <span className="homeV3WelcomeIcon">🧠</span>
+            <p className="homeV3WelcomeEyebrow">Welcome to JoeAnimeDB</p>
+            <h2 id="welcome-name-title">What should JoeAI call you?</h2>
+            <p>Your name personalizes the Home screen and JoeAI. You can change it later in Settings.</p>
+            <label htmlFor="joeanime-display-name">Display name</label>
+            <input
+              id="joeanime-display-name"
+              value={nameDraft}
+              onChange={(event) => setNameDraft(event.target.value)}
+              placeholder="Enter your name"
+              maxLength={32}
+              autoFocus
+            />
+            <div className="homeV3WelcomeActions">
+              <button type="button" onClick={() => setShowNameWelcome(false)}>Skip for now</button>
+              <button type="submit" className="primary" disabled={!nameDraft.trim() || savingName}>
+                {savingName ? 'Saving…' : 'Continue'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </section>
   );
 }

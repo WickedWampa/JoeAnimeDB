@@ -112,6 +112,60 @@ export function parseJoeAIIntent(input = '') {
   const lower = raw.toLowerCase();
   const status = normalizeStatus(raw);
 
+  // Broad taste questions must be analyzed as personal patterns before any
+  // title/recommendation lookup sees words such as "adventures" as a show name.
+  // Examples: "why do I like long adventures?", "why am I drawn to dark fantasy?"
+  const tastePatternPatterns = [
+    /^(?:please\s+)?why\s+do\s+i\s+like\s+(.+?)[?.!]*$/i,
+    /^(?:please\s+)?why\s+am\s+i\s+(?:drawn|attracted)\s+to\s+(.+?)[?.!]*$/i,
+    /^(?:please\s+)?explain\s+why\s+i\s+like\s+(.+?)[?.!]*$/i,
+    /^(?:please\s+)?what\s+makes\s+me\s+like\s+(.+?)[?.!]*$/i
+  ];
+
+  for (const pattern of tastePatternPatterns) {
+    const match = raw.match(pattern);
+    if (match?.[1]) {
+      return { kind: 'tastePattern', pattern: match[1].trim(), text: raw };
+    }
+  }
+
+  // Genre DNA explanations are explicit analysis requests, not recommendations.
+  // Keep the captured genre dynamic so this works for every user's genre list.
+  const genreDNAPatterns = [
+    /^(?:please\s+)?explain(?:\s+why)?\s+(.+?)\s+(?:is|appears|shows up)\s+(?:a\s+)?part\s+of\s+my\s+(?:anime\s+)?dna[?.!]*$/i,
+    /^why\s+is\s+(.+?)\s+(?:a\s+)?part\s+of\s+my\s+(?:anime\s+)?dna[?.!]*$/i,
+    /^(?:please\s+)?explain\s+my\s+(.+?)\s+(?:anime\s+)?dna[?.!]*$/i,
+    /^(?:please\s+)?explain\s+the\s+(.+?)\s+signal\s+in\s+my\s+(?:anime\s+)?dna[?.!]*$/i
+  ];
+
+  for (const pattern of genreDNAPatterns) {
+    const match = raw.match(pattern);
+    if (match?.[1]) {
+      return { kind: 'genreDNA', genre: match[1].trim(), text: raw };
+    }
+  }
+
+  // Recommendation explanations must be routed as reasoning questions before
+  // the broad recommendation matcher sees the word "recommend". This powers
+  // Pick of the Day's Why This? button and natural prompts such as
+  // "why did you recommend Frieren?" without generating a fresh pick list.
+  const recommendationExplanationPatterns = [
+    /^(?:please\s+)?(?:tell\s+me\s+)?why\s+(?:did|do|would)\s+you\s+(?:recommend|suggest)\s+(.+?)[?.!]*$/i,
+    /^(?:please\s+)?explain\s+why\s+you\s+(?:recommended|recommend|suggested|suggest)\s+(.+?)[?.!]*$/i,
+    /^(?:please\s+)?why\s+(?:this|that)\s+(?:pick|recommendation)[?.!]*$/i
+  ];
+
+  for (const pattern of recommendationExplanationPatterns) {
+    const match = raw.match(pattern);
+    if (!match) continue;
+
+    return {
+      kind: 'recommendationExplanation',
+      title: match[1]?.trim() || '',
+      text: raw
+    };
+  }
+
   const memoryPrompt =
     /\b(what do you know about me|analyze my taste|analyse my taste|taste profile|joeai memory|anime taste|my taste|taste memory|what have you learned about me|what have you learned|what did you learn|what changed recently|what surprised you most|daily thought|prediction accuracy|least certain|strongest signals|how has my taste changed|when did you learn|when did you realize)\b/i.test(raw);
 

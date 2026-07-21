@@ -740,3 +740,353 @@
 .libraryArchiveLiveStats > div:nth-child(2) span { text-shadow: 0 0 18px color-mix(in srgb, var(--library-stat-2, var(--pink)) 58%, transparent); }
 .libraryArchiveLiveStats > div:nth-child(3) span { text-shadow: 0 0 18px color-mix(in srgb, var(--library-stat-3, var(--cyan)) 58%, transparent); }
 .libraryArchiveLiveStats > div:nth-child(4) span { text-shadow: 0 0 18px color-mix(in srgb, var(--library-stat-4, var(--pink)) 58%, transparent); }
+
+/* =========================================================
+   v5 final Library cinematic hero
+   Full 16:9 room artwork, no gradient/blur overlay.
+   ========================================================= */
+
+.libraryArchiveHeroLive {
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  min-height: 0;
+  max-height: 620px;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  padding: 0;
+  background: #02050a;
+}
+
+.libraryArchiveLiveArt {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  background-image: var(--library-room, url('../assets/themes/library/library-room-neon.webp'));
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: cover;
+  filter: none;
+  transform: none;
+  opacity: 1;
+}
+
+/* Remove every legacy gradient, vignette, blur, and dark wash. */
+.libraryArchiveHeroLive::before,
+.libraryArchiveHeroLive::after {
+  display: none !important;
+  content: none !important;
+  background: none !important;
+  box-shadow: none !important;
+  filter: none !important;
+  backdrop-filter: none !important;
+}
+
+.libraryArchiveLiveCopy {
+  position: relative;
+  z-index: 2;
+  width: min(50%, 680px);
+  padding: clamp(28px, 3.2vw, 48px);
+  text-shadow:
+    0 4px 22px rgba(0, 0, 0, .92),
+    0 1px 4px rgba(0, 0, 0, 1);
+}
+
+.libraryArchiveLiveTagline {
+  text-shadow:
+    0 3px 16px rgba(0, 0, 0, .96),
+    0 1px 3px rgba(0, 0, 0, 1);
+}
+
+.libraryArchiveLiveStats {
+  margin-top: 28px;
+}
+
+.libraryArchiveLiveAdd {
+  z-index: 3;
+  right: 28px;
+  bottom: 28px;
+}
+
+/* Remove the old artwork-covering patch behind the button. */
+.libraryArchiveLiveAdd::before,
+.libraryArchiveHeroLive .libraryArchiveLiveAdd::before {
+  display: none !important;
+  content: none !important;
+}
+
+@media (max-width: 1180px) {
+  .libraryArchiveHeroLive {
+    max-height: 560px;
+  }
+
+  .libraryArchiveLiveCopy {
+    width: min(58%, 640px);
+  }
+}
+
+@media (max-width: 760px) {
+  .libraryArchiveHeroLive {
+    aspect-ratio: auto;
+    min-height: 520px;
+    max-height: none;
+    align-items: flex-end;
+  }
+
+  .libraryArchiveLiveArt {
+    background-position: center;
+  }
+
+  .libraryArchiveLiveCopy {
+    width: 100%;
+    padding: 190px 22px 28px;
+  }
+
+  .libraryArchiveLiveAdd {
+    right: 18px;
+    bottom: 18px;
+  }
+}
+
+
+/* v5 Library title readability fix */
+.libraryArchiveHeroLive h1 {
+  color: #f7fbff !important;
+  background: none !important;
+  background-clip: border-box !important;
+  -webkit-background-clip: border-box !important;
+  -webkit-text-fill-color: #f7fbff !important;
+  -webkit-text-stroke: 1px rgba(2, 6, 14, .72);
+  filter: none !important;
+  text-shadow:
+    0 2px 0 rgba(0, 0, 0, .92),
+    0 4px 12px rgba(0, 0, 0, .95),
+    0 0 24px color-mix(in srgb, var(--cyan) 34%, transparent);
+}
+
+.theme-sakura .libraryArchiveHeroLive h1 {
+  text-shadow:
+    0 2px 0 rgba(40, 4, 24, .92),
+    0 4px 12px rgba(25, 2, 16, .94),
+    0 0 24px rgba(255, 105, 190, .34);
+}
+
+.theme-vapor .libraryArchiveHeroLive h1 {
+  text-shadow:
+    0 2px 0 rgba(4, 2, 30, .94),
+    0 4px 12px rgba(2, 1, 20, .96),
+    0 0 26px rgba(183, 124, 255, .4);
+}
+
+.theme-ramen .libraryArchiveHeroLive h1,
+.theme-inferno .libraryArchiveHeroLive h1 {
+  text-shadow:
+    0 2px 0 rgba(35, 10, 0, .95),
+    0 4px 12px rgba(20, 4, 0, .96),
+    0 0 24px rgba(255, 145, 50, .38);
+}
+
+.theme-amoled .libraryArchiveHeroLive h1 {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  text-shadow:
+    0 2px 0 rgba(0, 0, 0, 1),
+    0 4px 14px rgba(0, 0, 0, 1),
+    0 0 22px rgba(184, 132, 255, .42);
+}
+
+
+/* =========================================================
+   JoeAnimeDB v5 — unified cinematic hero typography
+   Analytics-inspired title, eyebrow, lead, and stat language.
+   ========================================================= */
+
+:where(
+  .libraryArchiveHeroLive,
+  .favoritesHero,
+  .followingHero,
+  .upcomingHero,
+  .joeAIHero
+) {
+  border-radius: 28px;
+}
+
+:where(
+  .libraryArchiveLiveCopy,
+  .favoritesHeroCopy,
+  .followingHeroContent,
+  .upcomingHero > div,
+  .joeAIHeroCopy
+) {
+  text-shadow: none;
+}
+
+:where(
+  .libraryArchiveHeroLive .eyebrow,
+  .favoritesEyebrow,
+  .followingHero > .followingHeroContent > p:first-child,
+  .upcomingHero > div > p:first-child,
+  .joeAIEyebrow
+) {
+  margin: 0 0 12px;
+  font-size: .78rem;
+  font-weight: 900;
+  letter-spacing: .18em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  text-shadow: 0 0 18px color-mix(in srgb, var(--hero-unified-accent, var(--cyan)) 55%, transparent);
+}
+
+:where(
+  .libraryArchiveHeroLive h1,
+  .favoritesHero h1,
+  .followingHero h1,
+  .upcomingHero h1,
+  .joeAIHeroCopy > h2
+) {
+  margin: 0;
+  width: fit-content;
+  font-size: clamp(3rem, 7vw, 6.4rem);
+  line-height: .92;
+  letter-spacing: -.055em;
+  font-weight: 1000;
+  color: transparent !important;
+  background:
+    linear-gradient(
+      100deg,
+      var(--hero-unified-accent, var(--cyan)),
+      var(--hero-unified-accent-2, #aa72ff) 58%,
+      var(--hero-unified-hot, var(--pink))
+    ) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  filter: drop-shadow(
+    0 0 22px
+    color-mix(in srgb, var(--hero-unified-accent-2, #aa72ff) 42%, transparent)
+  ) !important;
+  text-shadow: none !important;
+}
+
+:where(
+  .libraryArchiveLiveTagline,
+  .favoritesLead,
+  .followingHeroContent > span,
+  .upcomingHero > div > p:not(:first-child),
+  .joeAIHeroBody
+) {
+  max-width: 610px;
+  margin-top: 22px;
+  color: rgba(242,248,255,.9);
+  font-size: clamp(1rem, 1.35vw, 1.28rem);
+  line-height: 1.65;
+  text-shadow:
+    0 3px 14px rgba(0,0,0,.82),
+    0 1px 2px rgba(0,0,0,.96);
+}
+
+:where(
+  .libraryArchiveLiveStats,
+  .favoritesStats,
+  .followingHeroStats,
+  .joeAIHeroStats
+) {
+  gap: 10px;
+}
+
+:where(
+  .libraryArchiveLiveStats > div,
+  .favoritesStats > div,
+  .followingHeroStats > div,
+  .joeAIHeroStats > div
+) {
+  min-height: 104px;
+  padding: 14px 12px;
+  border: 1px solid color-mix(in srgb, var(--hero-unified-accent, var(--cyan)) 24%, transparent);
+  border-radius: 16px;
+  background: rgba(4,8,14,.72);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
+}
+
+:where(
+  .libraryArchiveLiveStats span,
+  .favoritesStats span,
+  .followingHeroStats svg,
+  .joeAIHeroStats span
+) {
+  color: var(--hero-unified-accent, var(--cyan));
+  text-shadow: 0 0 14px currentColor;
+}
+
+:where(
+  .libraryArchiveLiveStats strong,
+  .favoritesStats strong,
+  .followingHeroStats strong,
+  .joeAIHeroStats strong
+) {
+  color: #fff;
+  font-size: 1.65rem;
+}
+
+:where(
+  .libraryArchiveLiveStats small,
+  .favoritesStats small,
+  .followingHeroStats small,
+  .joeAIHeroStats small
+) {
+  color: rgba(223,233,244,.65);
+  font-size: .72rem;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+@media (max-width: 760px) {
+  :where(
+    .libraryArchiveHeroLive h1,
+    .favoritesHero h1,
+    .followingHero h1,
+    .upcomingHero h1,
+    .joeAIHeroCopy > h2
+  ) {
+    font-size: clamp(2.7rem, 14vw, 4rem);
+  }
+}
+
+
+.libraryArchiveHeroLive {
+  --hero-unified-accent: var(--library-stat-1, var(--cyan));
+  --hero-unified-accent-2: var(--library-title-mid, #aa72ff);
+  --hero-unified-hot: var(--library-stat-2, var(--pink));
+}
+.libraryArchiveLiveCopy {
+  width: min(760px, 52%);
+  padding: clamp(30px, 4vw, 58px);
+}
+.libraryArchiveLiveStats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(105px, 1fr));
+  max-width: 690px;
+  margin-top: auto;
+}
+.libraryArchiveLiveStats > div {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  grid-template-columns: 1fr;
+  grid-template-areas:
+    "icon"
+    "value"
+    "label";
+  text-align: center;
+}
+@media (max-width: 760px) {
+  .libraryArchiveLiveCopy { width: 100%; }
+  .libraryArchiveLiveStats { grid-template-columns: repeat(2, minmax(0,1fr)); }
+}
+

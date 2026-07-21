@@ -1,0 +1,13 @@
+node_modules/ 
+dist/ 
+out/ 
+.vite/ 
+*.log 
+JoeAnime.db
+*.zip
+*.db
+# Electron builds
+dist-desktop/
+
+# Temporary genome files
+.tmp*

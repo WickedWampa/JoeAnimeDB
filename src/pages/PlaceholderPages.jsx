@@ -3,12 +3,21 @@ import '../styles/joeanime-splash.css';
 import joeAnimeSplashHero from '../assets/joeanime-splash-hero.png';
 import joeAIHologramBrain from '../assets/joeai-hologram-brain.png';
 import '../styles/joeai-command-center.css';
+import '../styles/settings-art.css';
 import { Poster } from '../components/Poster';
 import { AnimeCard } from '../components/AnimeCard';
 import { score, countBy } from '../utils/animeUtils';
-import { exportBackup, resetData } from '../services/storage';
+import {
+  exportBackup,
+  exportLibraryList,
+  exportRankedLibraryList,
+  exportLibraryCsv,
+  resetData
+} from '../services/storage';
 import { createAnimeBrain } from '../engine/animeBrain'; import { fetchMetadata } from '../services/metadata'; import { maybeKnowledgeFirstRecommendation } from '../ai/knowledgeFirstRecommender'; import { parseJoeAIIntent } from '../ai/intentParser'; import { executeJoeAICommand } from '../ai/commandExecutor'; import { routeJoeAIRecommendation } from '../ai/joeAIRecommendationRouter';
-import { buildTonightsWatch } from '../ai/tonightsWatch'; import { importAnimeByTitle, mergeAnimeMetadata } from '../services/animeImporter';
+import { buildTonightsWatch } from '../ai/tonightsWatch'; import { importAnimeByTitle, mergeAnimeMetadata, searchAnimeCandidates } from '../services/animeImporter';
+import { fetchWikidataRepair, needsWikidataRepair } from '../services/wikidataRepair';
+import { getAnimeStudios, getAnimeTasteSignals } from '../utils/metadataAdapters';
 
 export function Universe({ anime, setQuery, setView }) {
   const total = anime.length;
@@ -183,17 +192,58 @@ export function Assistant({ anime, catalog = [], updateAnime, initialPrompt = ''
   }, [log, pendingAction, expandedRecommendationIds]);
 
   useEffect(() => {
-    const prompt = String(initialPrompt || '').trim();
+    let storedPrompt = '';
+
+    try {
+      storedPrompt = String(
+        localStorage.getItem('joeanime-pending-joeai-prompt') || ''
+      ).trim();
+    } catch (error) {
+      console.warn('Could not read JoeAI Quick Ask prompt:', error);
+    }
+
+    const prompt = String(initialPrompt || storedPrompt || '').trim();
+
     if (!prompt) {
       lastAutoPromptRef.current = '';
       return;
     }
+
     if (lastAutoPromptRef.current === prompt) return;
 
     lastAutoPromptRef.current = prompt;
+
+    try {
+      localStorage.removeItem('joeanime-pending-joeai-prompt');
+    } catch (error) {
+      console.warn('Could not clear JoeAI Quick Ask prompt:', error);
+    }
+
     void ask(prompt);
     onPromptConsumed?.();
   }, [initialPrompt, onPromptConsumed]);
+
+  useEffect(() => {
+    function handlePendingPrompt(event) {
+      if (event.key !== 'joeanime-pending-joeai-prompt') return;
+
+      const prompt = String(event.newValue || '').trim();
+      if (!prompt || lastAutoPromptRef.current === prompt) return;
+
+      lastAutoPromptRef.current = prompt;
+
+      try {
+        localStorage.removeItem('joeanime-pending-joeai-prompt');
+      } catch (error) {
+        console.warn('Could not clear JoeAI Quick Ask prompt:', error);
+      }
+
+      void ask(prompt);
+    }
+
+    window.addEventListener('storage', handlePendingPrompt);
+    return () => window.removeEventListener('storage', handlePendingPrompt);
+  }, []);
 
   function animeId(item) {
     return String(item?.malId || item?.id || item?.title || '')
@@ -1524,7 +1574,9 @@ export function Analytics({ anime, setSelected, updateAnime }) {
   const [resultQuery, setResultQuery] = useState('');
   const [resultSort, setResultSort] = useState('score');
   const [resultLimit, setResultLimit] = useState(24);
+  const [coverageReview, setCoverageReview] = useState(null);
   const resultsRef = useRef(null);
+  const coverageReviewRef = useRef(null);
 
   function normalizedName(value) {
     if (value && typeof value === 'object') {
@@ -1608,8 +1660,16 @@ export function Analytics({ anime, setSelected, updateAnime }) {
     : '—';
   const topGenre = genres[0]?.[0] || 'Your taste';
   const topStudio = studios[0]?.[0] || 'Studios';
-  const missingStudioCount = anime.filter((item) => studiosFor(item).length === 0).length;
-  const missingGenreCount = anime.filter((item) => genresFor(item).length === 0).length;
+  const missingStudioTitles = useMemo(
+    () => anime.filter((item) => studiosFor(item).length === 0),
+    [anime]
+  );
+  const missingGenreTitles = useMemo(
+    () => anime.filter((item) => genresFor(item).length === 0),
+    [anime]
+  );
+  const missingStudioCount = missingStudioTitles.length;
+  const missingGenreCount = missingGenreTitles.length;
 
   const liveRankMap = useMemo(() => {
     const ranked = [...anime].sort((a, b) => {
@@ -1674,6 +1734,27 @@ export function Analytics({ anime, setSelected, updateAnime }) {
     setResultLimit(24);
   }
 
+  function openCoverageReview(type) {
+    const count = type === 'studio' ? missingStudioCount : missingGenreCount;
+    if (!count) return;
+
+    setCoverageReview((current) => current === type ? null : type);
+
+    requestAnimationFrame(() => {
+      coverageReviewRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start'
+      });
+    });
+  }
+
+  const coverageReviewItems =
+    coverageReview === 'studio'
+      ? missingStudioTitles
+      : coverageReview === 'genre'
+        ? missingGenreTitles
+        : [];
+
   return (
     <section className="analyticsLabPage">
       <section className="analyticsLabHero">
@@ -1705,8 +1786,73 @@ export function Analytics({ anime, setSelected, updateAnime }) {
       <section className="analyticsCoverageStrip">
         <div><strong>{studioIndex.length}</strong><span>Studios detected</span></div>
         <div><strong>{genreIndex.length}</strong><span>Genres detected</span></div>
-        <div className={missingStudioCount ? 'needsAttention' : ''}><strong>{missingStudioCount}</strong><span>Titles missing studio data</span></div>
-        <div className={missingGenreCount ? 'needsAttention' : ''}><strong>{missingGenreCount}</strong><span>Titles missing genre data</span></div>
+
+        <button
+          type="button"
+          className={`${missingStudioCount ? 'needsAttention' : ''} ${coverageReview === 'studio' ? 'isActive' : ''}`}
+          onClick={() => openCoverageReview('studio')}
+          disabled={!missingStudioCount}
+          aria-expanded={coverageReview === 'studio'}
+        >
+          <strong>{missingStudioCount}</strong>
+          <span>Titles missing studio data</span>
+          <small>{missingStudioCount ? 'View titles →' : 'Complete'}</small>
+        </button>
+
+        <button
+          type="button"
+          className={`${missingGenreCount ? 'needsAttention' : ''} ${coverageReview === 'genre' ? 'isActive' : ''}`}
+          onClick={() => openCoverageReview('genre')}
+          disabled={!missingGenreCount}
+          aria-expanded={coverageReview === 'genre'}
+        >
+          <strong>{missingGenreCount}</strong>
+          <span>Titles missing genre data</span>
+          <small>{missingGenreCount ? 'View titles →' : 'Complete'}</small>
+        </button>
+      </section>
+
+      <section
+        ref={coverageReviewRef}
+        className={`analyticsCoverageReview ${coverageReview ? 'isOpen' : ''}`}
+      >
+        {coverageReview ? (
+          <>
+            <header>
+              <div>
+                <p>Metadata Coverage Report</p>
+                <h2>{coverageReview === 'studio' ? 'Missing Studio Data' : 'Missing Genre Data'}</h2>
+                <span>{coverageReviewItems.length} title{coverageReviewItems.length === 1 ? '' : 's'} still need metadata.</span>
+              </div>
+              <button type="button" onClick={() => setCoverageReview(null)}>Close</button>
+            </header>
+
+            <div className="analyticsCoverageReviewList">
+              {coverageReviewItems.map((item, index) => (
+                <button
+                  type="button"
+                  key={item.id || item.title || index}
+                  onClick={() => setSelected?.(item)}
+                >
+                  <span>{String(index + 1).padStart(2, '0')}</span>
+                  <div>
+                    <strong>{item.officialTitle || item.title}</strong>
+                    <small>
+                      {[
+                        item.year || '',
+                        item.type || '',
+                        Number(item.episodeCount || item.episodes || 0)
+                          ? `${Number(item.episodeCount || item.episodes)} eps`
+                          : ''
+                      ].filter(Boolean).join(' · ') || 'No additional metadata'}
+                    </small>
+                  </div>
+                  <b>Open details →</b>
+                </button>
+              ))}
+            </div>
+          </>
+        ) : null}
       </section>
 
       <section className="analyticsLabGrid">
@@ -1871,24 +2017,6 @@ function BarPanel({ title, subtitle, data, icon, type, limit, setLimit, onSelect
   );
 }
 
-export function Timeline({ anime, setSelected }) {
-  const top = [...anime].sort((a, b) => Number(a.finalRank) - Number(b.finalRank)).slice(0, 18);
-  return (
-    <section className="panel">
-      <h2>Timeline</h2>
-      <div className="timelineCards">
-        {top.map((item) => (
-          <button className="timelineItem" key={item.id} onClick={() => setSelected(item)}>
-            <Poster anime={item} className="thumb" />
-            <strong>{item.title}</strong>
-            <span>#{item.finalRank}</span>
-          </button>
-        ))}
-      </div>
-    </section>
-  );
-}
-
 export function BleachShrine({ anime, setSelected }) {
   const bleach = anime.find((item) => item.title === 'Bleach');
   const tybw = anime.find((item) => item.title === 'Bleach TYBW');
@@ -1908,82 +2036,1091 @@ export function BleachShrine({ anime, setSelected }) {
 
 export function SettingsPage({
   data,
+  updateAnime,
   syncMetadata,
   stats,
-  newUserMode,
-  enableNewUserMode,
-  exitNewUserMode,
-  resetNewUserMode,
-  onOpenIntegrity
+  onOpenIntegrity,
+  onOpenMetadataHealth
 }) {
   const [genomeUpdateStatus, setGenomeUpdateStatus] = React.useState('');
+  const [metadataRepairStatus, setMetadataRepairStatus] = React.useState('');
+  const [metadataRepairProgress, setMetadataRepairProgress] = React.useState(null);
+  const [metadataRepairSummary, setMetadataRepairSummary] = React.useState(null);
+  const [libraryImportStatus, setLibraryImportStatus] = React.useState('');
+  const [libraryImportProgress, setLibraryImportProgress] = React.useState(null);
+  const [libraryImportSummary, setLibraryImportSummary] = React.useState(() => {
+    try {
+      const saved = localStorage.getItem('joeanime-library-import-review-v1');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+  const libraryImportInputRef = React.useRef(null);
+
+  function saveLibraryImportSummary(summary) {
+    setLibraryImportSummary(summary);
+
+    try {
+      if (summary?.failed?.length || summary?.added?.length || summary?.skipped?.length) {
+        localStorage.setItem(
+          'joeanime-library-import-review-v1',
+          JSON.stringify(summary)
+        );
+      } else {
+        localStorage.removeItem('joeanime-library-import-review-v1');
+      }
+    } catch (error) {
+      console.warn('Could not persist library import review.', error);
+    }
+  }
+
+  function clearLibraryImportReview() {
+    saveLibraryImportSummary(null);
+    setLibraryImportStatus('');
+
+    try {
+      localStorage.removeItem('joeanime-library-import-review-v1');
+    } catch (error) {
+      console.warn('Could not clear library import review.', error);
+    }
+  }
+
+  function parseCsvLine(line = '') {
+    const values = [];
+    let current = '';
+    let quoted = false;
+
+    for (let index = 0; index < line.length; index += 1) {
+      const character = line[index];
+
+      if (character === '"') {
+        if (quoted && line[index + 1] === '"') {
+          current += '"';
+          index += 1;
+        } else {
+          quoted = !quoted;
+        }
+      } else if (character === ',' && !quoted) {
+        values.push(current.trim());
+        current = '';
+      } else {
+        current += character;
+      }
+    }
+
+    values.push(current.trim());
+    return values;
+  }
+
+  const LIBRARY_IMPORT_TITLE_ALIASES = new Map([
+    ['re zero starting life in another world', 'Re:ZERO -Starting Life in Another World-'],
+    ['tsukimichi moonlit fantasy', 'TSUKIMICHI -Moonlit Fantasy-'],
+    ['solo leveling season 2 arise from the shadow', 'Solo Leveling Season 2: Arise from the Shadow'],
+    ['that time i got reincarnated as a slime the movie scarlet bond', 'That Time I Got Reincarnated as a Slime: The Movie - Scarlet Bond'],
+    ['demon slayer kimetsu no yaiba', 'Demon Slayer: Kimetsu no Yaiba']
+  ]);
+
+  function importTitleKey(value = '') {
+    return String(value || '')
+      .normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/&/g, ' and ')
+      .replace(/[’‘]/g, "'")
+      .replace(/[^a-z0-9]+/gi, ' ')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, ' ');
+  }
+
+  function normalizeLibraryImportTitle(value = '') {
+    const clean = String(value || '')
+      .replace(/[‐‑‒–—―]/g, '-')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    return LIBRARY_IMPORT_TITLE_ALIASES.get(importTitleKey(clean)) || clean;
+  }
+
+  function importedTitleMatchesLibraryItem(requestedTitle = '', item = {}) {
+    const wanted = importTitleKey(requestedTitle);
+    if (!wanted) return false;
+
+    const titles = [
+      item.title,
+      item.officialTitle,
+      item.englishTitle,
+      item.canonicalTitle,
+      ...(Array.isArray(item.titleSynonyms) ? item.titleSynonyms : [])
+    ]
+      .map(importTitleKey)
+      .filter(Boolean);
+
+    return titles.includes(wanted);
+  }
+
+  function normalizeImportedStatus(value = '') {
+    const normalized = String(value || '').trim().toLowerCase();
+
+    if (normalized.includes('complete') || normalized.includes('watched') || normalized.includes('finished')) {
+      return 'Completed';
+    }
+    if (normalized.includes('watching') || normalized.includes('current')) return 'Watching';
+    if (normalized.includes('hold')) return 'On Hold';
+    if (normalized.includes('drop')) return 'Dropped';
+    if (normalized.includes('plan')) return 'Plan to Watch';
+
+    return 'Completed';
+  }
+
+  function cleanImportedTitle(value = '') {
+    return String(value || '')
+      .replace(/^\uFEFF/, '')
+      .replace(/^\s*\d+\s*[.)-]\s*/, '')
+      .replace(/^\s*[-*•]\s*/, '')
+      .replace(/\s*\|\s*Score:.*$/i, '')
+      .trim();
+  }
+
+  function parseLibraryImport(text = '', filename = '') {
+    const raw = String(text || '').replace(/\r/g, '');
+    const isCsv =
+      String(filename || '').toLowerCase().endsWith('.csv') ||
+      /^\s*"?title"?\s*,/i.test(raw);
+
+    const rows = [];
+
+    if (isCsv) {
+      const lines = raw.split('\n').filter((line) => line.trim());
+      if (!lines.length) return rows;
+
+      const headers = parseCsvLine(lines[0]).map((header) =>
+        String(header || '').trim().toLowerCase()
+      );
+      const titleIndex = Math.max(0, headers.findIndex((header) => header === 'title'));
+      const statusIndex = headers.findIndex((header) => header === 'status');
+      const scoreIndex = headers.findIndex((header) => header === 'score');
+
+      lines.slice(1).forEach((line) => {
+        const columns = parseCsvLine(line);
+        const title = cleanImportedTitle(columns[titleIndex]);
+
+        if (!title) return;
+
+        rows.push({
+          title: normalizeLibraryImportTitle(title),
+          requestedTitle: title,
+          status: normalizeImportedStatus(
+            statusIndex >= 0 ? columns[statusIndex] : 'Completed'
+          ),
+          score:
+            scoreIndex >= 0 && Number.isFinite(Number(columns[scoreIndex]))
+              ? Number(columns[scoreIndex])
+              : undefined
+        });
+      });
+    } else {
+      raw.split('\n').forEach((line) => {
+        const trimmed = line.trim();
+
+        if (
+          !trimmed ||
+          /^JoeAnimeDB /i.test(trimmed) ||
+          /^Exported:/i.test(trimmed) ||
+          /^Total titles:/i.test(trimmed)
+        ) {
+          return;
+        }
+
+        const statusMatch = trimmed.match(/\|\s*Status:\s*([^|]+)\s*$/i);
+        const scoreMatch = trimmed.match(/\|\s*Score:\s*([^|]+)(?:\||$)/i);
+        const title = cleanImportedTitle(trimmed);
+
+        if (!title) return;
+
+        const parsedScore = Number(scoreMatch?.[1]);
+
+        rows.push({
+          title: normalizeLibraryImportTitle(title),
+          requestedTitle: title,
+          status: normalizeImportedStatus(statusMatch?.[1] || 'Completed'),
+          score: Number.isFinite(parsedScore) ? parsedScore : undefined
+        });
+      });
+    }
+
+    const seen = new Set();
+
+    return rows.filter((row) => {
+      const key = row.title.toLowerCase().replace(/[^a-z0-9]+/g, '');
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
+  async function importLibraryRows(rows = []) {
+    if (!rows.length || !updateAnime) return;
+
+    const confirmed = window.confirm(
+      `Import ${rows.length} title${rows.length === 1 ? '' : 's'} into JoeAnimeDB? Existing titles will be skipped.`
+    );
+
+    if (!confirmed) return;
+
+    setLibraryImportSummary(null);
+    setLibraryImportStatus(`Starting import of ${rows.length} titles...`);
+
+    let liveLibrary = [...(data?.anime || [])];
+    const added = [];
+    const addedIds = new Set();
+    const skipped = [];
+    const failed = [];
+
+    for (let index = 0; index < rows.length; index += 1) {
+      const row = rows[index];
+
+      setLibraryImportProgress({
+        processed: index + 1,
+        total: rows.length,
+        title: row.title
+      });
+      setLibraryImportStatus(
+        `Importing ${index + 1}/${rows.length}: ${row.title}`
+      );
+
+      try {
+        const result = await importAnimeByTitle({
+          title: row.requestedTitle || row.title,
+          normalizedTitle: row.title,
+          status: row.status || 'Completed',
+          library: liveLibrary
+        });
+
+        if (result.duplicate) {
+          const exactDuplicate = importedTitleMatchesLibraryItem(
+            row.requestedTitle || row.title,
+            result.duplicate
+          );
+
+          if (exactDuplicate) {
+            skipped.push({
+              requested: row.requestedTitle || row.title,
+              matched: result.duplicate.officialTitle || result.duplicate.title,
+              exact: true
+            });
+            continue;
+          }
+
+          const candidates = [
+            ...(result.results || []),
+            result.candidate
+          ].filter(Boolean);
+
+          failed.push({
+            title: row.requestedTitle || row.title,
+            normalizedTitle: row.title,
+            status: row.status || 'Completed',
+            score: row.score,
+            reason:
+              `Possible duplicate collision: importer matched this to “${result.duplicate.officialTitle || result.duplicate.title}”. Please confirm the correct season/title.`,
+            candidates
+          });
+          continue;
+        }
+
+        const candidate = result.candidate;
+        if (!candidate) {
+          failed.push({
+            title: row.requestedTitle || row.title,
+            normalizedTitle: row.title,
+            status: row.status || 'Completed',
+            score: row.score,
+            reason: 'No import candidate was returned.',
+            candidates: result.results || []
+          });
+          continue;
+        }
+
+        const next = {
+          ...candidate,
+          id: candidate.id,
+          title: candidate.title || row.title,
+          status: row.status || candidate.status || 'Completed',
+          joeScore:
+            row.score !== undefined
+              ? row.score
+              : candidate.joeScore,
+          favorite: Boolean(candidate.favorite),
+          rewatches: Number(candidate.rewatches || 0),
+          finalRank: liveLibrary.length + 1,
+          notes:
+            candidate.notes ||
+            'Imported from a shared JoeAnimeDB library list.'
+        };
+
+        const saved = await updateAnime(next);
+        liveLibrary = saved?.anime || [...liveLibrary, next];
+        added.push(next.title);
+        addedIds.add(String(next.id));
+      } catch (error) {
+        console.warn('Library list import failed:', row.title, error);
+
+        let candidates = [];
+
+        try {
+          candidates = await searchAnimeCandidates(row.title, { limit: 5 });
+        } catch (candidateError) {
+          console.warn('Could not load review candidates:', row.title, candidateError);
+        }
+
+        failed.push({
+          title: row.title,
+          status: row.status || 'Completed',
+          score: row.score,
+          reason: error?.message || String(error),
+          candidates
+        });
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 40));
+    }
+
+    // Run the exact same Wikidata repair used by the Workshop after every title
+    // has been saved. Waiting until the full library exists is important because
+    // local franchise inheritance can now use seasons imported later in the file.
+    const postImportTargets = liveLibrary.filter((item) =>
+      addedIds.has(String(item.id)) && needsWikidataRepair(item)
+    );
+
+    const autoRepaired = [];
+    const autoUnresolved = [];
+
+    for (let index = 0; index < postImportTargets.length; index += 1) {
+      const item = postImportTargets[index];
+      const displayTitle = item.officialTitle || item.title;
+
+      setLibraryImportProgress({
+        processed: index + 1,
+        total: postImportTargets.length,
+        title: displayTitle
+      });
+      setLibraryImportStatus(
+        `Final metadata pass ${index + 1}/${postImportTargets.length}: ${displayTitle}`
+      );
+
+      try {
+        const result = await fetchWikidataRepair(item, liveLibrary);
+        const patch = result.patch || {};
+        const repairedFields = [];
+
+        if (patch.studio || patch.productionStudios?.length) repairedFields.push('studio');
+        if (patch.genres?.length) repairedFields.push('genres');
+        if (patch.year) repairedFields.push('year');
+        if (patch.episodeCount || patch.episodes) repairedFields.push('episodes');
+
+        if (!repairedFields.length) {
+          autoUnresolved.push({
+            title: displayTitle,
+            reason: 'Matched metadata did not contain the remaining fields.'
+          });
+        } else {
+          const completed = {
+            ...item,
+            ...patch,
+            id: item.id,
+            title: item.title,
+            officialTitle: item.officialTitle || item.title,
+
+            // Never replace artwork or user-owned values during automatic repair.
+            cover: item.cover,
+            poster: item.poster,
+            image: item.image,
+            posterImage: item.posterImage,
+            coverImage: item.coverImage,
+            joeScore: item.joeScore,
+            score: item.score,
+            favorite: item.favorite,
+            rewatches: item.rewatches,
+            notes: item.notes,
+            status: item.status,
+
+            metadataNeedsReview: false,
+            metadataReviewReason: '',
+            metadataNeedsRefresh: false,
+            syncStatus: {
+              ...(item.syncStatus || {}),
+              dirty: false,
+              importerFinalRepair: true,
+              lastMetadataSync: new Date().toISOString()
+            }
+          };
+
+          const saved = await updateAnime(completed);
+          liveLibrary = saved?.anime || liveLibrary.map((row) =>
+            String(row.id) === String(completed.id) ? completed : row
+          );
+
+          autoRepaired.push({
+            title: displayTitle,
+            fields: repairedFields,
+            matchedTitle: result.matchedTitle,
+            confidence: result.confidence
+          });
+        }
+      } catch (error) {
+        autoUnresolved.push({
+          title: displayTitle,
+          reason: error?.message || String(error),
+          candidates: error?.candidates || []
+        });
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 180));
+    }
+
+    setLibraryImportProgress(null);
+    saveLibraryImportSummary({
+      added,
+      skipped,
+      failed,
+      autoRepaired,
+      autoUnresolved
+    });
+    setLibraryImportStatus(
+      `Import finished — ${added.length} added, ${autoRepaired.length} automatically completed, ${skipped.length} already present, ${failed.length} failed.`
+    );
+  }
+
+  async function importReviewedLibraryCandidate(failedItem, candidate) {
+    if (!candidate || !updateAnime) return;
+
+    setLibraryImportStatus(`Adding reviewed match: ${candidate.officialTitle || candidate.title}...`);
+
+    try {
+      const currentLibrary = data?.anime || [];
+      const existing = currentLibrary.find((item) => {
+        const left = String(item.officialTitle || item.title || '').toLowerCase();
+        const right = String(candidate.officialTitle || candidate.title || '').toLowerCase();
+        return left === right || (item.kitsuId && candidate.kitsuId && item.kitsuId === candidate.kitsuId);
+      });
+
+      if (existing) {
+        const nextSummary = {
+          ...libraryImportSummary,
+          failed: (libraryImportSummary?.failed || []).filter((item) => item.title !== failedItem.title),
+          skipped: [
+            ...(libraryImportSummary?.skipped || []),
+            { requested: failedItem.title, matched: existing.title }
+          ]
+        };
+        saveLibraryImportSummary(nextSummary);
+        setLibraryImportStatus(`${existing.title} is already in the library.`);
+        return;
+      }
+
+      const next = {
+        ...candidate,
+        id: candidate.id || candidate.kitsuId || `import-${Date.now()}`,
+        title: candidate.title || candidate.officialTitle || failedItem.title,
+        officialTitle: candidate.officialTitle || candidate.title || failedItem.title,
+        status: failedItem.status || 'Completed',
+        joeScore:
+          failedItem.score !== undefined
+            ? failedItem.score
+            : candidate.joeScore,
+        favorite: Boolean(candidate.favorite),
+        rewatches: Number(candidate.rewatches || 0),
+        finalRank: currentLibrary.length + 1,
+        notes: 'Imported after manual review from a shared JoeAnimeDB list.'
+      };
+
+      await updateAnime(next);
+
+      const nextSummary = {
+        ...libraryImportSummary,
+        added: [...(libraryImportSummary?.added || []), next.title],
+        failed: (libraryImportSummary?.failed || []).filter((item) => item.title !== failedItem.title)
+      };
+      saveLibraryImportSummary(nextSummary);
+
+      setLibraryImportStatus(`Added ${next.title} from Needs Review.`);
+    } catch (error) {
+      setLibraryImportStatus(
+        `Could not add reviewed title: ${error?.message || String(error)}`
+      );
+    }
+  }
+
+  async function copyFailedLibraryTitles() {
+    const failed = libraryImportSummary?.failed || [];
+    if (!failed.length) return;
+
+    const text = failed.map((item) => item.title).join('\\n');
+
+    try {
+      await navigator.clipboard.writeText(text);
+      setLibraryImportStatus(`Copied ${failed.length} failed title${failed.length === 1 ? '' : 's'} to the clipboard.`);
+    } catch {
+      setLibraryImportStatus('Could not copy failed titles to the clipboard.');
+    }
+  }
+
+  async function handleLibraryImportFile(event) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+
+    if (!file) return;
+
+    try {
+      setLibraryImportStatus(`Reading ${file.name}...`);
+      const text = await file.text();
+      const rows = parseLibraryImport(text, file.name);
+
+      if (!rows.length) {
+        setLibraryImportStatus(
+          'No anime titles were found. Use a JoeAnimeDB TXT or CSV export.'
+        );
+        return;
+      }
+
+      await importLibraryRows(rows);
+    } catch (error) {
+      setLibraryImportStatus(
+        `Could not import file: ${error?.message || String(error)}`
+      );
+    }
+  }
+
+  async function completeMissingMetadata() {
+    if (!updateAnime || metadataRepairProgress) return;
+
+    const targets = (data?.anime || []).filter(needsWikidataRepair);
+
+    if (!targets.length) {
+      setMetadataRepairStatus('Metadata health is complete for all supported fields.');
+      setMetadataRepairSummary({
+        scanned: 0,
+        repaired: [],
+        unresolved: [],
+        fields: {}
+      });
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Complete missing metadata for ${targets.length} title${targets.length === 1 ? '' : 's'}?\n\nExisting metadata and all Kitsu artwork will be preserved.`
+    );
+
+    if (!confirmed) return;
+
+    const beforeMissingStudio = targets.filter(
+      (item) => getAnimeStudios(item).length === 0
+    ).length;
+    const beforeMissingGenre = targets.filter(
+      (item) => getAnimeTasteSignals(item).length === 0
+    ).length;
+
+    const repaired = [];
+    const unresolved = [];
+    const fieldTotals = {
+      studio: 0,
+      genres: 0,
+      year: 0,
+      episodes: 0
+    };
+
+    setMetadataRepairSummary(null);
+    setMetadataRepairStatus(`Scanning ${targets.length} titles for missing metadata...`);
+
+    for (let index = 0; index < targets.length; index += 1) {
+      const item = targets[index];
+
+      setMetadataRepairProgress({
+        processed: index + 1,
+        total: targets.length,
+        title: item.officialTitle || item.title
+      });
+
+      setMetadataRepairStatus(
+        `Metadata repair ${index + 1}/${targets.length}: ${item.officialTitle || item.title}`
+      );
+
+      try {
+        const result = await fetchWikidataRepair(item, animeRows);
+        const patch = result.patch || {};
+
+        const repairedFields = [];
+        if (patch.studio || patch.productionStudios?.length) repairedFields.push('studio');
+        if (patch.genres?.length) repairedFields.push('genres');
+        if (patch.year) repairedFields.push('year');
+        if (patch.episodeCount || patch.episodes) repairedFields.push('episodes');
+
+        if (!repairedFields.length) {
+          unresolved.push({
+            title: item.officialTitle || item.title,
+            reason: 'A confident title match was found, but Wikidata did not contain the missing fields.'
+          });
+        } else {
+          repairedFields.forEach((field) => {
+            fieldTotals[field] += 1;
+          });
+
+          await updateAnime({
+            ...item,
+            ...patch,
+            id: item.id,
+            title: item.title,
+            officialTitle: item.officialTitle || item.title,
+
+            // Artwork is always retained from the existing Kitsu/local record.
+            cover: item.cover,
+            poster: item.poster,
+            image: item.image,
+            posterImage: item.posterImage,
+            coverImage: item.coverImage,
+
+            syncStatus: {
+              ...(item.syncStatus || {}),
+              dirty: false,
+              wikidataManualRepair: true,
+              lastMetadataSync: new Date().toISOString()
+            }
+          });
+
+          repaired.push({
+            title: item.officialTitle || item.title,
+            matchedTitle: result.matchedTitle,
+            matchedQuery: result.matchedQuery,
+            confidence: result.confidence,
+            source: result.patch?.metadataRepairSource || 'wikidata-smart-resolver',
+            fields: repairedFields
+          });
+        }
+      } catch (error) {
+        unresolved.push({
+          title: item.officialTitle || item.title,
+          reason: error?.message || String(error),
+          candidates: error?.candidates || []
+        });
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 180));
+    }
+
+    setMetadataRepairProgress(null);
+    setMetadataRepairSummary({
+      scanned: targets.length,
+      repaired,
+      unresolved,
+      fields: fieldTotals,
+      beforeMissingStudio,
+      beforeMissingGenre
+    });
+
+    setMetadataRepairStatus(
+      `Metadata repair finished — ${repaired.length} titles improved and ${unresolved.length} still need review.`
+    );
+  }
 
   async function updateDatabaseWithGenomes() {
-    setGenomeUpdateStatus('Updating database metadata...');
+    setGenomeUpdateStatus('Updating metadata, recommendation catalog, and Genome coverage...');
 
     try {
       await syncMetadata?.();
-
-      if (window.JoeAnimeDB?.generateMissingGenomesForLibrary) {
-        setGenomeUpdateStatus('Generating missing Genome cards...');
-
-        const result = await window.JoeAnimeDB.generateMissingGenomesForLibrary(data?.anime || data || [], {
-          limit: 0
-        });
-
-        if (result?.ok) {
-          setGenomeUpdateStatus('Database updated and missing Genome cards generated. Restart/refresh if new cards do not appear immediately.');
-        } else {
-          setGenomeUpdateStatus('Database updated, but Genome generation failed: ' + (result?.error || 'Unknown error'));
-        }
-      } else {
-        setGenomeUpdateStatus('Database updated. Genome bridge is not available yet.');
-      }
+      setGenomeUpdateStatus('Database update finished.');
     } catch (error) {
       setGenomeUpdateStatus('Update failed: ' + (error?.message || String(error)));
     }
   }
 
+  const animeRows = Array.isArray(data?.anime) ? data.anime : [];
+  const animeCount = animeRows.length;
+  const missingStudioCount = animeRows.filter(
+    (item) => getAnimeStudios(item).length === 0
+  ).length;
+  const missingGenreCount = animeRows.filter(
+    (item) => getAnimeTasteSignals(item).length === 0
+  ).length;
+  const metadataRepairCount = animeRows.filter(needsWikidataRepair).length;
+  const metadataHealthyCount = Math.max(0, animeCount - metadataRepairCount);
+  const metadataHealthPercent = animeCount
+    ? Math.round((metadataHealthyCount / animeCount) * 100)
+    : 100;
+
   return (
-    <section className="panel">
-      <h2>Settings</h2>
-      <p>Backups, metadata sync, and database tools.</p>
-
-      <section className="newUserModePanel">
-        <div>
-          <p className="eyebrow">Onboarding / Testing</p>
-          <h2>🧪 New User Mode</h2>
-          <p>Try imports, JoeAI commands, bulk add, and recommendations without touching your real SQLite database.</p>
-          <strong>Status: {newUserMode ? 'ON — temporary library active' : 'OFF — real library active'}</strong>
-        </div>
-
-        <div className="newUserModeActions">
-          {!newUserMode ? (
-            <button type="button" onClick={enableNewUserMode}>Enter New User Mode</button>
-          ) : (
-            <>
-              <button type="button" onClick={resetNewUserMode}>Reset Demo Library</button>
-              <button type="button" onClick={exitNewUserMode}>Exit To Real Library</button>
-            </>
-          )}
-        </div>
-      </section>
-
-      <section className="settingsIntegrityCard">
-        <div>
-          <p className="eyebrow">JoeAI Library Maintenance</p>
-          <h2>🛠 Library Integrity</h2>
-          <p>Scan for duplicate seasons and incomplete metadata, then safely merge or repair affected titles.</p>
-        </div>
-        <button type="button" onClick={onOpenIntegrity}>Open Integrity Scan</button>
-      </section>
-
-      {genomeUpdateStatus && <p className="settingsStatus">{genomeUpdateStatus}</p>}
-      <div className="settingsActions">
-        <button onClick={() => exportBackup(data)}>Export Backup</button>
-        <button onClick={updateDatabaseWithGenomes}>Update Database + Genomes</button>
-        <button onClick={resetData}>Reset Local Data</button>
+    <section className="panel settingsPage">
+      <div className="settingsPageHeader">
+        <p className="settingsWorkshopEyebrow">JoeAnimeDB Control Center</p>
+        <h2>Workshop</h2>
+        <p>Export, repair, and maintain your anime library from one place.</p>
       </div>
+
+      <section className="settingsWorkshopSummary" aria-label="Workshop summary">
+        <div>
+          <strong>{animeCount}</strong>
+          <span>Library Titles</span>
+        </div>
+        <div>
+          <strong>{stats?.catalogTotal ?? data?.catalog?.length ?? 0}</strong>
+          <span>Catalog Titles</span>
+        </div>
+        <div>
+          <strong>{stats?.databaseEngine || data?.engine || 'Local'}</strong>
+          <span>Database Engine</span>
+        </div>
+      </section>
+
+      {genomeUpdateStatus && (
+        <p className="settingsStatus">{genomeUpdateStatus}</p>
+      )}
+
+      {metadataRepairStatus && (
+        <p className="settingsStatus settingsMetadataRepairStatus">
+          {metadataRepairStatus}
+        </p>
+      )}
+
+      {libraryImportSummary?.failed?.length ? (
+        <section className="settingsImportReviewBanner">
+          <div>
+            <strong>{libraryImportSummary.failed.length}</strong>
+            <span>titles still need review from the last import</span>
+          </div>
+          <a href="#library-import-needs-review">Review them now</a>
+        </section>
+      ) : null}
+
+      <div className="settingsWorkshopGrid">
+        <section className="settingsWorkshopCard library">
+          <header>
+            <span className="settingsWorkshopIcon">📚</span>
+            <div>
+              <p>Share &amp; Move</p>
+              <h2>Library</h2>
+            </div>
+          </header>
+
+          <p className="settingsWorkshopDescription">
+            Back up the full database or export clean lists that are easy to share.
+          </p>
+
+          <div className="settingsWorkshopActions">
+            <button type="button" onClick={() => exportBackup(data)}>
+              <span>📦</span>
+              <strong>Export Full Backup</strong>
+              <small>Complete JoeAnimeDB JSON backup</small>
+            </button>
+
+            <button type="button" onClick={() => exportLibraryList(data)}>
+              <span>📄</span>
+              <strong>Export Library List</strong>
+              <small>Alphabetical plain-text title list</small>
+            </button>
+
+            <button type="button" onClick={() => exportRankedLibraryList(data)}>
+              <span>⭐</span>
+              <strong>Export Ranked List</strong>
+              <small>Titles with score and watch status</small>
+            </button>
+
+            <button type="button" onClick={() => exportLibraryCsv(data)}>
+              <span>📊</span>
+              <strong>Export CSV</strong>
+              <small>Spreadsheet-ready library data</small>
+            </button>
+
+            <input
+              ref={libraryImportInputRef}
+              className="settingsImportInput"
+              type="file"
+              accept=".txt,.csv,text/plain,text/csv"
+              onChange={handleLibraryImportFile}
+            />
+
+            <button
+              type="button"
+              onClick={() => libraryImportInputRef.current?.click()}
+              disabled={!updateAnime || Boolean(libraryImportProgress)}
+            >
+              <span>📥</span>
+              <strong>
+                {libraryImportProgress
+                  ? `Importing ${libraryImportProgress.processed}/${libraryImportProgress.total}`
+                  : 'Import Library List'}
+              </strong>
+              <small>
+                {libraryImportProgress?.title || 'Load a JoeAnimeDB TXT or CSV export'}
+              </small>
+            </button>
+          </div>
+        </section>
+
+        <section className="settingsWorkshopCard database">
+          <header>
+            <span className="settingsWorkshopIcon">🧬</span>
+            <div>
+              <p>Repair &amp; Refresh</p>
+              <h2>Database</h2>
+            </div>
+          </header>
+
+          <section className="settingsMetadataHealth">
+            <div className="settingsMetadataHealthTop">
+              <div>
+                <p>Metadata Health</p>
+                <strong>{metadataHealthPercent}%</strong>
+              </div>
+              <span>{metadataRepairCount} repair{metadataRepairCount === 1 ? '' : 's'} remaining</span>
+            </div>
+            <div className="settingsMetadataHealthTrack">
+              <i style={{ width: `${metadataHealthPercent}%` }} />
+            </div>
+            <div className="settingsMetadataHealthFacts">
+              <span><strong>{missingStudioCount}</strong> missing studio</span>
+              <span><strong>{missingGenreCount}</strong> missing genre</span>
+              <span><strong>{metadataHealthyCount}</strong> healthy titles</span>
+            </div>
+          </section>
+
+          <p className="settingsWorkshopDescription">
+            Refresh metadata, rebuild Genome coverage, and inspect unresolved records.
+          </p>
+
+          <div className="settingsWorkshopActions">
+            <button type="button" onClick={updateDatabaseWithGenomes}>
+              <span>🔄</span>
+              <strong>Update Database + Genomes</strong>
+              <small>Refresh Kitsu metadata and rebuild local intelligence</small>
+              <b className="settingsActionBadge">Kitsu</b>
+            </button>
+
+            <button type="button" onClick={onOpenIntegrity}>
+              <span>🛠</span>
+              <strong>Open Integrity Scan</strong>
+              <small>Find duplicates and incomplete records</small>
+            </button>
+
+            <button
+              type="button"
+              onClick={completeMissingMetadata}
+              disabled={!updateAnime || Boolean(metadataRepairProgress) || !metadataRepairCount}
+            >
+              <span>✨</span>
+              <strong>
+                {metadataRepairProgress
+                  ? `Repairing ${metadataRepairProgress.processed}/${metadataRepairProgress.total}`
+                  : 'Complete Missing Metadata'}
+              </strong>
+              <small>
+                {metadataRepairProgress?.title || 'Smart title resolver → Wikidata → unresolved report'}
+              </small>
+              <b className="settingsActionBadge warning">
+                {metadataRepairCount ? `${metadataRepairCount} remaining` : 'Complete'}
+              </b>
+            </button>
+
+            <button type="button" onClick={onOpenMetadataHealth}>
+              <span>📋</span>
+              <strong>Metadata Health Report</strong>
+              <small>Review every title still missing studio or genre data</small>
+              <b className="settingsActionBadge">
+                {missingStudioCount + missingGenreCount} flags
+              </b>
+            </button>
+          </div>
+        </section>
+
+        <section className="settingsWorkshopCard system">
+          <header>
+            <span className="settingsWorkshopIcon">⚙️</span>
+            <div>
+              <p>Application</p>
+              <h2>System</h2>
+            </div>
+          </header>
+
+          <p className="settingsWorkshopDescription">
+            Application-level tools and destructive maintenance controls.
+          </p>
+
+          <div className="settingsWorkshopActions">
+            <button type="button" disabled title="Open Data Folder is coming soon">
+              <span>🗂</span>
+              <strong>Open Data Folder</strong>
+              <small>Coming soon</small>
+            </button>
+
+            <button type="button" disabled title="View Logs is coming soon">
+              <span>📋</span>
+              <strong>View Logs</strong>
+              <small>Coming soon</small>
+            </button>
+
+            <button
+              type="button"
+              className="danger"
+              onClick={() => {
+                const confirmed = window.confirm(
+                  'Reset all local JoeAnimeDB data? This cannot be undone unless you exported a backup.'
+                );
+
+                if (confirmed) resetData();
+              }}
+            >
+              <span>🗑</span>
+              <strong>Reset Local Data</strong>
+              <small>Delete local profile and library data</small>
+            </button>
+          </div>
+        </section>
+      </div>
+
+      {libraryImportStatus ? (
+        <p className="settingsStatus settingsImportStatus">
+          {libraryImportStatus}
+        </p>
+      ) : null}
+
+      {libraryImportSummary ? (
+        <section className="settingsImportSummary">
+          <div>
+            <strong>{libraryImportSummary.added.length}</strong>
+            <span>Added</span>
+          </div>
+          <div>
+            <strong>{libraryImportSummary.skipped.length}</strong>
+            <span>Already Present</span>
+          </div>
+          <div>
+            <strong>{libraryImportSummary.failed.length}</strong>
+            <span>Failed</span>
+          </div>
+
+          {libraryImportSummary.skipped.length ? (
+            <details className="settingsImportSkipped">
+              <summary>
+                Show {libraryImportSummary.skipped.length} already-present title{libraryImportSummary.skipped.length === 1 ? '' : 's'}
+              </summary>
+              <div>
+                {libraryImportSummary.skipped.map((item, index) => (
+                  <p key={`${item.requested}-${index}`}>
+                    <strong>{item.requested}</strong>
+                    <span>matched existing:</span>
+                    <b>{item.matched}</b>
+                  </p>
+                ))}
+              </div>
+            </details>
+          ) : null}
+
+          {libraryImportSummary.failed.length ? (
+            <section id="library-import-needs-review" className="settingsImportReview">
+              <header>
+                <div>
+                  <p>Manual Match Required</p>
+                  <h3>Needs Review</h3>
+                </div>
+                <div className="settingsImportReviewHeaderActions">
+                  <button type="button" onClick={copyFailedLibraryTitles}>
+                    Copy Failed Titles
+                  </button>
+                  <button type="button" onClick={clearLibraryImportReview}>
+                    Clear Review
+                  </button>
+                </div>
+              </header>
+
+              <p className="settingsImportReviewIntro">
+                These titles were not matched confidently. Pick the correct result below, or copy the list and add them manually later.
+              </p>
+
+              <div className="settingsImportReviewList">
+                {libraryImportSummary.failed.map((item) => (
+                  <article key={item.title}>
+                    <div className="settingsImportReviewTitle">
+                      <strong>{item.title}</strong>
+                      <small>{item.reason}</small>
+                    </div>
+
+                    {item.candidates?.length ? (
+                      <div className="settingsImportCandidates">
+                        {item.candidates.slice(0, 5).map((candidate) => (
+                          <button
+                            type="button"
+                            key={candidate.id || candidate.kitsuId || candidate.title}
+                            onClick={() => importReviewedLibraryCandidate(item, candidate)}
+                          >
+                            <span>{candidate.importConfidence || candidate.matchScore || '?'}%</span>
+                            <strong>{candidate.officialTitle || candidate.title}</strong>
+                            <small>
+                              {[candidate.year, candidate.type, candidate.status, candidate.episodeCount ? `${candidate.episodeCount} eps` : '']
+                                .filter(Boolean)
+                                .join(' · ') || 'Kitsu candidate'}
+                            </small>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="settingsImportNoCandidates">
+                        No likely candidates were returned. Add this title manually from Library.
+                      </p>
+                    )}
+                  </article>
+                ))}
+              </div>
+            </section>
+          ) : null}
+        </section>
+      ) : null}
+
+      {metadataRepairSummary ? (
+        <section className="settingsMetadataRepairSummary">
+          <header>
+            <div>
+              <p>Metadata Repair Report</p>
+              <h2>{metadataRepairSummary.repaired.length} titles improved</h2>
+            </div>
+            <span>{metadataRepairSummary.unresolved.length} unresolved</span>
+          </header>
+
+          <div className="settingsMetadataRepairStats">
+            <div><strong>{metadataRepairSummary.scanned}</strong><span>Scanned</span></div>
+            <div><strong>{metadataRepairSummary.fields.studio || 0}</strong><span>Studios Filled</span></div>
+            <div><strong>{metadataRepairSummary.fields.genres || 0}</strong><span>Genres Filled</span></div>
+            <div><strong>{metadataRepairSummary.fields.year || 0}</strong><span>Years Filled</span></div>
+            <div><strong>{metadataRepairSummary.fields.episodes || 0}</strong><span>Episodes Filled</span></div>
+          </div>
+
+          {metadataRepairSummary.repaired.length ? (
+            <details>
+              <summary>Show repaired titles</summary>
+              {metadataRepairSummary.repaired.map((item) => (
+                <p key={`${item.title}-${item.matchedTitle}`}>
+                  <strong>{item.title}</strong>
+                  {' → '}
+                  {item.matchedTitle} ({item.confidence}%)
+                  {' · '}
+                  {item.fields.join(', ')}
+                  {item.source === 'local-franchise-inheritance' ? ' · local franchise match' : ''}
+                </p>
+              ))}
+            </details>
+          ) : null}
+
+          {metadataRepairSummary.unresolved.length ? (
+            <details open>
+              <summary>Show unresolved titles</summary>
+              {metadataRepairSummary.unresolved.map((item) => (
+                <p key={`${item.title}-${item.reason}`}>
+                  <strong>{item.title}</strong> — {item.reason}
+                </p>
+              ))}
+            </details>
+          ) : null}
+        </section>
+      ) : null}
+
     </section>
   );
 }

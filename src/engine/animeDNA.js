@@ -8,6 +8,7 @@ import {
   normalizeStatus,
   topEntries
 } from './statistics';
+import { getAnimeStudios, getAnimeTasteSignals } from '../utils/metadataAdapters';
 
 function influenceScore(anime) {
   const score = getScore(anime);
@@ -37,11 +38,13 @@ export function generateAnimeDNA(library = []) {
   for (const item of rated) {
     const influence = influenceScore(item);
 
-    for (const genre of item.genres || []) {
-      addWeightedValue(genreMap, genre, influence);
+    for (const signal of getAnimeTasteSignals(item)) {
+      addWeightedValue(genreMap, signal, influence);
     }
 
-    addWeightedValue(studioMap, item.studio, influence);
+    for (const studio of getAnimeStudios(item)) {
+      addWeightedValue(studioMap, studio, influence);
+    }
     addWeightedValue(statusMap, item.status || 'Untracked', 1);
   }
 

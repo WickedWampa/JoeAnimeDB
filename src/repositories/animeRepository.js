@@ -1,8 +1,34 @@
 import seedData from '../data/animeSeed.json';
 import catalogSeed from '../data/animeCatalogSeed.json';
 import { STORAGE_KEY } from '../services/storage';
+import { normalizeAnimeStudioFields } from '../utils/metadataAdapters';
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
+
+function debugIdentity(item) {
+  return {
+    id: item?.id ?? null,
+    title: item?.title || '',
+    malId: item?.malId ?? item?.mal_id ?? null,
+    kitsuId: item?.kitsuId ?? item?.kitsu_id ?? null
+  };
+}
+
+function findIdentityCollisions(items, target) {
+  const targetIds = debugIdentity(target);
+  return (items || [])
+    .filter((item) => {
+      if (String(item?.id ?? '') === String(targetIds.id ?? '')) return false;
+      const itemMal = item?.malId ?? item?.mal_id;
+      const itemKitsu = item?.kitsuId ?? item?.kitsu_id;
+      return (
+        (targetIds.malId != null && String(itemMal ?? '') === String(targetIds.malId)) ||
+        (targetIds.kitsuId != null && String(itemKitsu ?? '') === String(targetIds.kitsuId))
+      );
+    })
+    .map(debugIdentity);
+}
+
 
 function readLegacyLocalStorage() {
   try {
@@ -22,7 +48,8 @@ function normalizeDatabase(database) {
   return {
     ...clone(seedData),
     ...database,
-    anime: Array.isArray(database?.anime) ? database.anime : clone(seedData.anime || []),
+    anime: (Array.isArray(database?.anime) ? database.anime : clone(seedData.anime || []))
+      .map(normalizeAnimeStudioFields),
     catalog: Array.isArray(database?.catalog) ? database.catalog : []
   };
 }
@@ -81,22 +108,49 @@ export const animeRepository = {
       const current = await window.JoeAnimeDB.database.getDatabase();
       const currentAnime = current?.anime || [];
       const malId = updatedAnime.malId ?? updatedAnime.mal_id;
+      const matchesById = currentAnime.filter((item) => String(item.id) === String(updatedAnime.id));
+      const matchesByMalId = malId == null ? [] : currentAnime.filter((item) =>
+        String(item.malId ?? item.mal_id ?? '') === String(malId)
+      );
       const existing = currentAnime.find((item) =>
         (malId && String(item.malId || '') === String(malId)) ||
         String(item.id) === String(updatedAnime.id)
       );
 
-      if (existing) {
-        await window.JoeAnimeDB.database.updateAnime({
-          ...existing,
-          ...updatedAnime,
-          id: existing.id
-        });
-      } else {
-        await window.JoeAnimeDB.database.updateAnime(updatedAnime);
-      }
+      console.group(`[Metadata Repair Debug][Repository] ${updatedAnime.title || updatedAnime.id}`);
+      console.log('DATABASE BEFORE UPDATE', {
+        count: currentAnime.length,
+        incoming: debugIdentity(updatedAnime),
+        matchesById: matchesById.map(debugIdentity),
+        matchesByMalId: matchesByMalId.map(debugIdentity),
+        providerIdentityCollisions: findIdentityCollisions(currentAnime, updatedAnime),
+        selectedExisting: existing ? debugIdentity(existing) : null
+      });
 
-      return normalizeDatabase(await window.JoeAnimeDB.database.getDatabase());
+      const payload = existing
+        ? { ...existing, ...updatedAnime, id: existing.id }
+        : updatedAnime;
+      console.log('PAYLOAD SENT TO SQLITE', debugIdentity(payload), payload);
+
+      await window.JoeAnimeDB.database.updateAnime(payload);
+
+      const afterRaw = await window.JoeAnimeDB.database.getDatabase();
+      const afterAnime = afterRaw?.anime || [];
+      const beforeIds = new Set(currentAnime.map((item) => String(item.id)));
+      const afterIds = new Set(afterAnime.map((item) => String(item.id)));
+      const removed = currentAnime.filter((item) => !afterIds.has(String(item.id))).map(debugIdentity);
+      const added = afterAnime.filter((item) => !beforeIds.has(String(item.id))).map(debugIdentity);
+      console.log('DATABASE AFTER UPDATE', {
+        count: afterAnime.length,
+        delta: afterAnime.length - currentAnime.length,
+        removed,
+        added,
+        savedMatchesById: afterAnime.filter((item) => String(item.id) === String(payload.id)).map(debugIdentity),
+        savedMatchesByMalId: malId == null ? [] : afterAnime.filter((item) => String(item.malId ?? item.mal_id ?? '') === String(malId)).map(debugIdentity)
+      });
+      console.groupEnd();
+
+      return normalizeDatabase(afterRaw);
     }
 
     const current = await this.getDatabase();

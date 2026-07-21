@@ -1,0 +1,210 @@
+
+.syncOverlay {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 9999;
+  width: min(560px, calc(100vw - 48px));
+  pointer-events: none;
+  background: transparent;
+  backdrop-filter: none;
+}
+
+.syncCard {
+  width: 100%;
+  border: 1px solid rgba(48, 229, 255, 0.35);
+  border-radius: 24px;
+  padding: 22px;
+  background:
+    radial-gradient(circle at top left, rgba(48, 229, 255, 0.16), transparent 36%),
+    radial-gradient(circle at bottom right, rgba(255, 84, 190, 0.12), transparent 40%),
+    rgba(8, 14, 28, 0.96);
+  box-shadow: 0 24px 90px rgba(0, 0, 0, 0.55), 0 0 34px rgba(48, 229, 255, 0.18);
+  pointer-events: none;
+}
+
+.syncCard h2 {
+  margin: 0 0 10px;
+  font-size: 24px;
+}
+
+.syncCard h3 {
+  margin: 8px 0 18px;
+  color: var(--accent, #30e5ff);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 14px;
+}
+
+.syncStep,
+.syncMeta,
+.syncCurrent,
+.syncCard p {
+  color: rgba(229, 246, 255, 0.78);
+}
+
+.syncBar {
+  height: 16px;
+  overflow: hidden;
+  border-radius: 999px;
+  border: 1px solid rgba(48, 229, 255, 0.28);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.syncBarFill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #30e5ff, #ff54be);
+  box-shadow: 0 0 22px rgba(48, 229, 255, 0.55);
+  transition: width 240ms ease;
+}
+
+.syncMeta {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+  font-weight: 800;
+}
+
+.syncCurrent {
+  margin-top: 12px;
+  font-size: 14px;
+}
+
+@media (max-width: 720px) {
+  .syncOverlay {
+    left: 16px;
+    right: 16px;
+    bottom: 16px;
+    width: auto;
+  }
+}
+
+
+/* JoeAnimeDB custom update confirmation modal. Replaces native confirm(), which can steal input/caret focus in Electron. */
+.updateConfirmOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(2, 8, 18, 0.58);
+  backdrop-filter: blur(10px);
+}
+
+.updateConfirmCard {
+  position: relative;
+  width: min(580px, calc(100vw - 48px));
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--cyan, #30e5ff) 42%, rgba(255,255,255,.12));
+  border-radius: 28px;
+  padding: 28px;
+  background:
+    radial-gradient(circle at top left, rgba(48, 229, 255, 0.17), transparent 38%),
+    radial-gradient(circle at bottom right, rgba(255, 84, 190, 0.14), transparent 42%),
+    rgba(8, 14, 28, 0.97);
+  box-shadow: 0 28px 100px rgba(0,0,0,.58), 0 0 44px rgba(48,229,255,.16);
+}
+
+.updateConfirmGlow {
+  position: absolute;
+  inset: -80px -120px auto auto;
+  width: 260px;
+  height: 260px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--pink, #ff54be) 28%, transparent);
+  filter: blur(35px);
+  pointer-events: none;
+}
+
+.updateConfirmEyebrow {
+  position: relative;
+  margin: 0 0 8px;
+  color: var(--cyan, #30e5ff);
+  font-size: 12px;
+  font-weight: 1000;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+
+.updateConfirmCard h2 {
+  position: relative;
+  margin: 0 0 10px;
+  font-size: 30px;
+  letter-spacing: -.02em;
+}
+
+.updateConfirmCard p {
+  position: relative;
+  margin: 0;
+  color: rgba(229, 246, 255, 0.78);
+  line-height: 1.55;
+}
+
+.updateConfirmList {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 20px 0 22px;
+}
+
+.updateConfirmList span {
+  min-width: 0;
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: rgba(255,255,255,.045);
+  color: rgba(237,247,255,.88);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.updateConfirmActions {
+  position: relative;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.updateConfirmActions button {
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: 14px;
+  background: rgba(10, 17, 27, .86);
+  color: var(--text, #edf7ff);
+  padding: 11px 15px;
+  cursor: pointer;
+  font-weight: 1000;
+}
+
+.updateConfirmActions button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--cyan, #30e5ff) 55%, transparent);
+  box-shadow: 0 0 24px rgba(48,229,255,.14);
+}
+
+.updateConfirmActions button.primary {
+  border-color: color-mix(in srgb, var(--pink, #ff54be) 50%, var(--cyan, #30e5ff) 50%);
+  background: linear-gradient(135deg, var(--pink, #ff54be), var(--cyan, #30e5ff));
+  color: #fff;
+}
+
+.updateConfirmActions button:disabled {
+  opacity: .62;
+  cursor: wait;
+}
+
+@media (max-width: 620px) {
+  .updateConfirmList {
+    grid-template-columns: 1fr;
+  }
+
+  .updateConfirmActions {
+    justify-content: stretch;
+  }
+
+  .updateConfirmActions button {
+    flex: 1 1 auto;
+  }
+}

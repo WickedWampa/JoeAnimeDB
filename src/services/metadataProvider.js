@@ -49,16 +49,18 @@ export async function fetchMetadataFromProvider(item = {}) {
     provider = 'kitsu';
   }
 
+  const needsRefresh = Boolean(fetched.metadataNeedsRefresh);
+
   return {
     ...fetched,
     metadataSource: fetched.metadataSource || provider,
-    metadataNeedsRefresh: provider === 'kitsu' ? true : Boolean(fetched.metadataNeedsRefresh),
+    metadataNeedsRefresh: needsRefresh,
     syncStatus: {
       ...(fetched.syncStatus || item.syncStatus || {}),
       metadata: true,
       metadataSource: provider,
       manualOverride: false,
-      dirty: provider === 'kitsu',
+      dirty: needsRefresh,
       lastMetadataSync: new Date().toISOString()
     }
   };

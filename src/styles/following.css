@@ -20,10 +20,13 @@
 .followingHero {
   position: relative;
   isolation: isolate;
-  min-height: clamp(360px, 42vw, 520px);
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  min-height: 0;
+  max-height: 520px;
   overflow: hidden;
   display: flex;
-  align-items: stretch;
+  align-items: center;
   border: 1px solid color-mix(in srgb, var(--cyan) 42%, var(--line));
   border-radius: 24px;
   background: #03070d;
@@ -34,37 +37,42 @@
   content: '';
   position: absolute;
   inset: 0;
-  z-index: -2;
+  z-index: 0;
+  pointer-events: none;
   background-image: var(--following-art);
   background-repeat: no-repeat;
-  background-position: right center;
-  background-size: auto 100%;
+  background-position: center;
+  background-size: cover;
+  filter: none;
+  transform: none;
 }
 
 .followingHero::after {
   content: '';
   position: absolute;
-  inset: 0;
-  z-index: -1;
+  inset: 0 auto 0 0;
+  width: 48%;
+  z-index: 1;
   pointer-events: none;
   background:
-    linear-gradient(90deg,
-      rgba(2, 7, 13, .98) 0%,
-      rgba(2, 7, 13, .97) 24%,
-      rgba(2, 7, 13, .88) 35%,
-      rgba(2, 7, 13, .48) 48%,
-      rgba(2, 7, 13, .12) 63%,
-      rgba(2, 7, 13, 0) 78%),
-    linear-gradient(0deg, rgba(1, 5, 10, .18), transparent 45%);
+    radial-gradient(circle at 22% 45%,
+      rgba(0,0,0,.42) 0%,
+      rgba(0,0,0,.18) 48%,
+      transparent 82%);
 }
 
 .followingHeroContent {
+  position: relative;
+  z-index: 2;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  width: min(54%, 720px);
-  min-width: 520px;
+  width: min(48%, 680px);
+  min-width: 0;
   padding: clamp(28px, 4vw, 58px);
+  text-shadow:
+    0 4px 20px rgba(0,0,0,.86),
+    0 1px 3px rgba(0,0,0,.96);
 }
 
 .followingHero p {
@@ -219,19 +227,839 @@
 .followingEmpty h2 { margin-bottom: 0; color: var(--text); }
 
 @media (max-width: 980px) {
-  .followingHero { min-height: 430px; }
-  .followingHeroContent { width: 66%; min-width: 0; padding: 30px; }
-  .followingHero::after {
-    background: linear-gradient(90deg, rgba(2,7,13,.98) 0%, rgba(2,7,13,.92) 43%, rgba(2,7,13,.35) 67%, transparent 88%);
+  .followingHero {
+    max-height: 480px;
+  }
+
+  .followingHeroContent {
+    width: min(56%, 620px);
+    padding: 30px;
   }
 }
 
 @media (max-width: 700px) {
   .followingGrid { grid-template-columns: 1fr; }
   .followingCard { grid-template-columns: 110px minmax(0, 1fr); }
-  .followingHero { min-height: 470px; }
-  .followingHero::before { background-position: 68% center; }
-  .followingHero::after { background: rgba(2, 7, 13, .76); }
-  .followingHeroContent { width: 100%; padding: 26px; justify-content: flex-end; }
-  .followingHero h1 { font-size: clamp(44px, 13vw, 64px); }
+
+  .followingHero {
+    aspect-ratio: auto;
+    min-height: 460px;
+    max-height: none;
+    align-items: flex-end;
+  }
+
+  .followingHero::before {
+    background-position: center;
+  }
+
+  .followingHero::after {
+    inset: auto 0 0;
+    width: 100%;
+    height: 68%;
+    background:
+      linear-gradient(0deg,
+        rgba(2,7,13,.78) 0%,
+        rgba(2,7,13,.34) 60%,
+        transparent 100%);
+  }
+
+  .followingHeroContent {
+    width: 100%;
+    padding: 26px;
+    justify-content: flex-end;
+  }
+
+  .followingHero h1 {
+    font-size: clamp(44px, 13vw, 64px);
+  }
+}
+
+
+/* =========================================================
+   JoeAnimeDB v5 — unified cinematic hero typography
+   Analytics-inspired title, eyebrow, lead, and stat language.
+   ========================================================= */
+
+:where(
+  .libraryArchiveHeroLive,
+  .favoritesHero,
+  .followingHero,
+  .upcomingHero,
+  .joeAIHero
+) {
+  border-radius: 28px;
+}
+
+:where(
+  .libraryArchiveLiveCopy,
+  .favoritesHeroCopy,
+  .followingHeroContent,
+  .upcomingHero > div,
+  .joeAIHeroCopy
+) {
+  text-shadow: none;
+}
+
+:where(
+  .libraryArchiveHeroLive .eyebrow,
+  .favoritesEyebrow,
+  .followingHero > .followingHeroContent > p:first-child,
+  .upcomingHero > div > p:first-child,
+  .joeAIEyebrow
+) {
+  margin: 0 0 12px;
+  font-size: .78rem;
+  font-weight: 900;
+  letter-spacing: .18em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  text-shadow: 0 0 18px color-mix(in srgb, var(--hero-unified-accent, var(--cyan)) 55%, transparent);
+}
+
+:where(
+  .libraryArchiveHeroLive h1,
+  .favoritesHero h1,
+  .followingHero h1,
+  .upcomingHero h1,
+  .joeAIHeroCopy > h2
+) {
+  margin: 0;
+  width: fit-content;
+  font-size: clamp(3rem, 7vw, 6.4rem);
+  line-height: .92;
+  letter-spacing: -.055em;
+  font-weight: 1000;
+  color: transparent !important;
+  background:
+    linear-gradient(
+      100deg,
+      var(--hero-unified-accent, var(--cyan)),
+      var(--hero-unified-accent-2, #aa72ff) 58%,
+      var(--hero-unified-hot, var(--pink))
+    ) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  filter: drop-shadow(
+    0 0 22px
+    color-mix(in srgb, var(--hero-unified-accent-2, #aa72ff) 42%, transparent)
+  ) !important;
+  text-shadow: none !important;
+}
+
+:where(
+  .libraryArchiveLiveTagline,
+  .favoritesLead,
+  .followingHeroContent > span,
+  .upcomingHero > div > p:not(:first-child),
+  .joeAIHeroBody
+) {
+  max-width: 610px;
+  margin-top: 22px;
+  color: rgba(242,248,255,.9);
+  font-size: clamp(1rem, 1.35vw, 1.28rem);
+  line-height: 1.65;
+  text-shadow:
+    0 3px 14px rgba(0,0,0,.82),
+    0 1px 2px rgba(0,0,0,.96);
+}
+
+:where(
+  .libraryArchiveLiveStats,
+  .favoritesStats,
+  .followingHeroStats,
+  .joeAIHeroStats
+) {
+  gap: 10px;
+}
+
+:where(
+  .libraryArchiveLiveStats > div,
+  .favoritesStats > div,
+  .followingHeroStats > div,
+  .joeAIHeroStats > div
+) {
+  min-height: 104px;
+  padding: 14px 12px;
+  border: 1px solid color-mix(in srgb, var(--hero-unified-accent, var(--cyan)) 24%, transparent);
+  border-radius: 16px;
+  background: rgba(4,8,14,.72);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
+}
+
+:where(
+  .libraryArchiveLiveStats span,
+  .favoritesStats span,
+  .followingHeroStats svg,
+  .joeAIHeroStats span
+) {
+  color: var(--hero-unified-accent, var(--cyan));
+  text-shadow: 0 0 14px currentColor;
+}
+
+:where(
+  .libraryArchiveLiveStats strong,
+  .favoritesStats strong,
+  .followingHeroStats strong,
+  .joeAIHeroStats strong
+) {
+  color: #fff;
+  font-size: 1.65rem;
+}
+
+:where(
+  .libraryArchiveLiveStats small,
+  .favoritesStats small,
+  .followingHeroStats small,
+  .joeAIHeroStats small
+) {
+  color: rgba(223,233,244,.65);
+  font-size: .72rem;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+@media (max-width: 760px) {
+  :where(
+    .libraryArchiveHeroLive h1,
+    .favoritesHero h1,
+    .followingHero h1,
+    .upcomingHero h1,
+    .joeAIHeroCopy > h2
+  ) {
+    font-size: clamp(2.7rem, 14vw, 4rem);
+  }
+}
+
+
+.followingHero {
+  --hero-unified-accent: var(--cyan);
+  --hero-unified-accent-2: #aa72ff;
+  --hero-unified-hot: var(--pink);
+}
+.followingHeroContent {
+  width: min(760px, 52%);
+  padding: clamp(30px, 4vw, 58px);
+  justify-content: space-between;
+  gap: 44px;
+}
+.followingHero h1 { display: flex; }
+.followingHeroStats {
+  display: grid;
+  grid-template-columns: repeat(3,minmax(105px,1fr));
+  max-width: 570px;
+  margin-top: auto;
+}
+.followingHeroStats > div {
+  min-width: 0;
+  grid-template-columns: 1fr;
+  grid-template-areas:
+    "icon"
+    "value"
+    "label";
+  justify-items: center;
+  text-align: center;
+}
+@media (max-width: 700px) {
+  .followingHeroContent { width: 100%; }
+  .followingHeroStats { grid-template-columns: 1fr; width: 100%; }
+}
+
+/* =========================================================
+   JoeAnimeDB v5 — FINAL Analytics hero alignment
+   Uses the exact gradient method that works on Settings.
+   This block intentionally sits last to defeat older stacked
+   hero experiments without touching cards or page content.
+   ========================================================= */
+
+.theme-neon {
+  --cinematic-title-a: #35efff;
+  --cinematic-title-b: #aa72ff;
+  --cinematic-title-c: #ff5cc8;
+}
+.theme-sakura {
+  --cinematic-title-a: #ffd0e7;
+  --cinematic-title-b: #ff7fbd;
+  --cinematic-title-c: #ffb2d7;
+}
+.theme-vapor {
+  --cinematic-title-a: #60f4ff;
+  --cinematic-title-b: #b36cff;
+  --cinematic-title-c: #ff64d8;
+}
+.theme-ramen {
+  --cinematic-title-a: #ffe0a3;
+  --cinematic-title-b: #ffb23e;
+  --cinematic-title-c: #ff784d;
+}
+.theme-inferno {
+  --cinematic-title-a: #ffd166;
+  --cinematic-title-b: #ff8a2b;
+  --cinematic-title-c: #ff3d2e;
+}
+.theme-amoled {
+  --cinematic-title-a: #f6f7ff;
+  --cinematic-title-b: #aa72ff;
+  --cinematic-title-c: #7a4dff;
+}
+
+:where(.discoverHero, .followingHero, .upcomingHero) {
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  min-height: 0;
+  max-height: 620px;
+  overflow: hidden;
+  border-radius: 28px;
+}
+
+:where(.discoverEyebrow, .followingHeroContent > p:first-child, .upcomingHero > div > p:first-child) {
+  margin: 0 0 12px !important;
+  color: var(--cinematic-title-a) !important;
+  font-size: .78rem !important;
+  font-weight: 900 !important;
+  letter-spacing: .18em !important;
+  line-height: 1.2 !important;
+  text-transform: uppercase !important;
+  text-shadow: 0 0 18px color-mix(in srgb, var(--cinematic-title-a) 55%, transparent) !important;
+}
+
+:where(.discoverHero h1, .followingHero h1, .upcomingHero h1) {
+  display: inline-block !important;
+  width: fit-content !important;
+  margin: 0 !important;
+  font-size: clamp(3rem, 7vw, 6.4rem) !important;
+  line-height: .92 !important;
+  letter-spacing: -.055em !important;
+  font-weight: 1000 !important;
+  color: transparent !important;
+  background: linear-gradient(
+    100deg,
+    var(--cinematic-title-a),
+    var(--cinematic-title-b) 58%,
+    var(--cinematic-title-c)
+  ) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  filter: drop-shadow(
+    0 0 22px color-mix(in srgb, var(--cinematic-title-b) 42%, transparent)
+  ) !important;
+  text-shadow: none !important;
+}
+
+:where(.discoverHero h1, .followingHero h1) svg {
+  display: inline-block !important;
+  width: .78em !important;
+  height: .78em !important;
+  margin-right: 13px !important;
+  vertical-align: -.06em !important;
+  color: var(--cinematic-title-a) !important;
+  -webkit-text-fill-color: initial !important;
+  filter: drop-shadow(
+    0 0 18px color-mix(in srgb, var(--cinematic-title-a) 52%, transparent)
+  ) !important;
+}
+
+:where(.discoverHero p:not(.discoverEyebrow), .followingHeroContent > span, .upcomingHero > div > p:not(:first-child)) {
+  width: 100%;
+  max-width: 610px !important;
+  margin-top: 22px !important;
+  color: rgba(242,248,255,.9) !important;
+  font-size: clamp(1rem, 1.35vw, 1.28rem) !important;
+  line-height: 1.65 !important;
+  text-shadow:
+    0 3px 14px rgba(0,0,0,.82),
+    0 1px 2px rgba(0,0,0,.96) !important;
+}
+
+
+.followingHero {
+  display: flex !important;
+  align-items: stretch !important;
+  max-height: 620px !important;
+}
+
+.followingHero::after {
+  display: none !important;
+  content: none !important;
+}
+
+.followingHeroContent {
+  position: relative;
+  z-index: 2;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  width: min(760px, 54%) !important;
+  max-width: 760px;
+  min-height: 100%;
+  padding: clamp(30px, 4vw, 58px) !important;
+  text-shadow: none !important;
+}
+
+.followingHeroStats {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(105px, 1fr)) !important;
+  gap: 10px !important;
+  width: min(100%, 570px);
+  margin-top: auto !important;
+  padding-top: 28px;
+}
+
+.followingHeroStats > div {
+  min-width: 0 !important;
+  min-height: 104px;
+  display: grid !important;
+  grid-template-columns: 1fr !important;
+  grid-template-areas:
+    "icon"
+    "value"
+    "label" !important;
+  align-content: center;
+  justify-items: center;
+  padding: 14px 12px !important;
+  border-radius: 16px !important;
+  background: rgba(4,8,14,.72) !important;
+  text-align: center;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+@media (max-width: 760px) {
+  .followingHero {
+    aspect-ratio: auto;
+    min-height: 560px;
+    max-height: none !important;
+    align-items: flex-end !important;
+  }
+
+  .followingHeroContent {
+    width: 100% !important;
+    min-height: 560px;
+    justify-content: flex-end;
+    padding: 190px 24px 28px !important;
+  }
+
+  .followingHeroStats {
+    grid-template-columns: 1fr !important;
+    width: 100%;
+  }
+
+  .followingHero h1 {
+    font-size: clamp(2.7rem, 14vw, 4rem) !important;
+  }
+}
+
+
+.followingCheckButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  width: fit-content;
+  margin-top: 14px;
+  padding: 10px 15px;
+  border: 1px solid color-mix(in srgb, var(--cyan) 55%, var(--line));
+  border-radius: 12px;
+  background: rgba(3, 8, 15, .84);
+  color: var(--text);
+  font-weight: 950;
+  cursor: pointer;
+}
+
+.followingCheckButton:disabled { opacity: .6; cursor: wait; }
+.followingCheckButton svg { width: 17px; height: 17px; color: var(--cyan); }
+.followingCheckButton .spinning { animation: following-spin 1s linear infinite; }
+
+.followingCheckMessage {
+  margin: 9px 0 0 !important;
+  color: var(--cyan) !important;
+  font-size: 12px !important;
+  font-weight: 850;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+}
+
+.followingUpdates {
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--cyan) 35%, var(--line));
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--panel) 94%, #02050a);
+}
+
+.followingUpdatesHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 18px;
+  padding: 17px 19px;
+  border-bottom: 1px solid var(--line);
+}
+
+.followingUpdatesHeader p {
+  margin: 0 0 3px;
+  color: var(--cyan);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+}
+
+.followingUpdatesHeader h2 { margin: 0; font-size: 22px; }
+.followingUpdatesHeader > span {
+  padding: 6px 10px;
+  border: 1px solid color-mix(in srgb, var(--pink) 45%, var(--line));
+  border-radius: 999px;
+  color: var(--pink);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.followingUpdatesList { display: grid; }
+
+.followingUpdatesList > button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  padding: 13px 18px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.followingUpdatesList > button:last-child { border-bottom: 0; }
+.followingUpdatesList > button:hover { background: color-mix(in srgb, var(--cyan) 8%, transparent); }
+.followingUpdatesList > button.read { opacity: .62; }
+.followingUpdatesList svg { color: var(--cyan); }
+.followingUpdatesList strong,
+.followingUpdatesList small { display: block; }
+.followingUpdatesList small { margin-top: 3px; color: var(--muted); }
+.followingUpdatesList time { color: var(--muted); font-size: 10px; white-space: nowrap; }
+
+.followingLastChecked,
+.followingCheckError {
+  margin-top: 8px !important;
+  font-size: 10px;
+}
+
+.followingLastChecked { color: color-mix(in srgb, var(--cyan) 70%, var(--muted)) !important; }
+.followingCheckError { color: #ff98a8 !important; }
+
+@keyframes following-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 700px) {
+  .followingUpdatesList > button {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .followingUpdatesList time {
+    grid-column: 2;
+  }
+}
+
+
+.followingHeroActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.followingHeroActions .followingCheckButton {
+  margin-top: 0;
+}
+
+.followingNotifyButton,
+.followingNotificationsOn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 39px;
+  padding: 9px 13px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.followingNotifyButton {
+  border: 1px solid color-mix(in srgb, var(--pink) 50%, var(--line));
+  background: rgba(3, 8, 15, .78);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.followingNotifyButton:hover {
+  background: color-mix(in srgb, var(--pink) 10%, rgba(3, 8, 15, .78));
+}
+
+.followingNotifyButton svg,
+.followingNotificationsOn svg {
+  width: 16px;
+  height: 16px;
+  color: var(--pink);
+}
+
+.followingNotificationsOn {
+  border: 1px solid color-mix(in srgb, var(--cyan) 42%, var(--line));
+  color: var(--cyan);
+  background: color-mix(in srgb, var(--cyan) 7%, transparent);
+}
+
+.followingUpdatesHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.followingUpdatesHeaderActions > span {
+  padding: 6px 10px;
+  border: 1px solid color-mix(in srgb, var(--pink) 45%, var(--line));
+  border-radius: 999px;
+  color: var(--pink);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.followingUpdatesHeaderActions > button {
+  padding: 6px 10px;
+  border: 1px solid color-mix(in srgb, var(--cyan) 40%, var(--line));
+  border-radius: 999px;
+  background: transparent;
+  color: var(--cyan);
+  font-size: 11px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.followingUpdatesHeaderActions > button:hover {
+  background: color-mix(in srgb, var(--cyan) 9%, transparent);
+}
+
+@media (max-width: 700px) {
+  .followingUpdatesHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .followingUpdatesHeaderActions {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
+
+
+/* Keep the two Following hero controls side-by-side without replacing the page stylesheet. */
+.followingHero {
+  height: auto;
+  min-height: 0;
+  overflow: visible;
+}
+
+.followingHeroContent {
+  position: relative;
+  z-index: 2;
+  padding-bottom: 24px;
+}
+
+.followingHeroActions {
+  position: relative;
+  z-index: 3;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: stretch;
+  margin-top: 14px;
+}
+
+.followingHeroActions .followingCheckButton,
+.followingHeroActions .followingNotifyButton,
+.followingHeroActions .followingNotificationsOn {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  margin: 0;
+  justify-content: center;
+  flex: none;
+}
+
+.followingCheckMessage {
+  position: relative;
+  z-index: 3;
+  max-width: 680px;
+  padding-bottom: 4px;
+}
+
+@media (max-width: 760px) {
+  .followingHeroActions {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* Final Following hero containment fix:
+   keep rounded corners intact and keep both action controls inside the artwork card. */
+.followingHero {
+  overflow: hidden !important;
+  border-radius: 24px !important;
+  background-clip: padding-box;
+  max-height: 620px !important;
+}
+
+.followingHero::before {
+  border-radius: inherit;
+  overflow: hidden;
+}
+
+.followingHeroContent {
+  box-sizing: border-box;
+  justify-content: center !important;
+  padding-top: clamp(24px, 3.2vw, 46px) !important;
+  padding-bottom: clamp(22px, 2.6vw, 38px) !important;
+}
+
+.followingHeroStats {
+  margin-top: 20px !important;
+  padding-top: 0 !important;
+}
+
+.followingHeroActions {
+  position: relative;
+  z-index: 3;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  width: min(100%, 570px);
+  margin-top: 12px !important;
+  transform: translateY(-4px);
+}
+
+.followingHeroActions .followingCheckButton,
+.followingHeroActions .followingNotifyButton,
+.followingHeroActions .followingNotificationsOn {
+  width: 100% !important;
+  min-width: 0;
+  min-height: 42px;
+  margin: 0 !important;
+  padding: 9px 12px;
+  justify-content: center;
+  white-space: normal;
+  text-align: center;
+}
+
+.followingCheckMessage {
+  width: min(100%, 570px);
+  margin-top: 4px !important;
+  padding: 0 !important;
+}
+
+@media (max-width: 960px) {
+  .followingHeroContent {
+    width: min(68%, 720px) !important;
+  }
+
+  .followingHeroStats > div {
+    min-height: 92px;
+    padding: 10px !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .followingHero {
+    overflow: hidden !important;
+  }
+
+  .followingHeroActions {
+    grid-template-columns: 1fr;
+    transform: none;
+  }
+}
+
+
+/* Final hero action placement + notification toggle */
+.followingHeroContent {
+  padding-bottom: 18px !important;
+}
+
+.followingHeroStats {
+  margin-top: 14px !important;
+}
+
+.followingHeroActions {
+  width: min(100%, 570px) !important;
+  margin-top: 8px !important;
+  transform: translateY(-18px) !important;
+}
+
+.followingCheckMessage {
+  width: min(100%, 570px) !important;
+  margin-top: -12px !important;
+}
+
+.followingNotifyButton.is-on {
+  border-color: color-mix(in srgb, var(--cyan) 62%, var(--line));
+  color: var(--cyan);
+  background: color-mix(in srgb, var(--cyan) 9%, rgba(3, 8, 15, .82));
+}
+
+.followingNotifyButton.is-on svg {
+  color: var(--cyan);
+}
+
+.followingNotifyButton.is-off {
+  border-color: color-mix(in srgb, var(--pink) 55%, var(--line));
+  color: var(--text);
+  background: color-mix(in srgb, var(--pink) 6%, rgba(3, 8, 15, .82));
+}
+
+.followingNotifyButton.is-off svg {
+  color: var(--pink);
+}
+
+.followingNotifyButton[aria-pressed="true"]::after,
+.followingNotifyButton[aria-pressed="false"]::after {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  margin-left: 8px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 950;
+  letter-spacing: .08em;
+}
+
+.followingNotifyButton[aria-pressed="true"]::after {
+  content: "ON";
+  color: #8fffd7;
+  background: rgba(50, 220, 150, .12);
+}
+
+.followingNotifyButton[aria-pressed="false"]::after {
+  content: "OFF";
+  color: #ff9ee9;
+  background: rgba(255, 80, 190, .12);
+}
+
+@media (max-width: 760px) {
+  .followingHeroActions {
+    transform: translateY(-8px) !important;
+  }
+
+  .followingCheckMessage {
+    margin-top: -4px !important;
+  }
 }

@@ -20,7 +20,7 @@ function NavButton({ icon, label, id, view, setView, badge }) {
   );
 }
 
-export function Sidebar({ view, setView, syncMetadata, theme, setTheme, newUserMode, followingCount = 0 }) {
+export function Sidebar({ view, setView, syncMetadata, theme, setTheme, followingCount = 0 }) {
   return (
     <aside className="sidebar">
       <div className="brand">
@@ -38,7 +38,7 @@ export function Sidebar({ view, setView, syncMetadata, theme, setTheme, newUserM
         <NavButton icon={<Bell />} label="Following" id="following" view={view} setView={setView} badge={followingCount} />
 
         <NavButton icon={<BarChart3 />} label="Analytics" id="analytics" view={view} setView={setView} />
-        <NavButton icon={<CalendarDays />} label="Timeline" id="timeline" view={view} setView={setView} />
+        <NavButton icon={<CalendarDays />} label="Upcoming" id="upcoming" view={view} setView={setView} />
 
         <NavButton icon={<Settings />} label="Settings" id="settings" view={view} setView={setView} />
       </nav>

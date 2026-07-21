@@ -1160,3 +1160,36 @@
 @media (prefers-reduced-motion: reduce) {
   .homeV3SignalBar i, .homeV3StudioRow i, .homeV3FeaturedRecommendation, .homeV3FeaturedRecommendation::after { animation: none !important; }
 }
+
+
+/* New-user display-name onboarding */
+.homeV3WelcomeOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(1, 7, 14, .76);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+.homeV3WelcomeCard {
+  width: min(520px, 100%);
+  padding: 32px;
+  border: 1px solid color-mix(in srgb, var(--accent, #32e7ff) 55%, transparent);
+  border-radius: 26px;
+  background: linear-gradient(145deg, rgba(7, 18, 31, .98), rgba(22, 10, 36, .98));
+  box-shadow: 0 28px 90px rgba(0,0,0,.58), 0 0 42px color-mix(in srgb, var(--accent, #32e7ff) 18%, transparent);
+}
+
+.homeV3WelcomeIcon { font-size: 2rem; }
+.homeV3WelcomeEyebrow { margin: 12px 0 6px; color: var(--accent, #32e7ff); font-weight: 900; letter-spacing: .14em; text-transform: uppercase; }
+.homeV3WelcomeCard h2 { margin: 0; font-size: clamp(2rem, 6vw, 3.1rem); line-height: 1; }
+.homeV3WelcomeCard > p:not(.homeV3WelcomeEyebrow) { color: rgba(235,245,255,.76); line-height: 1.6; }
+.homeV3WelcomeCard label { display: block; margin: 22px 0 8px; font-weight: 800; }
+.homeV3WelcomeCard input { width: 100%; box-sizing: border-box; padding: 15px 16px; border: 1px solid rgba(86,225,255,.34); border-radius: 14px; background: rgba(2,9,17,.82); color: white; font: inherit; font-size: 1.05rem; outline: none; }
+.homeV3WelcomeCard input:focus { border-color: var(--accent, #32e7ff); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, #32e7ff) 18%, transparent); }
+.homeV3WelcomeActions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
+.homeV3WelcomeActions button { padding: 12px 18px; border-radius: 13px; }

@@ -1,0 +1,27 @@
+
+.homeV3BrainHologram {
+  width: 132px !important;
+  height: 132px !important;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--cyan) 42%, var(--pink));
+  border-radius: 50%;
+  background: #030813;
+  box-shadow:
+    0 0 28px color-mix(in srgb, var(--pink) 20%, transparent),
+    inset 0 0 22px rgba(0,0,0,.65);
+}
+
+.homeV3BrainHologram img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scale(1.18);
+  mix-blend-mode: screen;
+  filter: saturate(1.18) contrast(1.08);
+  animation: homeV3BrainHover 4.5s ease-in-out infinite;
+}
+
+@keyframes homeV3BrainHover {
+  0%, 100% { transform: scale(1.18) translateY(0); }
+  50% { transform: scale(1.22) translateY(-3px); }
+}

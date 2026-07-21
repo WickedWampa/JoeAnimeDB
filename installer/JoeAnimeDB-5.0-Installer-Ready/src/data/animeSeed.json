@@ -1,0 +1,11 @@
+{
+  "appName": "JoeAnimeDB",
+  "version": "5.0.0",
+  "source": "Clean first-run database",
+  "anime": [],
+  "catalog": [],
+  "settings": {
+    "firstRun": true,
+    "displayName": ""
+  }
+}

@@ -1,3 +1,10 @@
+import {
+  buildTitleSearchQueries,
+  compactTitleKey,
+  normalizeTitleWords,
+  romanToArabicTitleTokens,
+  stripEditionNoise
+} from '../utils/titleAliases';
 const KITSU_API_BASE = 'https://kitsu.io/api/edge';
 const REQUEST_TIMEOUT_MS = 12000;
 
@@ -33,15 +40,318 @@ function scoreFromRating(value) {
   return Number.isFinite(numeric) && numeric > 0 ? Number((numeric / 10).toFixed(2)) : '';
 }
 
+function extractSeasonNumber(value = '') {
+  const title = romanToArabicTitleTokens(value);
+
+  const patterns = [
+    /\bseason\s*(\d+)\b/i,
+    /\b(\d+)(?:st|nd|rd|th)\s+season\b/i,
+    /\bpart\s*(\d+)\b/i,
+    /\bcour\s*(\d+)\b/i,
+    /\bs\s*(\d+)\b/i,
+    /\b(\d+)\s*$/i
+  ];
+
+  for (const pattern of patterns) {
+    const match = title.match(pattern);
+    if (match) return Number(match[1]) || 0;
+  }
+
+  return 0;
+}
+
+function stripEditionNoiseForKitsu(value = '') {
+  return normalizeTitleWords(stripEditionNoise(value))
+    .replace(/\bseason\s+\d+\b/g, ' ')
+    .replace(/\bpart\s+\d+\b/g, ' ')
+    .replace(/\b(?:movie|film|special|ova|ona|recap)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizeTitleKey(value = '') {
+  return compactTitleKey(value);
+}
+
+function franchiseTitleKey(value = '') {
+  const title = stripEditionNoiseForKitsu(value);
+
+  if (/^re\s*zero\b/.test(title)) {
+    return 'rezero';
+  }
+
+  return title
+    .replace(/\bstarting life in another world\b/g, ' ')
+    .replace(/\barise from the shadow\b/g, ' ')
+    .replace(/\bmoonlit fantasy\b/g, ' moonlit fantasy ')
+    .replace(/\s+/g, '')
+    .trim();
+}
+
+function titleTokenSimilarity(left = '', right = '') {
+  const leftTokens = new Set(normalizeTitleWords(left).split(' ').filter(Boolean));
+  const rightTokens = new Set(normalizeTitleWords(right).split(' ').filter(Boolean));
+
+  if (!leftTokens.size || !rightTokens.size) return 0;
+
+  const intersection = [...leftTokens].filter((token) => rightTokens.has(token)).length;
+  const union = new Set([...leftTokens, ...rightTokens]).size;
+  return union ? intersection / union : 0;
+}
+
+function titleSimilarity(left = '', right = '') {
+  const a = normalizeTitleKey(left);
+  const b = normalizeTitleKey(right);
+
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+
+  const franchiseA = franchiseTitleKey(left);
+  const franchiseB = franchiseTitleKey(right);
+
+  if (franchiseA && franchiseA === franchiseB) {
+    const seasonA = extractSeasonNumber(left);
+    const seasonB = extractSeasonNumber(right);
+
+    if (!seasonA || !seasonB || seasonA === seasonB) return 0.96;
+    return 0.76;
+  }
+
+  const shorter = a.length <= b.length ? a : b;
+  const longer = a.length > b.length ? a : b;
+
+  const containment = longer.includes(shorter)
+    ? shorter.length / Math.max(longer.length, 1)
+    : 0;
+
+  return Math.max(containment, titleTokenSimilarity(left, right));
+}
+
+function scoreKitsuCandidate(candidate = {}, wantedItem = {}) {
+  const wantedTitle =
+    wantedItem.title ||
+    wantedItem.officialTitle ||
+    '';
+
+  const names = [
+    candidate.title,
+    candidate.officialTitle,
+    candidate.japaneseTitle,
+    ...(candidate.titleSynonyms || [])
+  ].filter(Boolean);
+
+  const normalizedWanted = normalizeTitleKey(wantedTitle);
+  const wantedSeason = extractSeasonNumber(wantedTitle);
+  const wantedYear = Number(wantedItem.year || 0);
+  const wantedEpisodes = Number(
+    wantedItem.episodeCount ||
+    wantedItem.episodes ||
+    0
+  );
+
+  let score = 0;
+  let bestSimilarity = 0;
+
+  for (const name of names) {
+    const normalizedName = normalizeTitleKey(name);
+    const similarity = titleSimilarity(name, wantedTitle);
+    bestSimilarity = Math.max(bestSimilarity, similarity);
+
+    if (normalizedName && normalizedName === normalizedWanted) {
+      score = Math.max(score, 100);
+    } else if (franchiseTitleKey(name) === franchiseTitleKey(wantedTitle)) {
+      score = Math.max(score, 88);
+    } else {
+      score = Math.max(score, Math.round(similarity * 82));
+    }
+  }
+
+  const candidateSeason = Math.max(
+    0,
+    ...names.map(extractSeasonNumber)
+  );
+
+  if (wantedSeason && candidateSeason) {
+    if (wantedSeason === candidateSeason) score += 14;
+    else score -= 18;
+  }
+
+  const candidateYear = Number(candidate.year || 0);
+  if (wantedYear && candidateYear) {
+    const difference = Math.abs(wantedYear - candidateYear);
+    if (difference === 0) score += 10;
+    else if (difference === 1) score += 5;
+    else if (difference >= 4) score -= 8;
+  }
+
+  const candidateEpisodes = Number(
+    candidate.episodeCount ||
+    candidate.episodes ||
+    0
+  );
+
+  if (wantedEpisodes && candidateEpisodes) {
+    const difference = Math.abs(wantedEpisodes - candidateEpisodes);
+    if (difference === 0) score += 8;
+    else if (difference <= 2) score += 4;
+    else if (difference >= 8) score -= 6;
+  }
+
+  const type = String(candidate.type || '').toLowerCase();
+  if (type === 'tv') score += 4;
+  if (/special|ova|ona/.test(type) && !/special|ova|ona/i.test(wantedItem.type || '')) {
+    score -= 10;
+  }
+
+  return {
+    candidate,
+    score: Math.max(0, Math.min(120, score)),
+    similarity: bestSimilarity
+  };
+}
+
+function bestKitsuMatch(results = [], wantedItem = {}) {
+  const ranked = results
+    .map((candidate) => scoreKitsuCandidate(candidate, wantedItem))
+    .sort((a, b) =>
+      b.score - a.score ||
+      b.similarity - a.similarity
+    );
+
+  console.groupCollapsed(
+    `[Kitsu Match] ${wantedItem.title || wantedItem.officialTitle || 'Unknown title'}`
+  );
+  console.table(
+    ranked.slice(0, 5).map((entry) => ({
+      title: entry.candidate.officialTitle || entry.candidate.title || '',
+      year: entry.candidate.year || '',
+      episodes:
+        entry.candidate.episodeCount ||
+        entry.candidate.episodes ||
+        '',
+      score: entry.score,
+      similarity: Number(entry.similarity.toFixed(3)),
+      season: extractSeasonNumber(
+        entry.candidate.officialTitle ||
+        entry.candidate.title ||
+        ''
+      )
+    }))
+  );
+  console.groupEnd();
+
+  const best = ranked[0];
+
+  // Accept exact/strong franchise matches even when punctuation, subtitle, or
+  // season formatting differs. Lower scores remain review-only.
+  return best && best.score >= 78
+    ? best.candidate
+    : null;
+}
+
+async function fetchKitsuCategories(kitsuId) {
+  if (!kitsuId) return [];
+
+  try {
+    const payload = await fetchKitsu(
+      `/anime/${encodeURIComponent(kitsuId)}/categories?page[limit]=20`
+    );
+
+    return cleanArray(
+      (payload.data || []).map((resource) => (
+        resource?.attributes?.title ||
+        resource?.attributes?.name ||
+        resource?.attributes?.slug
+      ))
+    );
+  } catch (error) {
+    console.warn('Kitsu category lookup failed:', kitsuId, error);
+    return [];
+  }
+}
+
+function includedResourceIndex(included = []) {
+  return new Map(
+    (included || [])
+      .filter((resource) => resource?.type && resource?.id)
+      .map((resource) => [`${resource.type}:${resource.id}`, resource])
+  );
+}
+
+function producerName(resource = {}) {
+  return (
+    resource?.attributes?.name ||
+    resource?.attributes?.title ||
+    resource?.attributes?.canonicalName ||
+    resource?.attributes?.slug ||
+    ''
+  );
+}
+
+async function fetchKitsuStudios(kitsuId) {
+  if (!kitsuId) return [];
+
+  try {
+    const payload = await fetchKitsuWithTimeout(
+      `/anime/${encodeURIComponent(kitsuId)}/anime-productions?include=producer&page[limit]=20`,
+      6000
+    );
+
+    console.groupCollapsed(`[Kitsu Studios] ${kitsuId}`);
+    console.log('FULL PAYLOAD', payload);
+    console.log('DATA', payload.data);
+    console.log('INCLUDED', payload.included);
+
+    const included = includedResourceIndex(payload.included || []);
+
+    const studios = cleanArray(
+      (payload.data || []).flatMap((production) => {
+        console.log('Production Row', production);
+
+        const role = String(production?.attributes?.role || '').toLowerCase();
+        console.log('Role:', role);
+
+        // For debugging, only treat explicit studio/animation rows as studios.
+        if (role && !/studio|animation/.test(role)) return [];
+
+        const link = production?.relationships?.producer?.data;
+        console.log('Producer Link:', link);
+
+        const producer = link
+          ? included.get(`${link.type}:${link.id}`)
+          : null;
+
+        console.log('Resolved Producer:', producer);
+
+        const name = producerName(producer);
+        console.log('Producer Name:', name);
+
+        return name ? [name] : [];
+      })
+    );
+
+    console.log('FINAL STUDIOS:', studios);
+    console.groupEnd();
+
+    return studios;
+  } catch (error) {
+    console.error('[Kitsu Studios] lookup failed:', kitsuId, error);
+    return [];
+  }
+}
+
 export function normalizeKitsuAnime(resource = {}, base = {}) {
   const attributes = resource.attributes || {};
   const canonicalTitle = attributes.canonicalTitle || attributes.titles?.en || attributes.titles?.en_jp || base.title || '';
   const englishTitle = attributes.titles?.en || canonicalTitle;
   const synonyms = cleanArray([
+    attributes.canonicalTitle,
+    attributes.titles?.en,
+    attributes.titles?.en_us,
     attributes.titles?.en_jp,
     attributes.titles?.ja_jp,
     ...(attributes.abbreviatedTitles || [])
-  ]).filter((title) => title !== englishTitle);
+  ]).filter((title) => title && title !== englishTitle);
 
   return {
     ...base,
@@ -49,6 +359,8 @@ export function normalizeKitsuAnime(resource = {}, base = {}) {
     kitsuId: resource.id,
     title: englishTitle,
     officialTitle: englishTitle,
+    englishTitle,
+    canonicalTitle,
     japaneseTitle: attributes.titles?.ja_jp || '',
     titleSynonyms: synonyms,
     cover: posterFromAttributes(attributes) || base.cover || '',
@@ -56,6 +368,9 @@ export function normalizeKitsuAnime(resource = {}, base = {}) {
     description: attributes.description || attributes.synopsis || base.description || '',
     type: attributes.subtype || attributes.showType || base.type || 'TV',
     year: yearFromDate(attributes.startDate) || base.year || '',
+    startDate: attributes.startDate || base.startDate || base.airedFrom || '',
+    airedFrom: attributes.startDate || base.airedFrom || base.startDate || '',
+    airedTo: attributes.endDate || base.airedTo || '',
     episodeCount: Number(attributes.episodeCount || 0) || base.episodeCount || 0,
     episodes: Number(attributes.episodeCount || 0) || base.episodes || base.episodeCount || 0,
     communityScore: scoreFromRating(attributes.averageRating) || base.communityScore || '',
@@ -63,74 +378,194 @@ export function normalizeKitsuAnime(resource = {}, base = {}) {
     ageRating: attributes.ageRating || base.ageRating || '',
     status: base.status || attributes.status || 'Watching',
     metadataSource: 'kitsu',
-    metadataNeedsRefresh: true,
+    metadataNeedsRefresh: !(Array.isArray(base.genres) && base.genres.length),
     metadataUpdatedAt: new Date().toISOString(),
     syncStatus: {
       ...(base.syncStatus || {}),
       metadata: true,
       metadataSource: 'kitsu',
-      dirty: true,
+      dirty: !(Array.isArray(base.genres) && base.genres.length),
       lastMetadataSync: new Date().toISOString()
     }
   };
 }
 
-async function fetchKitsu(path) {
-  const request = withTimeout((signal) => fetch(`${KITSU_API_BASE}${path}`, {
-    signal,
-    headers: {
-      Accept: 'application/vnd.api+json'
-    }
-  }));
+const KITSU_REQUEST_TIMEOUT_MS = 9000;
 
-  let response;
+async function fetchKitsuWithTimeout(path, timeoutMs = KITSU_REQUEST_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
   try {
-    response = await request.run;
-  } catch (error) {
-    if (error?.name === 'AbortError') throw new Error('Kitsu request timed out');
-    throw error;
-  }
+    const response = await fetch(`${KITSU_API_BASE}${path}`, {
+      headers: {
+        Accept: 'application/vnd.api+json'
+      },
+      signal: controller.signal
+    });
 
-  if (!response.ok) throw new Error(`Kitsu ${response.status}`);
-  return response.json();
+    if (!response.ok) {
+      const error = new Error(`Kitsu ${response.status}`);
+      error.status = response.status;
+      throw error;
+    }
+
+    return response.json();
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
-export async function searchKitsuAnime(title, { limit = 8 } = {}) {
+async function fetchKitsu(path) {
+  return fetchKitsuWithTimeout(path);
+}
+
+
+async function searchKitsuAnimeOnce(title, { limit = 8 } = {}) {
   const query = encodeURIComponent(String(title || '').trim());
   if (!query) return [];
 
-  const payload = await fetchKitsu(`/anime?filter[text]=${query}&page[limit]=${Math.min(Math.max(limit, 1), 20)}`);
+  const payload = await fetchKitsu(
+    `/anime?filter[text]=${query}&page[limit]=${Math.min(Math.max(limit, 1), 20)}`
+  );
+
   return (payload.data || []).map((resource) => normalizeKitsuAnime(resource));
 }
 
+export async function searchKitsuAnime(title, { limit = 8 } = {}) {
+  const queries = buildTitleSearchQueries(title);
+  if (!queries.length) return [];
+
+  const byId = new Map();
+
+  for (const query of queries) {
+    try {
+      const rows = await searchKitsuAnimeOnce(query, { limit });
+
+      rows.forEach((row) => {
+        const key = String(row.kitsuId || row.id || '');
+        if (!key || byId.has(key)) return;
+        byId.set(key, row);
+      });
+
+      const exactFound = [...byId.values()].some((row) => {
+        const names = [
+          row.title,
+          row.officialTitle,
+          row.canonicalTitle,
+          row.englishTitle,
+          ...(row.titleSynonyms || [])
+        ].filter(Boolean);
+
+        return names.some(
+          (name) => normalizeTitleKey(name) === normalizeTitleKey(title)
+        );
+      });
+
+      if (exactFound) break;
+    } catch (error) {
+      console.warn('Kitsu search variant failed:', query, error);
+    }
+  }
+
+  const results = [...byId.values()];
+
+  console.log('[Kitsu Search Variants]', {
+    originalTitle: title,
+    queries,
+    resultCount: results.length,
+    results: results.slice(0, 8).map((row) => ({
+      kitsuId: row.kitsuId,
+      title: row.title,
+      officialTitle: row.officialTitle,
+      canonicalTitle: row.canonicalTitle,
+      year: row.year,
+      episodes: row.episodeCount || row.episodes || 0
+    }))
+  });
+
+  return results;
+}
+
 export async function fetchKitsuMetadata(item = {}) {
-  const results = await searchKitsuAnime(item.title || item.officialTitle || '', { limit: 8 });
+  const wantedTitle = item.title || item.officialTitle || '';
+  const results = await searchKitsuAnime(wantedTitle, { limit: 8 });
   if (!results.length) throw new Error('Kitsu returned no matches');
 
-  const normalizedWanted = String(item.title || item.officialTitle || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
-  const match = results.find((candidate) => [
-    candidate.title,
-    candidate.officialTitle,
-    ...(candidate.titleSynonyms || [])
-  ].some((title) => String(title || '').toLowerCase().replace(/[^a-z0-9]+/g, '') === normalizedWanted)) || results[0];
+  const match = bestKitsuMatch(results, item);
+  if (!match) {
+    throw new Error(`Kitsu returned no confident title match for ${wantedTitle}`);
+  }
 
-  return normalizeKitsuAnime({ id: match.kitsuId, attributes: {
-    canonicalTitle: match.title,
-    titles: {
-      en: match.officialTitle,
-      ja_jp: match.japaneseTitle
-    },
-    abbreviatedTitles: match.titleSynonyms,
-    posterImage: { original: match.cover },
-    synopsis: match.synopsis,
-    description: match.description,
-    subtype: match.type,
-    startDate: match.year ? `${match.year}-01-01` : null,
-    episodeCount: match.episodeCount,
-    averageRating: match.communityScore ? Number(match.communityScore) * 10 : null,
-    ageRating: match.ageRating,
-    status: match.status
-  } }, item);
+  const [genres, studios] = await Promise.all([
+    fetchKitsuCategories(match.kitsuId),
+    fetchKitsuStudios(match.kitsuId)
+  ]);
+
+  return {
+    ...item,
+    ...match,
+    id: item.id || match.id,
+    title: item.title || match.title,
+    officialTitle: match.officialTitle || match.title || item.officialTitle || wantedTitle,
+    status: item.status || match.status || 'Watching',
+    favorite: Boolean(item.favorite),
+    rewatches: Number(item.rewatches || 0),
+    notes: item.notes || match.notes || '',
+    genres: genres.length
+      ? cleanArray([...(item.genres || []), ...genres]).slice(0, 12)
+      : item.genres || [],
+    studio: studios.length
+      ? studios.join(' / ')
+      : item.studio || match.studio || '',
+    studioLookupAttemptedAt: new Date().toISOString(),
+    metadataSource: 'kitsu',
+    metadataNeedsRefresh: !genres.length,
+    metadataUpdatedAt: new Date().toISOString(),
+    syncStatus: {
+      ...(item.syncStatus || {}),
+      metadata: true,
+      poster: Boolean(match.cover || item.cover),
+      genres: Boolean(genres.length || item.genres?.length),
+      studio: Boolean(studios.length || item.studio || match.studio),
+      studioLookupAttempted: true,
+      metadataSource: 'kitsu',
+      dirty: !genres.length,
+      lastMetadataSync: new Date().toISOString()
+    }
+  };
+}
+
+
+export async function fetchKitsuFollowingSnapshot(item = {}) {
+  const wantedTitle = item.title || item.officialTitle || '';
+  const results = await searchKitsuAnime(wantedTitle, { limit: 8 });
+
+  if (!results.length) {
+    throw new Error(`Kitsu returned no matches for ${wantedTitle}`);
+  }
+
+  const match = bestKitsuMatch(results, item);
+  if (!match) {
+    throw new Error(`Kitsu returned no confident title match for ${wantedTitle}`);
+  }
+
+  return {
+    kitsuId: match.kitsuId || item.kitsuId || '',
+    title: item.title || match.title || wantedTitle,
+    officialTitle: match.officialTitle || match.title || item.officialTitle || wantedTitle,
+    status: String(match.status || '').toLowerCase(),
+    startDate: match.startDate || match.airedFrom || '',
+    airedFrom: match.airedFrom || match.startDate || '',
+    airedTo: match.airedTo || '',
+    episodeCount: Number(match.episodeCount || match.episodes || 0),
+    episodes: Number(match.episodes || match.episodeCount || 0),
+    cover: match.cover || item.cover || '',
+    synopsis: match.synopsis || match.description || item.synopsis || '',
+    year: match.year || item.year || '',
+    checkedAt: new Date().toISOString(),
+    metadataSource: 'kitsu'
+  };
 }
 
 
@@ -207,21 +642,88 @@ async function fetchFirstWorkingKitsuCollection(paths = []) {
   return [];
 }
 
-export async function fetchKitsuLiveDiscoverFeeds({ limit = 20 } = {}) {
-  const safeLimit = Math.min(Math.max(Number(limit || 20), 1), 20);
+function appendKitsuPagination(path, { limit = 20, offset = 0 } = {}) {
+  const separator = path.includes('?') ? '&' : '?';
+  return `${path}${separator}page[limit]=${limit}&page[offset]=${offset}`;
+}
+
+async function fetchPaginatedKitsuCollection({
+  paths = [],
+  target = 60,
+  pageSize = 20,
+  maxPages = 6
+} = {}) {
+  let lastError = null;
+
+  for (const basePath of paths) {
+    const collected = [];
+    const seen = new Set();
+
+    try {
+      for (let page = 0; page < maxPages && collected.length < target; page += 1) {
+        const offset = page * pageSize;
+        const rows = await fetchKitsuAnimeCollection(
+          appendKitsuPagination(basePath, {
+            limit: pageSize,
+            offset
+          })
+        );
+
+        if (!rows.length) break;
+
+        rows.forEach((row) => {
+          const key = String(row?.id || '');
+          if (!key || seen.has(key)) return;
+          seen.add(key);
+          collected.push(row);
+        });
+
+        if (rows.length < pageSize) break;
+      }
+
+      if (collected.length) return collected;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  if (lastError) throw lastError;
+  return [];
+}
+
+export async function fetchKitsuLiveDiscoverFeeds({
+  limit = 60,
+  currentLimit,
+  upcomingLimit
+} = {}) {
+  const safeCurrentLimit = Math.min(
+    Math.max(Number(currentLimit || Math.min(limit, 40) || 40), 1),
+    100
+  );
+  const safeUpcomingLimit = Math.min(
+    Math.max(Number(upcomingLimit || limit || 60), 1),
+    100
+  );
   const today = new Date();
   const todayKey = today.toISOString().slice(0, 10);
 
-  const currentResources = await fetchFirstWorkingKitsuCollection([
-    `/anime?filter[status]=current&sort=-userCount&page[limit]=${safeLimit}`,
-    `/anime?filter[status]=current&page[limit]=${safeLimit}`
-  ]);
-
-  const upcomingResources = await fetchFirstWorkingKitsuCollection([
-    `/anime?filter[status]=tba&sort=-userCount&page[limit]=${safeLimit}`,
-    `/anime?filter[status]=unreleased&sort=-userCount&page[limit]=${safeLimit}`,
-    `/anime?filter[status]=upcoming&sort=-userCount&page[limit]=${safeLimit}`,
-    `/anime?sort=startDate&page[limit]=${safeLimit}`
+  const [currentResources, upcomingResources] = await Promise.all([
+    fetchPaginatedKitsuCollection({
+      target: Math.max(safeCurrentLimit * 2, 40),
+      paths: [
+        '/anime?filter[status]=current&sort=-userCount',
+        '/anime?filter[status]=current'
+      ]
+    }),
+    fetchPaginatedKitsuCollection({
+      target: Math.max(safeUpcomingLimit * 2, 80),
+      paths: [
+        '/anime?filter[status]=tba&sort=startDate',
+        '/anime?filter[status]=unreleased&sort=startDate',
+        '/anime?filter[status]=upcoming&sort=startDate',
+        '/anime?sort=startDate'
+      ]
+    })
   ]);
 
   const current = currentResources
@@ -232,7 +734,12 @@ export async function fetchKitsuLiveDiscoverFeeds({ limit = 20 } = {}) {
       const end = String(attributes.endDate || '');
       return status === 'current' || (start && start <= todayKey && (!end || end >= todayKey));
     })
-    .slice(0, safeLimit)
+    .sort((a, b) => {
+      const left = discoverStartDate(a.attributes || {});
+      const right = discoverStartDate(b.attributes || {});
+      return String(right || '').localeCompare(String(left || ''));
+    })
+    .slice(0, safeCurrentLimit)
     .map((resource) => normalizeKitsuCatalogAnime(resource, 'current'));
 
   const upcoming = upcomingResources
@@ -242,8 +749,21 @@ export async function fetchKitsuLiveDiscoverFeeds({ limit = 20 } = {}) {
       const start = discoverStartDate(attributes);
       return ['tba', 'unreleased', 'upcoming'].includes(status) || (start && start > todayKey);
     })
-    .slice(0, safeLimit)
+    .sort((a, b) => {
+      const left = discoverStartDate(a.attributes || {}) || '9999-12-31';
+      const right = discoverStartDate(b.attributes || {}) || '9999-12-31';
+      return left.localeCompare(right);
+    })
+    .slice(0, safeUpcomingLimit)
     .map((resource) => normalizeKitsuCatalogAnime(resource, 'upcoming'));
 
-  return { current, upcoming, source: 'kitsu' };
+  return {
+    current,
+    upcoming,
+    source: 'kitsu',
+    fetched: {
+      current: currentResources.length,
+      upcoming: upcomingResources.length
+    }
+  };
 }

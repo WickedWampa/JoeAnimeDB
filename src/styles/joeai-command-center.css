@@ -1207,3 +1207,243 @@ main::-webkit-scrollbar-thumb:hover,
     margin: 0 22px 24px;
   }
 }
+
+
+/* ===== JoeAI cinematic hero art — final override ===== */
+.joeAICommandCenter .joeAIHero {
+  isolation: isolate;
+  min-height: 540px;
+  background: #050914 !important;
+}
+
+.joeAICommandCenter .joeAIHero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: var(--joeai-hero-image) center center / cover no-repeat;
+}
+
+.joeAICommandCenter .joeAIHero::after {
+  display: none;
+}
+
+/* The new cinematic artwork already contains the JoeAI brain chamber. */
+.joeAICommandCenter .joeAIHeroBrain {
+  visibility: hidden;
+  opacity: 0;
+}
+
+.joeAICommandCenter .joeAIHeroCopy,
+.joeAICommandCenter .joeAIHeroStats {
+  position: relative;
+  z-index: 2;
+}
+
+@media (max-width: 1180px) {
+  .joeAICommandCenter .joeAIHero::before {
+    background-position: 58% center;
+  }
+}
+
+@media (max-width: 760px) {
+  .joeAICommandCenter .joeAIHero::before {
+    background-position: 62% center;
+  }
+}
+
+
+/* =========================================================
+   JoeAnimeDB v5 — unified cinematic hero typography
+   Analytics-inspired title, eyebrow, lead, and stat language.
+   ========================================================= */
+
+:where(
+  .libraryArchiveHeroLive,
+  .favoritesHero,
+  .followingHero,
+  .upcomingHero,
+  .joeAIHero
+) {
+  border-radius: 28px;
+}
+
+:where(
+  .libraryArchiveLiveCopy,
+  .favoritesHeroCopy,
+  .followingHeroContent,
+  .upcomingHero > div,
+  .joeAIHeroCopy
+) {
+  text-shadow: none;
+}
+
+:where(
+  .libraryArchiveHeroLive .eyebrow,
+  .favoritesEyebrow,
+  .followingHero > .followingHeroContent > p:first-child,
+  .upcomingHero > div > p:first-child,
+  .joeAIEyebrow
+) {
+  margin: 0 0 12px;
+  font-size: .78rem;
+  font-weight: 900;
+  letter-spacing: .18em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  text-shadow: 0 0 18px color-mix(in srgb, var(--hero-unified-accent, var(--cyan)) 55%, transparent);
+}
+
+:where(
+  .libraryArchiveHeroLive h1,
+  .favoritesHero h1,
+  .followingHero h1,
+  .upcomingHero h1,
+  .joeAIHeroCopy > h2
+) {
+  margin: 0;
+  width: fit-content;
+  font-size: clamp(3rem, 7vw, 6.4rem);
+  line-height: .92;
+  letter-spacing: -.055em;
+  font-weight: 1000;
+  color: transparent !important;
+  background:
+    linear-gradient(
+      100deg,
+      var(--hero-unified-accent, var(--cyan)),
+      var(--hero-unified-accent-2, #aa72ff) 58%,
+      var(--hero-unified-hot, var(--pink))
+    ) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  filter: drop-shadow(
+    0 0 22px
+    color-mix(in srgb, var(--hero-unified-accent-2, #aa72ff) 42%, transparent)
+  ) !important;
+  text-shadow: none !important;
+}
+
+:where(
+  .libraryArchiveLiveTagline,
+  .favoritesLead,
+  .followingHeroContent > span,
+  .upcomingHero > div > p:not(:first-child),
+  .joeAIHeroBody
+) {
+  max-width: 610px;
+  margin-top: 22px;
+  color: rgba(242,248,255,.9);
+  font-size: clamp(1rem, 1.35vw, 1.28rem);
+  line-height: 1.65;
+  text-shadow:
+    0 3px 14px rgba(0,0,0,.82),
+    0 1px 2px rgba(0,0,0,.96);
+}
+
+:where(
+  .libraryArchiveLiveStats,
+  .favoritesStats,
+  .followingHeroStats,
+  .joeAIHeroStats
+) {
+  gap: 10px;
+}
+
+:where(
+  .libraryArchiveLiveStats > div,
+  .favoritesStats > div,
+  .followingHeroStats > div,
+  .joeAIHeroStats > div
+) {
+  min-height: 104px;
+  padding: 14px 12px;
+  border: 1px solid color-mix(in srgb, var(--hero-unified-accent, var(--cyan)) 24%, transparent);
+  border-radius: 16px;
+  background: rgba(4,8,14,.72);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
+}
+
+:where(
+  .libraryArchiveLiveStats span,
+  .favoritesStats span,
+  .followingHeroStats svg,
+  .joeAIHeroStats span
+) {
+  color: var(--hero-unified-accent, var(--cyan));
+  text-shadow: 0 0 14px currentColor;
+}
+
+:where(
+  .libraryArchiveLiveStats strong,
+  .favoritesStats strong,
+  .followingHeroStats strong,
+  .joeAIHeroStats strong
+) {
+  color: #fff;
+  font-size: 1.65rem;
+}
+
+:where(
+  .libraryArchiveLiveStats small,
+  .favoritesStats small,
+  .followingHeroStats small,
+  .joeAIHeroStats small
+) {
+  color: rgba(223,233,244,.65);
+  font-size: .72rem;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+@media (max-width: 760px) {
+  :where(
+    .libraryArchiveHeroLive h1,
+    .favoritesHero h1,
+    .followingHero h1,
+    .upcomingHero h1,
+    .joeAIHeroCopy > h2
+  ) {
+    font-size: clamp(2.7rem, 14vw, 4rem);
+  }
+}
+
+
+.joeAIHero {
+  --hero-unified-accent: var(--joeai-world-accent);
+  --hero-unified-accent-2: var(--joeai-world-accent-2);
+  --hero-unified-hot: var(--pink);
+}
+.joeAIHeroCopy {
+  width: min(760px, 52%);
+  padding: clamp(30px, 4vw, 58px);
+}
+.joeAIHeroTitle {
+  margin-bottom: 18px;
+}
+.joeAIHeroTitle h1 {
+  color: #fff;
+  font-size: 1.35rem;
+}
+.joeAIHeroStats {
+  grid-template-columns: repeat(3,minmax(105px,1fr));
+  max-width: 690px;
+}
+.joeAIHeroStats > div {
+  grid-template-columns: 1fr;
+  grid-template-areas:
+    "icon"
+    "value"
+    "label";
+  justify-items: center;
+  text-align: center;
+}
+@media (max-width: 900px) {
+  .joeAIHeroCopy { width: 100%; }
+  .joeAIHeroStats { grid-template-columns: 1fr; }
+}
+

@@ -67,8 +67,6 @@ export function AnimeCard({ anime, setSelected, updateAnime, displayRank, totalC
 
       <div className="cardInfo">
         <h3>{anime.title}</h3>
-        <p>{showRank ? `#${rank || '—'} · ` : ''}{anime.studio || 'Unknown Studio'}</p>
-
         <div className="metaPills">
           {anime.year && <span>{anime.year}</span>}
           {Number(anime.episodeCount) > 0 && <span>{anime.episodeCount} eps</span>}

@@ -1,3 +1,5 @@
+import { getAnimeStudios } from '../utils/metadataAdapters';
+
 // Sprint 4 Phase 1: Library Intelligence
 // Pure functions only. No React. No database writes.
 
@@ -33,7 +35,8 @@ function line(item = {}, extra = '') {
 
   if (j !== null) bits.push(`Joe ${j.toFixed(1)}`);
   if (m !== null) bits.push(`MAL ${m}`);
-  if (item.studio) bits.push(item.studio);
+  const studio = getAnimeStudios(item)[0];
+  if (studio) bits.push(studio);
   if (eps) bits.push(`${eps} eps`);
   if (extra) bits.push(extra);
 
@@ -51,7 +54,7 @@ function statusMatches(anime = [], status = '') {
 
 function byStudio(anime = [], studio = '') {
   const s = low(studio);
-  return anime.filter((item) => low(item.studio).includes(s));
+  return anime.filter((item) => getAnimeStudios(item).some((studio) => low(studio).includes(s)));
 }
 
 function byGenre(anime = [], genre = '') {
@@ -81,7 +84,7 @@ export function getLibraryStats(anime = [], catalog = []) {
     avgJoe: rated.length ? rated.reduce((sum, item) => sum + joeScore(item), 0) / rated.length : null,
     avgMal: malRated.length ? malRated.reduce((sum, item) => sum + malScore(item), 0) / malRated.length : null,
     topGenres: countBy(anime.flatMap((item) => item.genres || [])),
-    topStudios: countBy(anime.map((item) => item.studio)),
+    topStudios: countBy(anime.flatMap((item) => getAnimeStudios(item))),
     topYears: countBy(anime.map((item) => item.year).filter(Boolean))
   };
 }

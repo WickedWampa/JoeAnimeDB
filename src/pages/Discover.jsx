@@ -22,8 +22,7 @@ import {
   RefreshCw,
   Grid2X2,
   List,
-  Bookmark
-} from 'lucide-react';
+  } from 'lucide-react';
 import { Poster } from '../components/Poster';
 import { sameAnimeIdentity } from '../services/titleIdentity';
 import { buildDiscoverPlan } from '../services/recommendationEngineV3';
@@ -238,10 +237,149 @@ function identityKeys(item = {}) {
   return keys;
 }
 
+
+const LIVE_DISCOVER_CACHE_KEY = 'joeanime-live-discover-cache-v1';
+const LIVE_DISCOVER_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+function readLiveDiscoverCache() {
+  try {
+    const raw = localStorage.getItem(LIVE_DISCOVER_CACHE_KEY);
+    if (!raw) return [];
+
+    const parsed = JSON.parse(raw);
+    const savedAt = Number(parsed?.savedAt || 0);
+    const rows = Array.isArray(parsed?.rows) ? parsed.rows : [];
+
+    if (!rows.length) return [];
+
+    // Keep stale cache as a fallback if live providers are unavailable.
+    // The timestamp is still retained so the UI can decide when to refresh.
+    return rows.filter(isValidCatalogEntry);
+  } catch (error) {
+    console.warn('Could not read live Discover cache.', error);
+    return [];
+  }
+}
+
+function writeLiveDiscoverCache(rows = []) {
+  try {
+    const validRows = (rows || []).filter(isValidCatalogEntry);
+
+    localStorage.setItem(
+      LIVE_DISCOVER_CACHE_KEY,
+      JSON.stringify({
+        savedAt: Date.now(),
+        rows: validRows
+      })
+    );
+  } catch (error) {
+    console.warn('Could not save live Discover cache.', error);
+  }
+}
+
+function liveDiscoverCacheIsFresh() {
+  try {
+    const raw = localStorage.getItem(LIVE_DISCOVER_CACHE_KEY);
+    if (!raw) return false;
+
+    const parsed = JSON.parse(raw);
+    const savedAt = Number(parsed?.savedAt || 0);
+
+    return Boolean(savedAt && Date.now() - savedAt < LIVE_DISCOVER_CACHE_MAX_AGE_MS);
+  } catch {
+    return false;
+  }
+}
+
+const DELETED_CATALOG_TITLES = new Set([
+  'delete',
+  'deleted',
+  '[deleted]',
+  'removed',
+  '[removed]'
+]);
+
+function catalogImageUrls(item = {}) {
+  return [
+    item.cover,
+    item.poster,
+    item.posterImage,
+    item.coverImage,
+    item.image,
+    item.images?.jpg?.image_url,
+    item.images?.jpg?.large_image_url,
+    item.images?.webp?.image_url,
+    item.images?.webp?.large_image_url
+  ]
+    .flatMap((value) => {
+      if (!value) return [];
+      if (typeof value === 'string') return [value];
+
+      return [
+        value.original,
+        value.large,
+        value.medium,
+        value.small,
+        value.tiny
+      ].filter(Boolean);
+    })
+    .map((value) => String(value).trim())
+    .filter(Boolean);
+}
+
+function isDeletedCatalogEntry(item = {}) {
+  const rawTitle = String(
+    item.officialTitle ||
+    item.title ||
+    item.canonicalTitle ||
+    ''
+  ).trim();
+
+  const normalizedTitle = rawTitle.toLowerCase();
+
+  if (!rawTitle || DELETED_CATALOG_TITLES.has(normalizedTitle)) {
+    return true;
+  }
+
+  if (/^\[?(?:delete|deleted|removed)\]?$/i.test(rawTitle)) {
+    return true;
+  }
+
+  const slug = String(item.slug || '').trim().toLowerCase();
+  if (DELETED_CATALOG_TITLES.has(slug)) {
+    return true;
+  }
+
+  const imageUrls = catalogImageUrls(item);
+  const onlyDeletedPlaceholders =
+    imageUrls.length > 0 &&
+    imageUrls.every((url) =>
+      /image[-_ ]?missing|missing[-_ ]?image|deleted|placeholder/i.test(url)
+    );
+
+  // Do not reject normal upcoming titles merely because artwork is not ready.
+  // Only treat a placeholder as a tombstone when the row also has no useful
+  // descriptive or release metadata.
+  if (
+    onlyDeletedPlaceholders &&
+    !(item.synopsis || item.description || item.airedFrom || item.startDate || item.year)
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function isValidCatalogEntry(item = {}) {
+  return Boolean(item && !isDeletedCatalogEntry(item));
+}
+
 function uniqueCatalog(items = []) {
   const seen = new Set();
 
   return items.filter((item) => {
+    if (!isValidCatalogEntry(item)) return false;
+
     const keys = identityKeys(item);
     if (!keys.size) return false;
 
@@ -272,7 +410,7 @@ function franchiseKey(item = {}) {
   return words.slice(0, 3).join('|') || cardKey(item);
 }
 
-function DiscoverCard({ item, onOpen, onAddWatching, onToggleFollow, onToggleWishlist, adding = false, following = false, wishlisted = false, showRelease = false }) {
+function DiscoverCard({ item, onOpen, onAddWatching, onToggleFollow, adding = false, following = false, showRelease = false }) {
   const score = numericScore(item);
   const releaseDate = item.airedFrom ? new Date(item.airedFrom) : null;
   const releaseText = releaseDate && !Number.isNaN(releaseDate.getTime())
@@ -318,26 +456,13 @@ function DiscoverCard({ item, onOpen, onAddWatching, onToggleFollow, onToggleWis
           >
             {following ? '🔔 Following' : '🔔 Follow'}
           </button>
-
-          {onToggleWishlist && (
-            <button
-              type="button"
-              className={`discoverWishlistButton ${wishlisted ? 'active' : ''}`}
-              onClick={(event) => {
-                event.stopPropagation();
-                onToggleWishlist(item);
-              }}
-            >
-              <Bookmark /> {wishlisted ? 'Wishlisted' : 'Wishlist'}
-            </button>
-          )}
         </div>
       </div>
     </article>
   );
 }
 
-function Shelf({ icon, title, subtitle, items, onOpen, onBrowse, onAddWatching, onToggleFollow, onToggleWishlist, addingKey }) {
+function Shelf({ icon, title, subtitle, items, onOpen, onBrowse, onAddWatching, onToggleFollow, addingKey }) {
   const railRef = useRef(null);
 
   function slide(direction) {
@@ -384,9 +509,7 @@ function Shelf({ icon, title, subtitle, items, onOpen, onBrowse, onAddWatching, 
               onOpen={onOpen}
               onAddWatching={onAddWatching}
               onToggleFollow={onToggleFollow}
-              onToggleWishlist={onToggleWishlist}
               following={Boolean(item.followed)}
-              wishlisted={Boolean(item.wishlisted)}
               adding={addingKey === cardKey(item)}
             />
           ))}
@@ -405,7 +528,6 @@ function LiveDiscoverBrowser({
   onOpen,
   onAddWatching,
   onToggleFollow,
-  onToggleWishlist,
   addingKey
 }) {
   const [query, setQuery] = useState('');
@@ -448,7 +570,7 @@ function LiveDiscoverBrowser({
         <div>
           <p className="discoverEyebrow">Live Discover</p>
           <h2>{mode === 'airing' ? <><Radio /> Airing Now</> : <><CalendarClock /> Coming Soon</>}</h2>
-          <span>{filtered.length} title{filtered.length === 1 ? '' : 's'} · Jikan/Kitsu live catalog</span>
+          <span>{filtered.length} title{filtered.length === 1 ? '' : 's'} · live Discover catalog</span>
         </div>
         <button type="button" className="discoverBackButton" onClick={onBack}>← Recommendations</button>
       </header>
@@ -491,9 +613,7 @@ function LiveDiscoverBrowser({
               onOpen={onOpen}
               onAddWatching={onAddWatching}
               onToggleFollow={onToggleFollow}
-              onToggleWishlist={onToggleWishlist}
               following={Boolean(item.followed)}
-              wishlisted={Boolean(item.wishlisted)}
               adding={addingKey === cardKey(item)}
               showRelease
             />
@@ -513,7 +633,6 @@ function LiveDiscoverBrowser({
               <div className="discoverLiveListActions">
                 <button type="button" onClick={(event) => { event.stopPropagation(); onAddWatching(item); }}>+ Watching</button>
                 <button type="button" className={item.followed ? 'active' : ''} onClick={(event) => { event.stopPropagation(); onToggleFollow(item); }}>{item.followed ? '🔔 Following' : '🔔 Follow'}</button>
-                <button type="button" className={item.wishlisted ? 'active' : ''} onClick={(event) => { event.stopPropagation(); onToggleWishlist(item); }}><Bookmark /> {item.wishlisted ? 'Wishlisted' : 'Wishlist'}</button>
               </div>
             </article>
           ))}
@@ -534,7 +653,6 @@ function CatalogBrowser({
   onOpenTitle,
   onAddWatching,
   onToggleFollow,
-  onToggleWishlist,
   addingKey
 }) {
   const [query, setQuery] = useState('');
@@ -656,9 +774,7 @@ function CatalogBrowser({
               onOpen={onOpenTitle}
               onAddWatching={onAddWatching}
               onToggleFollow={onToggleFollow}
-              onToggleWishlist={onToggleWishlist}
               following={Boolean(item.followed)}
-              wishlisted={Boolean(item.wishlisted)}
               adding={addingKey === cardKey(item)}
             />
           ))}
@@ -681,9 +797,31 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
   const [refreshingLive, setRefreshingLive] = useState(false);
   const [catalogMessage, setCatalogMessage] = useState('');
   const [hubMode, setHubMode] = useState('recommendations');
+  const [liveCatalog, setLiveCatalog] = useState(() => {
+    const cached = readLiveDiscoverCache();
+    if (cached.length) return cached;
+
+    return (catalog || []).filter((item) =>
+      item?.discoverBucket === 'current' ||
+      item?.discoverBucket === 'upcoming'
+    );
+  });
+
+  useEffect(() => {
+    const tagged = (catalog || []).filter((item) =>
+      item?.discoverBucket === 'current' ||
+      item?.discoverBucket === 'upcoming'
+    );
+
+    if (tagged.length) {
+      setLiveCatalog(tagged);
+      writeLiveDiscoverCache(tagged);
+    }
+  }, [catalog]);
 
   useEffect(() => {
     if (!refreshLiveDiscover) return;
+    if (liveDiscoverCacheIsFresh()) return;
 
     const lastSync = new Date(
       localStorage.getItem('joeanime-discover-live-synced-at') || 0
@@ -720,9 +858,41 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
     return { malIds, allFingerprints, legacyFingerprints, legacyTitles };
   }, [anime]);
 
+  const discoverCatalog = useMemo(() => {
+    const liveByIdentity = new Map();
+
+    (liveCatalog || [])
+      .filter(isValidCatalogEntry)
+      .forEach((item) => {
+        identityKeys(item).forEach((key) => liveByIdentity.set(key, item));
+      });
+
+    const overlaid = (catalog || [])
+      .filter(isValidCatalogEntry)
+      .map((item) => {
+      const live = Array.from(identityKeys(item) || [])
+        .map((key) => liveByIdentity.get(key))
+        .find(Boolean);
+
+      return live ? { ...item, ...live, id: item.id || live.id } : item;
+    });
+
+    const persistedKeys = new Set(
+      overlaid.flatMap((item) => identityKeys(item))
+    );
+
+    const missingLiveRows = (liveCatalog || [])
+      .filter(isValidCatalogEntry)
+      .filter((item) =>
+        !Array.from(identityKeys(item) || []).some((key) => persistedKeys.has(key))
+      );
+
+    return uniqueCatalog([...overlaid, ...missingLiveRows]);
+  }, [catalog, liveCatalog]);
+
   const unseenCatalog = useMemo(() => {
     const validCatalog = uniqueCatalog(
-      (catalog || []).filter((item) => item && titleOf(item))
+      (discoverCatalog || []).filter((item) => item && titleOf(item))
     );
 
     return validCatalog.filter((item) => {
@@ -766,7 +936,7 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
         )
       );
     });
-  }, [catalog, libraryLookup]);
+  }, [discoverCatalog, libraryLookup]);
 
   const airingNow = useMemo(
     () => [...unseenCatalog]
@@ -970,29 +1140,26 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
     );
   }
 
-  async function toggleWishlist(item) {
-    if (!updateCatalogAnime || !item) return;
-
-    const wishlisted = !Boolean(item.wishlisted);
-    await updateCatalogAnime({
-      ...item,
-      wishlisted,
-      ignored: false,
-      wishlistedAt: wishlisted ? (item.wishlistedAt || new Date().toISOString()) : '',
-      listUpdatedAt: new Date().toISOString()
-    });
-
-    setCatalogMessage(wishlisted ? `🔖 Added ${titleOf(item)} to your wishlist.` : `Removed ${titleOf(item)} from your wishlist.`);
-  }
-
   async function refreshLive() {
     if (!refreshLiveDiscover || refreshingLive) return;
 
     setRefreshingLive(true);
-    setCatalogMessage('Checking Jikan, with Kitsu ready as backup...');
+    setCatalogMessage('Refreshing live anime feeds...');
 
     try {
-      const result = await refreshLiveDiscover({ limitPerFeed: 25 });
+      const result = await refreshLiveDiscover({ limitPerFeed: 80 });
+
+      const refreshedLiveRows = (result.catalog || result.saved?.catalog || [])
+        .filter((item) =>
+          item?.discoverBucket === 'current' ||
+          item?.discoverBucket === 'upcoming'
+        );
+
+      if (refreshedLiveRows.length) {
+        setLiveCatalog(refreshedLiveRows);
+        writeLiveDiscoverCache(refreshedLiveRows);
+      }
+
       const cacheNote = result.usedCache ? ' Cached titles were kept where both providers were unavailable.' : '';
       const providerNote = result.sources ? ` Sources: current ${result.sources.current}, upcoming ${result.sources.upcoming}.` : '';
       const partialNote = result.partial ? ' One or more feeds used a fallback or cache.' : '';
@@ -1096,7 +1263,6 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
           onOpen={setSelected}
           onAddWatching={addWatching}
           onToggleFollow={toggleFollow}
-          onToggleWishlist={toggleWishlist}
           addingKey={addingKey}
         />
       )}
@@ -1110,7 +1276,6 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
         onOpen={setSelected}
         onAddWatching={addWatching}
         onToggleFollow={toggleFollow}
-        onToggleWishlist={toggleWishlist}
         addingKey={addingKey}
         onBrowse={() => browse('all', 'Entire Catalog')}
       />
@@ -1123,7 +1288,6 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
         onOpen={setSelected}
         onAddWatching={addWatching}
         onToggleFollow={toggleFollow}
-        onToggleWishlist={toggleWishlist}
         addingKey={addingKey}
         onBrowse={() => browse('all', 'Entire Catalog')}
       />
@@ -1187,7 +1351,6 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
           onOpen={setSelected}
           onAddWatching={addWatching}
           onToggleFollow={toggleFollow}
-          onToggleWishlist={toggleWishlist}
           addingKey={addingKey}
           onBrowse={() => browse('genre', (primaryAnchor.genres || [])[0] || 'Entire Catalog')}
         />
@@ -1203,7 +1366,6 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
         onOpen={setSelected}
         onAddWatching={addWatching}
         onToggleFollow={toggleFollow}
-        onToggleWishlist={toggleWishlist}
         addingKey={addingKey}
         onBrowse={() => browse('all', 'JoeAI Picks')}
       />
@@ -1216,7 +1378,6 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
         onOpen={setSelected}
         onAddWatching={addWatching}
         onToggleFollow={toggleFollow}
-        onToggleWishlist={toggleWishlist}
         addingKey={addingKey}
         onBrowse={() => browse('all', 'Entire Catalog')}
       />
@@ -1229,7 +1390,6 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
         onOpen={setSelected}
         onAddWatching={addWatching}
         onToggleFollow={toggleFollow}
-        onToggleWishlist={toggleWishlist}
         addingKey={addingKey}
         onBrowse={() => browse('hidden', 'Hidden Gems')}
       />
@@ -1242,7 +1402,6 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
         onOpen={setSelected}
         onAddWatching={addWatching}
         onToggleFollow={toggleFollow}
-        onToggleWishlist={toggleWishlist}
         addingKey={addingKey}
         onBrowse={() => browse('genre', 'Psychological')}
       />
@@ -1255,7 +1414,6 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
         onOpen={setSelected}
         onAddWatching={addWatching}
         onToggleFollow={toggleFollow}
-        onToggleWishlist={toggleWishlist}
         addingKey={addingKey}
         onBrowse={() => browse('genre', 'Drama')}
       />
@@ -1268,7 +1426,6 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
         onOpen={setSelected}
         onAddWatching={addWatching}
         onToggleFollow={toggleFollow}
-        onToggleWishlist={toggleWishlist}
         addingKey={addingKey}
         onBrowse={() => browse('all', 'Entire Catalog')}
       />
@@ -1282,7 +1439,6 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
           onOpen={setSelected}
           onAddWatching={addWatching}
           onToggleFollow={toggleFollow}
-          onToggleWishlist={toggleWishlist}
           addingKey={addingKey}
           onBrowse={() => browse('studio', topStudioDisplay)}
         />
@@ -1342,7 +1498,6 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
           }}
           onAddWatching={addWatching}
           onToggleFollow={toggleFollow}
-          onToggleWishlist={toggleWishlist}
           addingKey={addingKey}
         />
       )}

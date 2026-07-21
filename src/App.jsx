@@ -4,7 +4,6 @@ import './styles/mmorpg-rank-borders.css';
 import './styles/rank-badge-tiers.css';
 import './styles/rank-badge-fix.css';
 import './styles/not-rated.css';
-import './styles/new-user-mode.css';
 import './styles/add-anime.css';
 import './styles/library-card-fix.css';
 import './styles/library-neon-archive.css';
@@ -16,7 +15,8 @@ import './styles/joeanime-home-v2.css';
 import './styles/analytics-lab.css';
 import './styles/library-cleanup.css';
 import './styles/library-integrity.css';
-import React, { useMemo, useState } from 'react';
+import './styles/settings-art.css';
+import React, { useEffect, useMemo, useState } from 'react';
 
 import { Sidebar } from './components/Sidebar';
 import { SearchBar } from './components/SearchBar';
@@ -26,8 +26,9 @@ import { LibraryPage } from './pages/LibraryPage';
 import { FavoritesPage } from './pages/FavoritesPage';
 import { Discover } from './pages/Discover';
 import { FollowingPage } from './pages/FollowingPage';
+import { UpcomingAnime } from './pages/UpcomingAnime';
 import { LibraryCleanup } from './pages/LibraryCleanup';
-import { Universe, Assistant, Analytics, Timeline, BleachShrine, SettingsPage } from './pages/PlaceholderPages';
+import { Universe, Assistant, Analytics, BleachShrine, SettingsPage } from './pages/PlaceholderPages';
 import { useAnimeLibrary } from './hooks/useAnimeLibrary';
 
 function UpdateProgressOverlay({ syncText, syncProgress }) {
@@ -86,10 +87,6 @@ export function App() {
     syncProgress,
     syncMetadata,
 
-    newUserMode,
-    enableNewUserMode,
-    exitNewUserMode,
-    resetNewUserMode,
 
     updateData, updateAnime, updateCatalogAnime, deleteAnime, fetchMoreCatalogTitles, refreshLiveDiscover
   } = library;
@@ -103,6 +100,77 @@ export function App() {
     () => catalog.filter((item) => Boolean(item.followed)).length,
     [catalog]
   );
+
+  const [profileDisplayName, setProfileDisplayName] = useState(() => {
+    try {
+      return String(localStorage.getItem('joeanime-display-name') || '').trim();
+    } catch {
+      return '';
+    }
+  });
+
+  useEffect(() => {
+    const databaseName = String(data?.profile?.displayName || '').trim();
+    if (!profileDisplayName && databaseName) {
+      setProfileDisplayName(databaseName);
+      try {
+        localStorage.setItem('joeanime-display-name', databaseName);
+      } catch (error) {
+        console.warn('Could not cache display name:', error);
+      }
+    }
+  }, [data?.profile?.displayName, profileDisplayName]);
+
+  const displayName = profileDisplayName || String(data?.profile?.displayName || '').trim();
+  const isNewUser = anime.length === 0 && !displayName;
+
+  async function handleSaveDisplayName(nextName) {
+    const cleanName = String(nextName || '').trim().slice(0, 32);
+    if (!cleanName) return null;
+
+    // Update immediately so the onboarding modal closes before the SQLite
+    // repository round-trip. The current desktop replaceAll path only persists
+    // anime rows, so profile data also needs its own durable preference key.
+    setProfileDisplayName(cleanName);
+
+    try {
+      localStorage.setItem('joeanime-display-name', cleanName);
+    } catch (error) {
+      console.warn('Could not save display name preference:', error);
+    }
+
+    try {
+      return await updateData((current) => ({
+        ...current,
+        profile: {
+          ...(current?.profile || {}),
+          displayName: cleanName,
+          onboardingCompletedAt: current?.profile?.onboardingCompletedAt || new Date().toISOString(),
+          profileUpdatedAt: new Date().toISOString()
+        }
+      }));
+    } catch (error) {
+      console.warn('Display name saved locally, but database profile update failed:', error);
+      return {
+        ...(data || {}),
+        profile: {
+          ...(data?.profile || {}),
+          displayName: cleanName
+        }
+      };
+    }
+  }
+
+  function handleOpenFilter(type, value) {
+    const cleanValue = String(value || '').trim();
+    if (!cleanValue) return;
+
+    // The library hook already searches metadata such as genres and studios.
+    // Populate the visible search field first, then open Library so the user
+    // immediately sees the matching collection and can clear/change it there.
+    setQuery(cleanValue);
+    setView('library');
+  }
 
   async function handleUpdateAnime(updatedAnime) {
     const saved = await updateAnime(updatedAnime);
@@ -138,20 +206,10 @@ export function App() {
         syncMetadata={syncMetadata}
         theme={theme}
         setTheme={setTheme}
-        newUserMode={newUserMode}
         followingCount={followingCount}
       />
 
       <section className="content">
-        {newUserMode && (
-          <div className="newUserModeBanner">
-            <strong>🧪 New User Mode</strong>
-            <span>Temporary test library — nothing is saved to your real database.</span>
-            <button type="button" onClick={resetNewUserMode}>Reset Demo</button>
-            <button type="button" onClick={exitNewUserMode}>Exit</button>
-          </div>
-        )}
-
         {['library', 'favorites', 'rankings'].includes(view) && (
           <header className="topbar">
             <SearchBar query={query} setQuery={setQuery} view={view} setView={setView} />
@@ -163,7 +221,19 @@ export function App() {
           </header>
         )}
 
-        {view === 'dashboard' && <Dashboard anime={anime} stats={stats} setSelected={setSelected} updateAnime={handleUpdateAnime} setView={setView} />}
+        {view === 'dashboard' && (
+          <Dashboard
+            anime={anime}
+            stats={stats}
+            setSelected={setSelected}
+            updateAnime={handleUpdateAnime}
+            setView={setView}
+            onOpenFilter={handleOpenFilter}
+            displayName={displayName || (anime.length ? 'Joe' : 'Anime Fan')}
+            isNewUser={isNewUser}
+            onSaveDisplayName={handleSaveDisplayName}
+          />
+        )}
         {(view === 'library' || view === 'rankings') && (
           <LibraryPage anime={filtered} allAnime={anime} mode={mode} setSelected={setSelected} updateAnime={handleUpdateAnime} title={view === 'rankings' ? 'Rankings' : 'Library'} />
         )}
@@ -198,7 +268,15 @@ export function App() {
           />
         )}
         {view === 'analytics' && <Analytics anime={anime} />}
-        {view === 'timeline' && <Timeline anime={anime} setSelected={setSelected} />}
+        {view === 'upcoming' && (
+          <UpcomingAnime
+            anime={anime}
+            catalog={catalog}
+            setSelected={setSelected}
+            updateAnime={handleUpdateAnime}
+            updateCatalogAnime={updateCatalogAnime}
+          />
+        )}
         {view === 'bleach' && <BleachShrine anime={anime} setSelected={setSelected} />}
         {view === 'library-integrity' && (
           <LibraryCleanup
@@ -212,13 +290,13 @@ export function App() {
         {view === 'settings' && (
           <SettingsPage
             data={data}
+            updateAnime={handleUpdateAnime}
             syncMetadata={syncMetadata}
             stats={stats}
-            newUserMode={newUserMode}
-            enableNewUserMode={enableNewUserMode}
-            exitNewUserMode={exitNewUserMode}
-            resetNewUserMode={resetNewUserMode}
+            displayName={displayName || (anime.length ? 'Joe' : '')}
+            onSaveDisplayName={handleSaveDisplayName}
             onOpenIntegrity={() => setView('library-integrity')}
+            onOpenMetadataHealth={() => setView('analytics')}
           />
         )}
       </section>
@@ -226,6 +304,7 @@ export function App() {
       {selected && (
         <DetailModal
           anime={selected}
+          library={anime}
           onClose={() => setSelected(null)}
           updateAnime={handleUpdateAnime}
           updateCatalogAnime={updateCatalogAnime}

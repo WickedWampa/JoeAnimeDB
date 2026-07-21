@@ -3,6 +3,8 @@ import { answerLibraryQuestion } from './libraryIntelligence';
 import { maybeSimilarRecommendation } from './similarityEngine';
 import { maybeKnowledgeFirstRecommendation } from './knowledgeFirstRecommender';
 import { routeJoeAIConversation } from './conversation/conversationEngine';
+import { explainGenreDNA } from './genreDNAExplainer';
+import { explainTastePattern } from './tastePatternExplainer';
 
 export function makeTextResult(text) {
   return { type: 'text', text };
@@ -608,6 +610,12 @@ export async function executeJoeAICommand({ intent, anime = [], catalog = [], up
     case 'watchingList':
       return answerWatchingList({ anime });
 
+    case 'genreDNA':
+      return explainGenreDNA({ genre: intent.genre, anime });
+
+    case 'tastePattern':
+      return explainTastePattern({ pattern: intent.pattern, anime });
+
     case 'singleAdd':
       return executeSingleAddCommand({
         anime,
@@ -662,6 +670,20 @@ export async function executeJoeAICommand({ intent, anime = [], catalog = [], up
         `node scripts\\generateGenomeCardForTitle.cjs "${title}"`,
         'node scripts\\rebuildGenomeRegistry.cjs'
       ].join('\n'));
+    }
+
+    case 'recommendationExplanation': {
+      const title = String(intent.title || '').trim();
+      const explanationPrompt = title
+        ? `why did you recommend ${title}?`
+        : String(intent.text || 'why did you recommend this?');
+
+      return answerConversationalQuestion({
+        text: explanationPrompt,
+        anime,
+        catalog,
+        brain
+      });
     }
 
     case 'recommendation': {

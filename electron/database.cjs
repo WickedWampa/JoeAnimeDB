@@ -23,6 +23,27 @@ function titleKey(title = '') {
     .replace(/[^a-z0-9]+/g, '');
 }
 
+
+function debugAnimeRow(item = {}) {
+  return {
+    id: item.id ?? null,
+    title: item.title || '',
+    malId: item.malId ?? item.mal_id ?? null,
+    kitsuId: item.kitsuId ?? item.kitsu_id ?? null
+  };
+}
+
+function getDuplicateMalIdGroups() {
+  return db.prepare(`
+    SELECT malId, COUNT(*) AS count, GROUP_CONCAT(id, ' | ') AS ids, GROUP_CONCAT(title, ' | ') AS titles
+    FROM anime
+    WHERE malId IS NOT NULL AND malId != ''
+    GROUP BY malId
+    HAVING COUNT(*) > 1
+    ORDER BY count DESC, malId
+  `).all();
+}
+
 function animeToRow(item) {
   return {
     id: String(item.id),
@@ -330,6 +351,7 @@ function mergeDuplicateAnime(existingRows = [], incoming = {}) {
 
 function upsertAnime(item) {
   const incomingMalId = item.malId ?? item.mal_id ?? null;
+  const countBefore = db.prepare('SELECT COUNT(*) AS count FROM anime').get().count;
   let duplicateRows = [];
 
   if (incomingMalId !== null && incomingMalId !== undefined && incomingMalId !== '') {
@@ -342,13 +364,55 @@ function upsertAnime(item) {
       .all(String(item.id));
   }
 
+  console.group(`[Mr Bug][SQLite upsert] ${item.title || item.id}`);
+  console.log('DATABASE BEFORE UPSERT', {
+    count: countBefore,
+    incoming: debugAnimeRow(item),
+    matchedRows: duplicateRows.length,
+    duplicateMalIdGroups: getDuplicateMalIdGroups()
+  });
+  console.table(duplicateRows.map(debugAnimeRow));
+
+  if (duplicateRows.length > 1) {
+    console.error('[Mr Bug] MULTIPLE DATABASE ROWS MATCHED ONE REPAIR', {
+      incoming: debugAnimeRow(item),
+      matches: duplicateRows.map(debugAnimeRow)
+    });
+  }
+
   const mergedItem = mergeDuplicateAnime(duplicateRows, item);
   const row = animeToRow(mergedItem);
+  console.log('MERGED ROW', debugAnimeRow(row));
 
   const transaction = db.transaction(() => {
     // Once MAL identity is known, collapse every duplicate row into one record.
-    if (row.malId !== null && row.malId !== undefined) {
-      db.prepare('DELETE FROM anime WHERE malId = ? AND id != ?').run(row.malId, row.id);
+    if (row.malId !== null && row.malId !== undefined && row.malId !== '') {
+      const rowsAboutToDelete = db
+        .prepare('SELECT * FROM anime WHERE malId = ? AND id != ?')
+        .all(row.malId, row.id);
+
+      console.log('DELETE CHECK', {
+        malId: row.malId,
+        keepId: row.id,
+        rowsAboutToDelete: rowsAboutToDelete.map(debugAnimeRow)
+      });
+
+      if (rowsAboutToDelete.length) {
+        console.error('[Mr Bug] DELETE IS ABOUT TO REMOVE EXISTING LIBRARY ROWS', {
+          keeping: debugAnimeRow(row),
+          deleting: rowsAboutToDelete.map(debugAnimeRow)
+        });
+      }
+
+      const deleteResult = db
+        .prepare('DELETE FROM anime WHERE malId = ? AND id != ?')
+        .run(row.malId, row.id);
+
+      console.log('DELETE RESULT', {
+        changes: deleteResult.changes,
+        malId: row.malId,
+        keepId: row.id
+      });
     }
 
     db.prepare(`
@@ -386,7 +450,28 @@ function upsertAnime(item) {
   });
 
   transaction();
-  return rowToAnime(db.prepare('SELECT * FROM anime WHERE id = ?').get(row.id));
+
+  const countAfter = db.prepare('SELECT COUNT(*) AS count FROM anime').get().count;
+  const savedRow = db.prepare('SELECT * FROM anime WHERE id = ?').get(row.id);
+  console.log('DATABASE AFTER UPSERT', {
+    count: countAfter,
+    delta: countAfter - countBefore,
+    saved: savedRow ? debugAnimeRow(savedRow) : null,
+    duplicateMalIdGroups: getDuplicateMalIdGroups()
+  });
+
+  if (countAfter < countBefore) {
+    console.error('[Mr Bug] LIBRARY COUNT SHRANK DURING SQLITE UPSERT', {
+      before: countBefore,
+      after: countAfter,
+      delta: countAfter - countBefore,
+      incoming: debugAnimeRow(item),
+      saved: savedRow ? debugAnimeRow(savedRow) : null
+    });
+  }
+
+  console.groupEnd();
+  return rowToAnime(savedRow);
 }
 
 function upsertCatalogAnime(item) {

@@ -15,8 +15,7 @@ function titleKey(title = '') {
 function hasUsefulMetadata(item) {
   return Boolean(
     item?.cover &&
-    item?.synopsis &&
-    item?.studio &&
+    (item?.synopsis || item?.description) &&
     Array.isArray(item?.genres) &&
     item.genres.length
   );
@@ -398,7 +397,7 @@ export async function fetchLiveDiscoverCatalog({
   limitPerFeed = 25,
   signal
 } = {}) {
-  const safeLimit = Math.max(1, Math.min(25, Number(limitPerFeed || 25)));
+  const safeLimit = Math.max(1, Math.min(100, Number(limitPerFeed || 60)));
   const cachedCurrent = (catalog || []).filter((item) => item?.discoverBucket === 'current');
   const cachedUpcoming = (catalog || []).filter((item) => item?.discoverBucket === 'upcoming');
 
@@ -428,7 +427,10 @@ export async function fetchLiveDiscoverCatalog({
 
   if (!currentRows.length || !upcomingRows.length) {
     try {
-      const kitsu = await fetchKitsuLiveDiscoverFeeds({ limit: Math.min(safeLimit, 20) });
+      const kitsu = await fetchKitsuLiveDiscoverFeeds({
+        currentLimit: Math.min(safeLimit, 40),
+        upcomingLimit: safeLimit
+      });
       if (!currentRows.length && kitsu.current.length) {
         currentRows = kitsu.current;
         sources.current = 'kitsu';

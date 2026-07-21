@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { countBy, filterAnime, score } from '../utils/animeUtils';
 import { isRemoteCover, needsArtworkRepair, sleep } from '../services/metadata';
-import { fetchMetadataFromProvider, hasManualMetadataOverride } from '../services/metadataProvider';
+import { hasManualMetadataOverride } from '../services/metadataProvider';
+import { fetchKitsuMetadata } from '../services/kitsuProvider';
 import { animeRepository } from '../repositories/animeRepository';
 import { updateCatalogMetadata, fetchMoreCatalogTitles as fetchMoreCatalogPage, fetchLiveDiscoverCatalog } from '../services/catalogService';
 import seedData from '../data/animeSeed.json';
@@ -9,17 +10,20 @@ import { createNewUserDemoDatabase } from '../services/newUserMode';
 
 
 function hasGoodMetadata(item = {}) {
-  return Boolean(
-    item.malId ||
-    item.officialTitle ||
+  const hasGenres = Array.isArray(item.genres) && item.genres.length > 0;
+  const hasIdentity = Boolean(item.malId || item.kitsuId || item.officialTitle);
+  const hasCoreDetails = Boolean(
     item.synopsis ||
     item.description ||
-    item.studio ||
     item.year ||
     item.episodeCount ||
-    item.episodes ||
-    (Array.isArray(item.genres) && item.genres.length)
+    item.episodes
   );
+
+  // A poster/title-only Kitsu fallback is not analytics-ready. Genres are the
+  // minimum required for Home and Analytics; identity/core details prevent an
+  // empty genre-only shell from being treated as complete.
+  return Boolean(hasGenres && hasIdentity && hasCoreDetails);
 }
 
 function metadataIsStale(item = {}) {
@@ -33,12 +37,45 @@ function metadataIsStale(item = {}) {
 }
 
 function shouldRefreshMetadata(item = {}) {
-  return hasManualMetadataOverride(item) || needsArtworkRepair(item) || !hasGoodMetadata(item) || metadataIsStale(item) || item.syncStatus?.dirty;
+  const studioRepairAttempts = Number(
+    item.studioRepairAttempts ??
+    item.syncStatus?.studioRepairAttempts ??
+    0
+  );
+
+  const needsStudioRepair = Boolean(
+    !item.studio &&
+    studioRepairAttempts < 2
+  );
+
+  return (
+    hasManualMetadataOverride(item) ||
+    needsArtworkRepair(item) ||
+    !hasGoodMetadata(item) ||
+    metadataIsStale(item) ||
+    Boolean(item.metadataNeedsRefresh) ||
+    Boolean(item.syncStatus?.dirty) ||
+    needsStudioRepair
+  );
 }
 
-const METADATA_LOOKUP_TIMEOUT_MS = 22000;
+function setItemSyncStatus(item = {}, updates = {}) {
+  return {
+    ...item,
+    metadataNeedsRefresh:
+      typeof updates.dirty === 'boolean'
+        ? updates.dirty
+        : Boolean(item.metadataNeedsRefresh),
+    syncStatus: {
+      ...(item.syncStatus || {}),
+      ...updates
+    }
+  };
+}
+
+const METADATA_LOOKUP_TIMEOUT_MS = 9000;
 const METADATA_BASE_DELAY_MS = 1450;
-const METADATA_RETRY_DELAYS_MS = [0, 2500, 5500];
+const METADATA_RETRY_DELAYS_MS = [0];
 
 async function withTimeout(promise, timeoutMs, label = 'Metadata lookup') {
   let timer;
@@ -59,44 +96,15 @@ async function withTimeout(promise, timeoutMs, label = 'Metadata lookup') {
 }
 
 async function fetchMetadataWithBackoff(item = {}) {
-  let lastError = null;
-
-  for (let attempt = 0; attempt < METADATA_RETRY_DELAYS_MS.length; attempt++) {
-    const waitMs = METADATA_RETRY_DELAYS_MS[attempt];
-
-    if (waitMs) {
-      await sleep(waitMs);
-    }
-
-    try {
-      return await withTimeout(
-        fetchMetadataFromProvider(item),
-        METADATA_LOOKUP_TIMEOUT_MS,
-        `Metadata lookup for ${item.title || 'title'}`
-      );
-    } catch (error) {
-      lastError = error;
-
-      const status = Number(
-        error?.status ||
-        String(error?.message || '').match(/\b(429|500|502|503|504)\b/)?.[1] ||
-        0
-      );
-
-      const retryable = [429, 500, 502, 503, 504].includes(status);
-
-      if (!retryable || attempt === METADATA_RETRY_DELAYS_MS.length - 1) {
-        throw error;
-      }
-
-      console.warn(
-        `Retryable Jikan error for ${item.title || 'title'}: ${status}. Backing off before retry.`
-      );
-    }
-  }
-
-  throw lastError || new Error('Metadata lookup failed');
+  // Library repair is deliberately Kitsu-only. This avoids Jikan 504/rate-limit
+  // stalls while retaining Kitsu categories and production relationships.
+  return withTimeout(
+    fetchKitsuMetadata(item),
+    METADATA_LOOKUP_TIMEOUT_MS,
+    `Kitsu metadata lookup for ${item.title || 'title'}`
+  );
 }
+
 
 const emptyProgress = {
   step: 1,
@@ -227,7 +235,41 @@ export function useAnimeLibrary() {
       return nextSnapshot;
     }
 
+    const before = dataRef.current || data || { anime: [] };
+    const beforeAnime = Array.isArray(before.anime) ? before.anime : [];
+    console.group(`[Metadata Repair Debug][Hook] ${updatedAnime.title || updatedAnime.id}`);
+    console.log('REACT STATE BEFORE REPOSITORY UPDATE', {
+      count: beforeAnime.length,
+      incoming: {
+        id: updatedAnime.id,
+        title: updatedAnime.title,
+        malId: updatedAnime.malId ?? updatedAnime.mal_id ?? null,
+        kitsuId: updatedAnime.kitsuId ?? updatedAnime.kitsu_id ?? null
+      }
+    });
+
     const saved = await animeRepository.updateAnime(updatedAnime);
+    const afterAnime = Array.isArray(saved?.anime) ? saved.anime : [];
+    const afterIds = new Set(afterAnime.map((item) => String(item.id)));
+    const beforeIds = new Set(beforeAnime.map((item) => String(item.id)));
+    console.log('REACT STATE AFTER REPOSITORY UPDATE', {
+      count: afterAnime.length,
+      delta: afterAnime.length - beforeAnime.length,
+      removed: beforeAnime.filter((item) => !afterIds.has(String(item.id))).map((item) => ({
+        id: item.id,
+        title: item.title,
+        malId: item.malId ?? item.mal_id ?? null,
+        kitsuId: item.kitsuId ?? item.kitsu_id ?? null
+      })),
+      added: afterAnime.filter((item) => !beforeIds.has(String(item.id))).map((item) => ({
+        id: item.id,
+        title: item.title,
+        malId: item.malId ?? item.mal_id ?? null,
+        kitsuId: item.kitsuId ?? item.kitsu_id ?? null
+      }))
+    });
+    console.groupEnd();
+
     dataRef.current = saved;
     setData(saved);
     return saved;
@@ -412,8 +454,8 @@ export function useAnimeLibrary() {
       `• ${updateQueue.length} need missing/dirty metadata or artwork repair`,
       '',
       updateQueue.length
-        ? 'Only those titles will contact Jikan.'
-        : 'No Jikan metadata calls are needed.',
+        ? 'Only those titles will contact Kitsu.'
+        : 'No library metadata calls are needed.',
       '',
       'Continue and build recommendation catalog / genomes?'
     ].join('\n');
@@ -454,9 +496,24 @@ export function useAnimeLibrary() {
 
         setSyncText(`${operationLabel} ${passIndex + 1}/${updateQueue.length}: ${title}`);
 
+        let lookupSucceeded = false;
+
         try {
           const existing = nextAnime[index];
           const refreshed = await fetchMetadataWithBackoff(existing);
+
+          console.log('[Library Updater] Refreshed metadata', {
+            title,
+            existingStudio: existing.studio || '',
+            refreshedStudio: refreshed.studio || '',
+            refreshedStudios: refreshed.studios || [],
+            refreshedProductionStudios: refreshed.productionStudios || [],
+            refreshedGenres: refreshed.genres || [],
+            refreshedMetadataNeedsRefresh: refreshed.metadataNeedsRefresh,
+            refreshedSyncStatus: refreshed.syncStatus
+          });
+
+          lookupSucceeded = true;
 
           // A normal database update refreshes metadata without renaming the
           // user's library entry. Official title data may be stored separately,
@@ -480,26 +537,73 @@ export function useAnimeLibrary() {
           }, {
             metadata: true,
             poster: !needsArtworkRepair({ ...existing, ...refreshed }),
-            dirty: false,
+            dirty: Boolean(refreshed.metadataNeedsRefresh),
+            studioLookupAttempted: Boolean(
+              refreshed.studioLookupAttemptedAt ||
+              refreshed.syncStatus?.studioLookupAttempted ||
+              !existing.studio
+            ),
+            studioRepairAttempts: !existing.studio
+              ? Number(existing.studioRepairAttempts ?? existing.syncStatus?.studioRepairAttempts ?? 0) + 1
+              : Number(existing.studioRepairAttempts ?? existing.syncStatus?.studioRepairAttempts ?? 0),
             metadataError: '',
             lastMetadataSync: new Date().toISOString()
+          });
+
+          console.log('[Library Updater] Merged anime before save', {
+            title,
+            studio: nextAnime[index].studio || '',
+            studios: nextAnime[index].studios || [],
+            productionStudios: nextAnime[index].productionStudios || [],
+            genres: nextAnime[index].genres || [],
+            metadataNeedsRefresh: nextAnime[index].metadataNeedsRefresh,
+            syncStatus: nextAnime[index].syncStatus
           });
         } catch (error) {
           console.warn('Metadata refresh failed:', title, error);
 
-          nextAnime[index] = setItemSyncStatus(nextAnime[index], {
+          const failedItem = nextAnime[index];
+          const attempts = !failedItem.studio
+            ? Number(failedItem.studioRepairAttempts ?? failedItem.syncStatus?.studioRepairAttempts ?? 0) + 1
+            : Number(failedItem.studioRepairAttempts ?? failedItem.syncStatus?.studioRepairAttempts ?? 0);
+
+          nextAnime[index] = setItemSyncStatus({
+            ...failedItem,
+            studioRepairAttempts: attempts
+          }, {
+            studioRepairAttempts: attempts,
             metadataError: error?.message || String(error),
             lastMetadataAttempt: new Date().toISOString(),
           });
 
           setSyncText(
-            `Skipped ${title}: ${error?.message || 'metadata lookup failed'}. Continuing...`
+            `Skipped ${title}: ${error?.message || 'Kitsu lookup failed'}. Moving to the next title...`
           );
         }
 
-        const saved = await updateData({ ...data, anime: nextAnime });
+        const currentSnapshot = dataRef.current || data;
+        const saved = await updateData({
+          ...currentSnapshot,
+          anime: nextAnime
+        });
+
+        const savedRow = (saved.anime || []).find((item) =>
+          String(item.id) === String(nextAnime[index]?.id)
+        );
+
+        console.log('[Library Updater] Saved anime after database round-trip', {
+          title,
+          id: nextAnime[index]?.id || '',
+          studio: savedRow?.studio || '',
+          studios: savedRow?.studios || [],
+          productionStudios: savedRow?.productionStudios || [],
+          genres: savedRow?.genres || [],
+          metadataNeedsRefresh: savedRow?.metadataNeedsRefresh,
+          syncStatus: savedRow?.syncStatus
+        });
+
         nextAnime = [...(saved.anime || nextAnime)];
-        await sleep(isRepair ? 1800 : METADATA_BASE_DELAY_MS);
+        await sleep(lookupSucceeded ? (isRepair ? 500 : 150) : 35);
       }
     } else {
       setSyncText(`Local scan complete — ${alreadyReady} titles already have usable metadata.`);
@@ -508,21 +612,50 @@ export function useAnimeLibrary() {
 
     const latest = await animeRepository.getDatabase();
 
-    const catalogResult = await updateCatalogMetadata({
-      library: latest.anime || nextAnime,
-      catalog: latest.catalog || catalog,
-      repository: animeRepository,
-      limit: 50,
-      onProgress: ({ index, total, title }) => {
-        setCatalogProgress({
-          processed: index,
-          total,
-          title
-        });
+    let catalogResult;
 
-        setSyncText(`Building recommendation catalog ${index}/${total}: ${title}`);
-      }
-    });
+    if (updateQueue.length > 0) {
+      // Keep "Update Database" focused on the user's library first. The old
+      // behavior immediately processed 50 recommendation-catalog entries, which
+      // looked like the same wrong titles were being refreshed every run.
+      const saved = await animeRepository.getDatabase();
+      catalogResult = {
+        saved,
+        updated: 0,
+        total: saved.catalog?.length || catalog.length,
+        deferred: true
+      };
+
+      setSyncProgress({
+        step: 2,
+        stepTotal: 2,
+        label: 'Library Metadata Repaired',
+        processed: updateQueue.length,
+        total: updateQueue.length,
+        percent: 90,
+        current: 'Recommendation catalog refresh deferred'
+      });
+
+      setSyncText(
+        `Library metadata pass finished. Recommendation catalog refresh was deferred until the library is analytics-ready.`
+      );
+    } else {
+      catalogResult = await updateCatalogMetadata({
+        library: latest.anime || nextAnime,
+        catalog: latest.catalog || catalog,
+        repository: animeRepository,
+        limit: 50,
+        onProgress: ({ index, total, title }) => {
+          setCatalogProgress({
+            processed: index,
+            total,
+            title
+          });
+
+          setSyncText(`Building recommendation catalog ${index}/${total}: ${title}`);
+        }
+      });
+    }
 
     let savedData = catalogResult.saved;
 
@@ -542,7 +675,7 @@ export function useAnimeLibrary() {
       // Genome generation is a bonus post-update task. It must never trap the
       // entire database updater if the Electron handler stalls or an AI call
       // never resolves.
-      const GENOME_TIMEOUT_MS = 30000;
+      const GENOME_TIMEOUT_MS = 15000;
 
       try {
         const genomeResult = await Promise.race([
@@ -576,6 +709,16 @@ export function useAnimeLibrary() {
         setSyncText('Database updated. Genome audit failed and was skipped for now.');
       }
     }
+
+    setSyncProgress({
+      step: 2,
+      stepTotal: 2,
+      label: 'Update Complete',
+      processed: savedData.anime?.length || 0,
+      total: savedData.anime?.length || 0,
+      percent: 100,
+      current: 'Finished'
+    });
 
     setData(savedData);
 
