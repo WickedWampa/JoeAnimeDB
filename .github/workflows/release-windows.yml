@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -22,14 +23,16 @@ jobs:
           node-version: '24.x'
           cache: npm
 
-      - name: Verify tag matches package version
+      - name: Resolve release version
         shell: pwsh
         run: |
           $packageVersion = node -p "require('./package.json').version"
           $expectedTag = "v$packageVersion"
-          if ("${{ github.ref_name }}" -ne $expectedTag) {
+          if ("${{ github.event_name }}" -eq "push" -and "${{ github.ref_name }}" -ne $expectedTag) {
             throw "Tag ${{ github.ref_name }} does not match package.json version $packageVersion. Expected $expectedTag."
           }
+          "RELEASE_VERSION=$packageVersion" >> $env:GITHUB_ENV
+          "RELEASE_TAG=$expectedTag" >> $env:GITHUB_ENV
 
       - name: Install dependencies
         run: npm ci --include=dev --no-audit --no-fund
@@ -44,7 +47,50 @@ jobs:
             throw "electron-builder was not installed."
           }
 
-      - name: Build and publish Windows update
-        run: npm run release:win
+      - name: Build Windows update
+        run: npm run pack:win
+
+      - name: Verify release assets
+        shell: pwsh
+        run: |
+          $assets = @(
+            "dist-desktop/JoeAnimeDB-Setup-$env:RELEASE_VERSION.exe",
+            "dist-desktop/JoeAnimeDB-Setup-$env:RELEASE_VERSION.exe.blockmap",
+            "dist-desktop/latest.yml"
+          )
+          foreach ($asset in $assets) {
+            if (-not (Test-Path $asset)) {
+              throw "Required release asset was not generated: $asset"
+            }
+          }
+
+      - name: Publish GitHub prerelease
+        shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $assets = @(
+            "dist-desktop/JoeAnimeDB-Setup-$env:RELEASE_VERSION.exe",
+            "dist-desktop/JoeAnimeDB-Setup-$env:RELEASE_VERSION.exe.blockmap",
+            "dist-desktop/latest.yml"
+          )
+
+          gh release view $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $env:RELEASE_TAG `
+              --repo $env:GITHUB_REPOSITORY `
+              --verify-tag `
+              --prerelease `
+              --title "JoeAnimeDB $env:RELEASE_VERSION" `
+              --notes "JoeAnimeDB $env:RELEASE_VERSION"
+            if ($LASTEXITCODE -ne 0) {
+              throw "Unable to create release $env:RELEASE_TAG."
+            }
+          }
+
+          gh release upload $env:RELEASE_TAG $assets `
+            --repo $env:GITHUB_REPOSITORY `
+            --clobber
+          if ($LASTEXITCODE -ne 0) {
+            throw "Unable to upload release assets for $env:RELEASE_TAG."
+          }
