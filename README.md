@@ -1,370 +1,282 @@
 # 🍜 JoeAnimeDB
 
-> **AI-powered anime tracking, recommendations, and Anime Genome analysis.**
+> Your personal, offline-first anime library—powered by JoeAI, Anime DNA, and Anime Genome cards.
 
-JoeAnimeDB is an offline-first desktop application that learns your **Anime DNA**.
+[![Version](https://img.shields.io/badge/version-5.0.0--beta.1-ff4fc3)](https://github.com/WickedWampa/JoeAnimeDB/releases)
+![Platform](https://img.shields.io/badge/platform-Windows-42d7ff)
+![Desktop](https://img.shields.io/badge/desktop-Electron-47848f)
+![Frontend](https://img.shields.io/badge/frontend-React-61dafb)
+![Database](https://img.shields.io/badge/database-SQLite-44a2d4)
 
-Instead of simply tracking what you've watched, JoeAnimeDB analyzes **why** you enjoy certain anime and uses that knowledge to deliver increasingly personalized recommendations over time.
+<p align="center">
+  <img src="src/assets/joeanime-splash-hero.png" alt="JoeAnimeDB" width="900">
+</p>
 
-Unlike traditional anime trackers, JoeAnimeDB becomes smarter as your library grows.
+JoeAnimeDB is a local Windows desktop application for tracking anime, exploring new shows, and understanding what makes your favorites work for you.
 
----
+Traditional anime trackers remember **what** you watched. JoeAnimeDB also learns **why** you loved it.
 
-# Why JoeAnimeDB?
+Your ratings, rewatches, favorites, viewing history, recommendation feedback, Anime DNA, and Genome signals work together to make JoeAI increasingly personal—without requiring a cloud account or subscription.
 
-A fair question is:
+> **Beta notice:** JoeAnimeDB 5.0 is currently in public beta. Back up your library before installing a new beta build.
 
-> **"Why use this instead of just asking ChatGPT?"**
+## What’s new in v5.0
 
-Because JoeAnimeDB doesn't start from scratch every conversation.
+- First-time onboarding with guided library setup
+- Smarter JoeAI intent routing, known-title answers, and explainable recommendations
+- Anime Genome coverage with Gold, Enhanced, Core, and generated cards
+- Kitsu-powered Discover catalog, current-season feeds, and upcoming releases
+- Persistent recommendation feedback and JoeAI learning
+- Redesigned Library, Favorites, Discover, Following, Upcoming, Settings, and About / Help pages
+- Previous and next navigation inside the anime detail card
+- Metadata review indicators and safer metadata refreshes
+- Full backup and restore, CSV export, ranked-list export, and text-list import
+- Six complete visual themes
 
-JoeAI understands your:
+## Core features
 
-- 📚 Watch history
-- ⭐ Ratings
-- 🔁 Rewatches
-- 🎬 Favorite studios
-- 🎭 Favorite themes
-- 🧬 Anime Genome
-- 🧠 Anime DNA
-- 📈 Taste evolution
-- ❤️ Comfort shows
-- 🎯 Recommendation history
+| Area | What it does |
+| --- | --- |
+| **Dashboard** | Summarizes your library, ratings, Anime DNA, recent activity, and rotating Pick of the Day. |
+| **JoeAI** | Answers questions about known titles, explains recommendations, analyzes taste, and adds one or many anime to your library. |
+| **Library** | Searches, sorts, filters, scores, edits, refreshes, and manages your personal anime collection. |
+| **Favorites** | Gives your most important anime a dedicated Hall of Fame. |
+| **Discover** | Ranks unseen Kitsu catalog titles using Anime DNA, Genome evidence, saved feedback, and the current request. |
+| **Following** | Tracks anime you want to monitor while preserving Kitsu identity across updates. |
+| **Upcoming** | Separates airing, upcoming, delayed, and date-TBA titles with cached fallback support. |
+| **Analytics** | Turns ratings, genres, studios, rewatches, and viewing patterns into a readable taste profile. |
+| **Settings** | Manages themes, imports, exports, backups, metadata repairs, Genome coverage, and JoeAI learning. |
+| **About / Help** | Shows version details, provider status, storage locations, troubleshooting shortcuts, and release notes. |
 
-Every time you add, rate, finish, or rewatch an anime, JoeAI becomes a little smarter.
+## JoeAI
 
-Think of it as your own personal anime curator that grows alongside your library.
+JoeAI is the application’s local anime assistant and recommendation layer. It combines your library with Anime DNA, Genome cards, catalog metadata, recommendation history, and explicit feedback.
 
----
+Try questions such as:
 
-# Features
-
-## 📚 Personal Anime Library
-
-Manage your entire collection locally.
-
-- Completed
-- Watching
-- Plan To Watch
-- Dropped
-- On Hold
-- Ratings
-- Rewatch tracking
-- Personal notes
-- Fast search
-- SQLite storage
-- Offline-first
-
----
-
-## 🧬 Anime Genome™
-
-Genres don't explain why people love anime.
-
-JoeAnimeDB introduces **Anime Genome Cards**.
-
-Every anime receives a structured profile describing things like:
-
-- Core Fantasy
-- Viewer Motivation
-- Emotional Profile
-- Atmosphere
-- Signature Traits
-- Themes
-- Accessibility
-- Rewatch Value
-- Ideal Follow-ups
-
-Example:
-
-### Monster
-
-Core Fantasy
-
-> A slow psychological thriller exploring morality, identity, guilt, and the nature of evil.
-
-Genome Cards allow JoeAI to compare anime by experience instead of genres alone.
-
----
-
-# 🤖 JoeAI Assistant
-
-Talk naturally.
-
-Examples:
-
-```
-recommend something like Slime
-
-recommend something darker
-
-recommend something comforting
-
-recommend something funny
-
-recommend Ghost in the Shell
-
-recommend Space Dandy
-
-what should I watch next?
-
-what are my strongest signals?
-
-why do I like Bleach?
-
-what changed recently?
-
-what are you least certain about?
+```text
+What is Dragon Ball?
+Why do you recommend One Piece Fan Letter?
+Recommend something like Slime, but darker.
+What should I watch next?
+Why do I like Bleach?
+What are my strongest Anime DNA signals?
+Add Trigun and Cowboy Bebop as Completed.
 ```
 
-JoeAI understands:
+JoeAI distinguishes between:
 
-- Genres
-- Themes
-- Mood
-- Viewer intent
-- Genome similarity
-- Personal library
-- Anime DNA
-- Recommendation history
+- Direct questions about known anime
+- Recommendation requests
+- Similarity and mood requests
+- Library commands
+- Bulk-add commands
+- Anime DNA and personal-statistics questions
+- Unknown titles and temporarily unavailable metadata
 
----
+Recommendations include the evidence behind each pick instead of returning an unexplained list.
 
-# 🧠 JoeAI Router V2
+## Anime Genome and Anime DNA
 
-JoeAI now includes an intent router that understands what you're actually asking.
+Genres alone cannot describe why two shows feel similar. JoeAnimeDB’s Genome system adds structured signals such as:
 
-Instead of matching keywords, JoeAI routes questions into specialized systems:
+- Core fantasy and viewer fantasy
+- Emotional profile and atmosphere
+- Character and relationship dynamics
+- Narrative rewards
+- Signature themes and traits
+- Accessibility and rewatch value
+- Franchise and sequel identity
 
-- Recommendation Engine
-- Anime Genome Engine
-- Anime DNA Analysis
-- Memory Engine
-- Library Manager
-- Statistics
-- Mood Matching
-- Similarity Search
+Genome cards can be curated or generated at several coverage levels:
 
-This produces much more accurate responses while preventing unrelated lookups from interfering with one another.
+- **Gold** — deeply curated anchor titles
+- **Enhanced** — hand-developed genre and franchise coverage
+- **Core** — broader expert coverage
+- **Generated** — local first-pass cards created by the Genome updater
 
----
+Anime DNA is your personal taste profile. It weighs Genome evidence alongside your ratings, rewatches, favorites, studios, genres, watch statuses, and recommendation feedback.
 
-# 🧬 Anime DNA
+## Adding and importing anime
 
-JoeAI continuously builds a profile of your taste.
+JoeAnimeDB supports several ways to build a library:
 
-Examples of learned signals include:
+### Add from the Library
 
-- Worldbuilding
-- Found Family
-- Long-form Stories
-- Power Fantasy
-- Psychological Drama
-- Supernatural Combat
-- Cozy Fantasy
-- Emotional Weight
-- Political Intrigue
+Choose **+ Add Anime** to search for one exact title or use Bulk Paste for several titles. Candidate selection helps prevent alternate-title and franchise mismatches.
 
-JoeAI also tracks confidence for every signal, making recommendations more transparent.
+### Add through JoeAI
 
----
+JoeAI understands both individual and comma-separated bulk commands:
 
-# 💭 JoeAI Memory
-
-JoeAI remembers how your taste evolves.
-
-It can answer questions like:
-
-```
-what changed recently?
-
-what surprised you most?
-
-when did you learn worldbuilding?
-
-daily thought
-
-prediction accuracy
+```text
+Add Fullmetal Alchemist: Brotherhood as Completed.
+Add Bleach, Naruto, One Piece, and Dragon Ball Z as Completed.
 ```
 
-Rather than simply storing facts, JoeAI records meaningful observations about your anime taste over time.
+JoeAI confirms bulk commands, skips duplicates, and fetches metadata only where needed.
 
----
+### Import a saved list
 
-# 🎯 Explainable Recommendations
+Open **Settings → Library → Import Library List**.
 
-Recommendations aren't black boxes.
+Supported formats include:
 
-Every recommendation explains:
+- JoeAnimeDB CSV exports
+- Plain-text title lists
+- Ranked text lists
 
-- Why JoeAI picked it
-- Which Anime DNA signals matched
-- Shared Genome traits
-- Confidence level
-- Whether it came from your library or new discovery
+Available scores and watch statuses are preserved when the source includes them. Existing titles are skipped, uncertain matches are placed in **Needs Review**, and a final metadata pass fills missing fields when possible.
 
-JoeAI shows its reasoning instead of asking you to trust it blindly.
+### Back up or move the complete database
 
----
+Use **Export Full Backup** before major updates or when moving to another computer. A full JSON backup contains the library, recommendation catalog, following state, JoeAI learning, and supported preferences.
 
-# 🎭 Trait Mixer
+Restoring a full backup replaces the active database, so JoeAnimeDB creates a safety backup first.
 
-JoeAI blends multiple ideas together.
+## Metadata providers
 
-Examples:
+JoeAnimeDB uses:
 
+- [Kitsu](https://kitsu.io/) for primary anime titles, artwork, synopsis, categories, community scores, studios, and release data
+- [Wikidata](https://www.wikidata.org/) for confidence-checked completion of missing fields
+
+The application preserves existing personal data during metadata refreshes, including your score, status, notes, favorites, rewatches, and following choices.
+
+Live metadata requires an internet connection. Your saved library, cached catalog, and available cached release information remain usable offline.
+
+JoeAnimeDB is an independent project and is not affiliated with Kitsu or the Wikimedia Foundation.
+
+## Themes
+
+The entire application follows the selected theme, including page art and the database updater:
+
+- ⚡ Neon Signal
+- 🌸 Sakura Bloom
+- 💿 Vapor Wave
+- 🍜 Ramen Mode
+- 🔥 Inferno Drive
+- ◉ AMOLED Black
+
+Change themes from **Settings → Appearance**.
+
+## Download and install
+
+1. Open the [JoeAnimeDB releases page](https://github.com/WickedWampa/JoeAnimeDB/releases).
+2. Download the latest Windows installer.
+3. Run the installer and follow the setup prompts.
+4. Complete the first-time tutorial or import an existing list or backup.
+
+JoeAnimeDB is not currently code-signed. Windows SmartScreen may show an **Unknown publisher** warning. If you trust the downloaded release, choose **More info → Run anyway**.
+
+## Local data and privacy
+
+JoeAnimeDB is offline-first:
+
+- No JoeAnimeDB account is required
+- No subscription is required
+- Your SQLite database is stored in your Windows user profile
+- Full backups can be exported whenever you choose
+- Uninstalling the application does not automatically delete the personal database
+
+Use **About / Help → Open Data Folder** to locate the active database, or **Open Backups Folder** to view safety backups.
+
+Before resetting the application, changing computers, or installing experimental builds, export a full backup from **Settings → Library**.
+
+## Development
+
+### Requirements
+
+- Windows 10 or newer
+- A current Node.js LTS release
+- npm
+
+### Run from source
+
+```bash
+git clone https://github.com/WickedWampa/JoeAnimeDB.git
+cd JoeAnimeDB
+npm install
+npm run dev
 ```
-funny cyberpunk
 
-comfort mystery
+Useful commands:
 
-dark fantasy
-
-cozy sci-fi
-
-romance comedy
-
-psychological action
+```bash
+npm run web            # Vite browser development server
+npm run desktop        # Start Electron while the Vite server is already running
+npm run build          # Production frontend build
+npm run pack:win       # Build the Windows NSIS installer
+npm run pack:portable  # Build a portable Windows executable
+npm run pack:dir       # Build an unpacked desktop directory
 ```
 
-Instead of matching genres, JoeAI blends Anime DNA.
+The packaged output is written to `dist-desktop`.
+
+## Architecture
+
+- **Electron** — Windows desktop shell, filesystem access, updater process, and IPC
+- **React + Vite** — interface and application state
+- **better-sqlite3** — local library, catalog, following state, and JoeAI persistence
+- **JoeAI Router** — intent classification and direct-question routing
+- **Recommendation Coordinator** — combines request intent, taste, Genome signals, and feedback
+- **Anime Genome Registry** — curated and generated title knowledge
+- **Kitsu provider** — search, discovery, artwork, and release metadata
+- **Wikidata resolver** — guarded missing-field repair
+
+## Troubleshooting
+
+### Metadata provider shows unavailable
+
+Open **About / Help** or **Settings** and run the provider check again. Saved data remains available during a provider outage. Discover and Upcoming use cached results when possible.
+
+### A title has the wrong metadata
+
+Open its detail card and use the metadata refresh or review controls. Personal scores, notes, status, favorites, and rewatches are preserved.
+
+### The application will not start after installing dependencies
+
+Run:
+
+```bash
+npm install
+npm run dev
+```
+
+If the native SQLite module reports an Electron compatibility error, reinstall dependencies from the project root before starting again.
+
+### Find the database or backups
+
+Use the buttons in **About / Help**. They open the exact folders used by the current installation.
+
+## Beta status and known limitations
+
+- Windows SmartScreen may warn because the application is unsigned.
+- Provider outages can temporarily limit new metadata, Discover feeds, and release updates.
+- Generated Genome cards are first-pass analysis and may be less detailed than curated Gold or Enhanced cards.
+- Ambiguous franchise, sequel, and alternate-title matches may still require manual review.
+- This beta is intended for testing; export a full backup before upgrading.
+
+## Feedback
+
+Please report crashes, interface bugs, recommendation problems, metadata mismatches, import issues, and installer problems through [GitHub Issues](https://github.com/WickedWampa/JoeAnimeDB/issues).
+
+Helpful reports include:
+
+- What you were trying to do
+- The title involved
+- What you expected
+- What happened instead
+- A screenshot or copied error message
+- Whether Kitsu and Wikidata showed online
+
+## Roadmap and release notes
+
+- [v5 improvement backlog](./5.0%20Improvements/README.md)
+- [Release notes](https://github.com/WickedWampa/JoeAnimeDB/releases)
 
 ---
 
-# 📈 Personalized Recommendation Engine
-
-JoeAI considers:
-
-- Your library
-- Ratings
-- Rewatch history
-- Favorite studios
-- Favorite genres
-- Hidden viewing patterns
-- Genome similarity
-- Anime DNA
-- Viewer intent
-- Confidence scoring
-
-Recommendations improve as JoeAI learns more about you.
-
----
-
-# ⚡ Offline First
-
-JoeAnimeDB is designed to work locally.
-
-Built with:
-
-- Electron
-- React
-- SQLite
-
-No subscription.
-
-No cloud account.
-
-Your library stays yours.
-
----
-
-# Current Architecture
-
-- Electron
-- React
-- SQLite
-- Anime Genome Engine
-- JoeAI Router V2
-- Recommendation Engine
-- Anime DNA Engine
-- Memory Engine
-- Trait Mixer
-- Intent Parser
-
----
-
-# Roadmap
-
-## ✅ Current
-
-- Personal Anime Library
-- JoeAI Assistant
-- Anime Genome Cards
-- Anime DNA
-- JoeAI Router V2
-- Explainable Recommendations
-- Memory Engine
-- Recommendation Cards
-- Mood Matching
-- Trait Mixer
-
----
-
-## 🚧 Next
-
-### AI Genome Generator
-
-Automatically generate first-pass Genome Cards using:
-
-- Jikan metadata
-- AI-assisted analysis
-- Heuristic scoring
-
-Cards are later reviewed and curated.
-
----
-
-### Learning Engine
-
-JoeAI will begin learning from:
-
-- Accepted recommendations
-- Rejected recommendations
-- Dropped anime
-- Favorite episodes
-- Rewatch frequency
-- User notes
-
-Recommendation quality improves continuously.
-
----
-
-### Advanced Discovery
-
-JoeAI will eventually answer questions like:
-
-- Hidden gems
-- Forgotten favorites
-- Comfort anime
-- Shows most likely to become a 10/10
-- Compare two anime
-- Predict my next favorite anime
-- Taste evolution over time
-
----
-
-### Future
-
-Optional community features:
-
-- Share Anime DNA
-- Compare libraries
-- Recommendation sharing
-- Import / Export
-- Optional cloud sync
-
----
-
-# Philosophy
-
-Most anime trackers remember **what** you've watched.
+Most anime trackers remember **what** you watched.
 
 JoeAnimeDB remembers **why** you loved it.
-
-The goal isn't simply to recommend another action anime.
-
-The goal is to understand your taste well enough to recommend the right anime—even when you don't know exactly what you're looking for.
-
-As your library grows...
-
-**JoeAI grows with you.**
