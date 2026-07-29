@@ -27,7 +27,7 @@ import '../styles/about-help.css';
 const RELEASE_NOTES_URL = 'https://github.com/WickedWampa/JoeAnimeDB/releases';
 const KITSU_URL = 'https://kitsu.io/';
 const WIKIDATA_URL = 'https://www.wikidata.org/';
-const FALLBACK_VERSION = '5.0.0-beta.3';
+const FALLBACK_VERSION = '5.0.0-beta.4';
 
 function displayVersion(value = '') {
   const clean = String(value || '').trim().replace(/^v/i, '');

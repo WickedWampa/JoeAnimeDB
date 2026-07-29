@@ -6,6 +6,12 @@ const { autoUpdater } = require('electron-updater');
 const database = require('./database.cjs');
 const { createUpdateManager } = require('./updateManager.cjs');
 
+const APP_USER_MODEL_ID = 'com.joeanimedb.app';
+
+if (process.platform === 'win32') {
+  app.setAppUserModelId(APP_USER_MODEL_ID);
+}
+
 const isDev = !app.isPackaged;
 
 /**
