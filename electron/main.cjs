@@ -2,7 +2,9 @@ const { app, BrowserWindow, shell, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { execFile, spawn } = require('child_process');
+const { autoUpdater } = require('electron-updater');
 const database = require('./database.cjs');
+const { createUpdateManager } = require('./updateManager.cjs');
 
 const isDev = !app.isPackaged;
 
@@ -39,6 +41,51 @@ function ensureAppFolders() {
   });
   return folders;
 }
+
+function updaterLogValue(value) {
+  if (value instanceof Error) return value.stack || value.message;
+  if (typeof value === 'string') return value;
+
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function writeUpdaterLog(level, ...values) {
+  const method = typeof console[level] === 'function' ? level : 'log';
+  console[method](...values);
+
+  try {
+    const folders = ensureAppFolders();
+    const line = [
+      new Date().toISOString(),
+      level.toUpperCase(),
+      ...values.map(updaterLogValue)
+    ].join(' ');
+    fs.appendFileSync(path.join(folders.logs, 'updates.log'), `${line}\n`, 'utf8');
+  } catch (error) {
+    console.warn('Could not write the updater log.', error);
+  }
+}
+
+const updateManager = createUpdateManager({
+  app,
+  BrowserWindow,
+  ipcMain,
+  autoUpdater,
+  isSupported:
+    app.isPackaged &&
+    process.platform === 'win32' &&
+    !process.env.PORTABLE_EXECUTABLE_DIR,
+  logger: {
+    info: (...values) => writeUpdaterLog('info', ...values),
+    warn: (...values) => writeUpdaterLog('warn', ...values),
+    error: (...values) => writeUpdaterLog('error', ...values),
+    debug: (...values) => writeUpdaterLog('debug', ...values)
+  }
+});
 
 
 function registerDatabaseHandlers() {
@@ -406,6 +453,11 @@ app.whenReady().then(() => {
   ensureAppFolders();
   registerDatabaseHandlers();
   createWindow();
+  updateManager.start();
+});
+
+app.on('before-quit', () => {
+  updateManager.stop();
 });
 
 app.on('activate', () => {

@@ -207,6 +207,108 @@
 .aboutActionList > button { margin: 0; grid-template-columns: auto minmax(0, 1fr); }
 .aboutActionList > button > svg { color: var(--about-accent); }
 
+.aboutUpdatePanel {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--about-accent) 42%, var(--line));
+  border-radius: 20px;
+  padding: 20px;
+  background:
+    radial-gradient(circle at 7% 50%, color-mix(in srgb, var(--about-accent) 14%, transparent), transparent 26%),
+    linear-gradient(110deg, color-mix(in srgb, var(--panel) 94%, #03070d), var(--panel));
+}
+.aboutUpdatePanel.state-available,
+.aboutUpdatePanel.state-downloaded {
+  border-color: color-mix(in srgb, var(--about-hot) 58%, var(--about-accent));
+  box-shadow: 0 0 32px color-mix(in srgb, var(--about-hot) 12%, transparent);
+}
+.aboutUpdateIcon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border: 1px solid color-mix(in srgb, var(--about-accent) 45%, transparent);
+  border-radius: 17px;
+  color: var(--about-accent);
+  background: color-mix(in srgb, var(--about-accent) 11%, transparent);
+}
+.aboutUpdateIcon svg { width: 27px; height: 27px; }
+.aboutUpdateCopy { min-width: 0; }
+.aboutUpdateCopy > p {
+  margin: 0 0 4px;
+  color: var(--about-accent);
+  font-size: .66rem;
+  font-weight: 950;
+  letter-spacing: .15em;
+  text-transform: uppercase;
+}
+.aboutUpdateCopy h2 { margin: 0; font-size: 1.35rem; }
+.aboutUpdateCopy > span {
+  display: block;
+  margin-top: 6px;
+  color: color-mix(in srgb, var(--text) 82%, var(--muted));
+}
+.aboutUpdateCopy > small {
+  display: block;
+  margin-top: 8px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+.aboutUpdateProgress {
+  height: 8px;
+  overflow: hidden;
+  margin-top: 12px;
+  border: 1px solid color-mix(in srgb, var(--about-accent) 34%, var(--line));
+  border-radius: 999px;
+  background: rgba(0,0,0,.28);
+}
+.aboutUpdateProgress i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--about-accent), #aa72ff, var(--about-hot));
+  box-shadow: 0 0 18px color-mix(in srgb, var(--about-accent) 55%, transparent);
+  transition: width .22s ease;
+}
+.aboutUpdateActions {
+  display: grid;
+  min-width: 205px;
+  gap: 8px;
+}
+.aboutUpdateActions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  border: 1px solid color-mix(in srgb, var(--about-accent) 52%, var(--line));
+  border-radius: 12px;
+  padding: 9px 13px;
+  background: color-mix(in srgb, var(--about-accent) 14%, var(--panel));
+  color: var(--text);
+  font-weight: 900;
+  cursor: pointer;
+}
+.aboutUpdateActions button.secondary {
+  border-color: var(--line);
+  background: rgba(255,255,255,.025);
+  color: var(--muted);
+}
+.aboutUpdateActions button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--about-hot) 58%, var(--about-accent));
+  background: color-mix(in srgb, var(--about-hot) 10%, var(--panel));
+}
+.aboutUpdateActions button:disabled { opacity: .58; cursor: default; }
+.aboutUpdateActions button svg { width: 17px; }
+.aboutUpdateActions .spinning { animation: aboutUpdateSpin .9s linear infinite; }
+
+@keyframes aboutUpdateSpin {
+  to { transform: rotate(360deg); }
+}
+
 .aboutReleaseNotes {
   display: flex;
   align-items: center;
@@ -235,11 +337,16 @@
 @media (max-width: 900px) {
   .aboutHelpGrid { grid-template-columns: 1fr; }
   .aboutHelpHero > svg { display: none; }
+  .aboutUpdatePanel { grid-template-columns: auto minmax(0, 1fr); }
+  .aboutUpdateActions { grid-column: 1 / -1; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 620px) {
   .aboutHelpPage { padding: 15px; }
   .aboutHelpHero { min-height: 290px; padding: 28px; }
   .aboutActionGrid { grid-template-columns: 1fr; }
+  .aboutUpdatePanel { grid-template-columns: 1fr; }
+  .aboutUpdateIcon { width: 48px; height: 48px; }
+  .aboutUpdateActions { grid-column: auto; grid-template-columns: 1fr; min-width: 0; }
   .aboutReleaseNotes { align-items: stretch; flex-direction: column; }
 }

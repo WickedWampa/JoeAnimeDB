@@ -15,20 +15,21 @@ if errorlevel 1 (
   exit /b 1
 )
 
-if not exist node_modules (
-  echo Installing dependencies...
-  call npm install
-  if errorlevel 1 goto :failed
-)
+echo Installing and updating dependencies...
+call npm install
+if errorlevel 1 goto :failed
 
 echo Building JoeAnimeDB and the Windows installer...
-call npm run installer:win
+call npm run pack:win
 if errorlevel 1 goto :failed
 
 echo.
 echo SUCCESS!
-echo Installer output:
-echo   dist-desktop\JoeAnimeDB-5.0-Beta-Setup-x64.exe
+echo Release files are in:
+echo   dist-desktop
+echo.
+echo Keep the installer, its blockmap file, and latest.yml together.
+echo All three are required for automatic updates.
 echo.
 start "" "%CD%\dist-desktop"
 pause

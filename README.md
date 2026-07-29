@@ -2,7 +2,7 @@
 
 > Your personal, offline-first anime library—powered by JoeAI, Anime DNA, and Anime Genome cards.
 
-[![Version](https://img.shields.io/badge/version-5.0.0--beta.1-ff4fc3)](https://github.com/WickedWampa/JoeAnimeDB/releases)
+[![Version](https://img.shields.io/badge/version-5.0.0--beta.2-ff4fc3)](https://github.com/WickedWampa/JoeAnimeDB/releases)
 ![Platform](https://img.shields.io/badge/platform-Windows-42d7ff)
 ![Desktop](https://img.shields.io/badge/desktop-Electron-47848f)
 ![Frontend](https://img.shields.io/badge/frontend-React-61dafb)
@@ -31,6 +31,7 @@ Your ratings, rewatches, favorites, viewing history, recommendation feedback, An
 - Previous and next navigation inside the anime detail card
 - Metadata review indicators and safer metadata refreshes
 - Full backup and restore, CSV export, ranked-list export, and text-list import
+- Built-in Windows update checks, download progress, and restart-to-install
 - Six complete visual themes
 
 ## Core features
@@ -46,7 +47,7 @@ Your ratings, rewatches, favorites, viewing history, recommendation feedback, An
 | **Upcoming** | Separates airing, upcoming, delayed, and date-TBA titles with cached fallback support. |
 | **Analytics** | Turns ratings, genres, studios, rewatches, and viewing patterns into a readable taste profile. |
 | **Settings** | Manages themes, imports, exports, backups, metadata repairs, Genome coverage, and JoeAI learning. |
-| **About / Help** | Shows version details, provider status, storage locations, troubleshooting shortcuts, and release notes. |
+| **About / Help** | Shows version details, app updates, provider status, storage locations, troubleshooting shortcuts, and release notes. |
 
 ## JoeAI
 
@@ -178,6 +179,7 @@ JoeAnimeDB is offline-first:
 - Your SQLite database is stored in your Windows user profile
 - Full backups can be exported whenever you choose
 - Uninstalling the application does not automatically delete the personal database
+- Application updates replace program files without replacing your personal database
 
 Use **About / Help → Open Data Folder** to locate the active database, or **Open Backups Folder** to view safety backups.
 
@@ -209,6 +211,7 @@ npm run build          # Production frontend build
 npm run pack:win       # Build the Windows NSIS installer
 npm run pack:portable  # Build a portable Windows executable
 npm run pack:dir       # Build an unpacked desktop directory
+npm run release:win    # Build and publish the Windows updater artifacts
 ```
 
 The packaged output is written to `dist-desktop`.
@@ -216,6 +219,7 @@ The packaged output is written to `dist-desktop`.
 ## Architecture
 
 - **Electron** — Windows desktop shell, filesystem access, updater process, and IPC
+- **electron-updater** — GitHub release checks, verified downloads, and NSIS installation
 - **React + Vite** — interface and application state
 - **better-sqlite3** — local library, catalog, following state, and JoeAI persistence
 - **JoeAI Router** — intent classification and direct-question routing
@@ -273,6 +277,7 @@ Helpful reports include:
 ## Roadmap and release notes
 
 - [v5 improvement backlog](./5.0%20Improvements/README.md)
+- [Windows update release guide](./AUTO_UPDATE_RELEASE_GUIDE.md)
 - [Release notes](https://github.com/WickedWampa/JoeAnimeDB/releases)
 
 ---

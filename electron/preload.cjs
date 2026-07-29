@@ -13,11 +13,27 @@ contextBridge.exposeInMainWorld('JoeAnimeDB', {
     };
   },
   generateGenome: (title) => ipcRenderer.invoke('genome:generate', title),
-  version: '5.0.0-beta.1',
+  version: '5.0.0-beta.2',
   desktop: true,
   app: {
     getInfo: () => ipcRenderer.invoke('app:getInfo'),
     openExternal: (url) => ipcRenderer.invoke('app:openExternal', url)
+  },
+  updates: {
+    getStatus: () => ipcRenderer.invoke('app:getUpdateStatus'),
+    check: () => ipcRenderer.invoke('app:checkForUpdates'),
+    download: () => ipcRenderer.invoke('app:downloadUpdate'),
+    install: () => ipcRenderer.invoke('app:installUpdate'),
+    onStatus: (callback) => {
+      if (typeof callback !== 'function') return () => {};
+
+      const listener = (_event, status) => callback(status);
+      ipcRenderer.on('app:updateStatus', listener);
+
+      return () => {
+        ipcRenderer.removeListener('app:updateStatus', listener);
+      };
+    }
   },
   storage: {
     getInfo: () => ipcRenderer.invoke('app:getStorageInfo'),

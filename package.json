@@ -1,6 +1,6 @@
 {
   "name": "joeanime-db-4",
-  "version": "5.0.0-beta.1",
+  "version": "5.0.0-beta.2",
   "private": true,
   "description": "JoeAnimeDB desktop anime library powered by JoeAI",
   "main": "electron/main.cjs",
@@ -12,12 +12,14 @@
     "preview": "vite preview",
     "pack:win": "npm run build && electron-builder --win nsis",
     "pack:dir": "npm run build && electron-builder --dir",
-    "pack:portable": "npm run build && electron-builder --win portable"
+    "pack:portable": "npm run build && electron-builder --win portable",
+    "release:win": "npm run build && electron-builder --win nsis --publish always"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
     "better-sqlite3": "^12.11.1",
     "concurrently": "latest",
+    "electron-updater": "^6.8.9",
     "lucide-react": "latest",
     "react": "latest",
     "react-dom": "latest",
@@ -40,10 +42,22 @@
     "files": [
       "dist/**/*",
       "electron/**/*",
+      "scripts/generateGenomeCardForTitle.cjs",
+      "scripts/generateMissingGenomesForList.cjs",
+      "scripts/rebuildGenomeRegistry.cjs",
       "package.json",
       "node_modules/sql.js/dist/sql-wasm.wasm"
     ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "WickedWampa",
+        "repo": "JoeAnimeDB",
+        "releaseType": "prerelease"
+      }
+    ],
     "win": {
+      "verifyUpdateCodeSignature": false,
       "target": [
         {
           "target": "nsis",

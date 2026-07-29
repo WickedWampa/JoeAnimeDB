@@ -7,12 +7,15 @@ import {
   CircleHelp,
   Clipboard,
   Database,
+  Download,
   ExternalLink,
   FileJson,
   FolderArchive,
   FolderOpen,
   GraduationCap,
   HeartHandshake,
+  RefreshCw,
+  Rocket,
   ScrollText,
   ServerCog,
   Wrench
@@ -24,7 +27,7 @@ import '../styles/about-help.css';
 const RELEASE_NOTES_URL = 'https://github.com/WickedWampa/JoeAnimeDB/releases';
 const KITSU_URL = 'https://kitsu.io/';
 const WIKIDATA_URL = 'https://www.wikidata.org/';
-const FALLBACK_VERSION = '5.0.0-beta.1';
+const FALLBACK_VERSION = '5.0.0-beta.2';
 
 function displayVersion(value = '') {
   const clean = String(value || '').trim().replace(/^v/i, '');
@@ -39,6 +42,12 @@ export function AboutHelpPage({
   const [systemInfo, setSystemInfo] = useState(null);
   const [providerHealth, setProviderHealth] = useState(null);
   const [checkingProviders, setCheckingProviders] = useState(false);
+  const [updateStatus, setUpdateStatus] = useState({
+    state: 'loading',
+    message: 'Loading update status…',
+    percent: 0
+  });
+  const [updateBusy, setUpdateBusy] = useState(false);
   const [status, setStatus] = useState('');
 
   useEffect(() => {
@@ -61,6 +70,42 @@ export function AboutHelpPage({
     void loadSystemInfo();
     return () => {
       active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const updates = window.JoeAnimeDB?.updates;
+
+    if (!updates) {
+      setUpdateStatus({
+        state: 'unavailable',
+        message: 'Automatic updates are available in the installed Windows app.',
+        percent: 0
+      });
+      return undefined;
+    }
+
+    let active = true;
+    const unsubscribe = updates.onStatus?.((nextStatus) => {
+      if (active && nextStatus) setUpdateStatus(nextStatus);
+    });
+
+    updates.getStatus?.()
+      .then((nextStatus) => {
+        if (active && nextStatus) setUpdateStatus(nextStatus);
+      })
+      .catch((error) => {
+        if (!active) return;
+        setUpdateStatus({
+          state: 'error',
+          message: `Could not load update status: ${error?.message || String(error)}`,
+          percent: 0
+        });
+      });
+
+    return () => {
+      active = false;
+      unsubscribe?.();
     };
   }, []);
 
@@ -176,7 +221,94 @@ export function AboutHelpPage({
     setStatus('The first-time tutorial was reopened.');
   }
 
+  async function runUpdateAction(action) {
+    const updates = window.JoeAnimeDB?.updates;
+    const actions = {
+      check: updates?.check,
+      download: updates?.download,
+      install: updates?.install
+    };
+    const handler = actions[action];
+
+    if (!handler || updateBusy) {
+      setStatus('Automatic updates are available in the installed Windows app.');
+      return;
+    }
+
+    setUpdateBusy(true);
+
+    try {
+      const result = await handler();
+      if (result?.status) setUpdateStatus(result.status);
+
+      if (!result?.ok) {
+        throw new Error(result?.error || result?.status?.message || 'The update action could not be completed.');
+      }
+
+      if (action === 'check') setStatus('Update check started.');
+      if (action === 'download') setStatus('Update download started.');
+      if (action === 'install') setStatus('Restarting to install the update.');
+    } catch (error) {
+      setStatus(`Update failed: ${error?.message || String(error)}`);
+    } finally {
+      setUpdateBusy(false);
+    }
+  }
+
   const providerRows = providerHealth?.providers || [];
+  const updateState = updateStatus?.state || 'idle';
+  const updatePercent = Math.max(0, Math.min(100, Number(updateStatus?.percent || 0)));
+  const updateVersion = updateStatus?.availableVersion || '';
+  const updateWorking = updateBusy || ['checking', 'downloading', 'installing'].includes(updateState);
+
+  function updateActionButton() {
+    if (updateState === 'downloaded') {
+      return (
+        <button type="button" onClick={() => runUpdateAction('install')} disabled={updateWorking}>
+          <Rocket /> Restart & Install
+        </button>
+      );
+    }
+
+    if (updateState === 'available') {
+      return (
+        <button type="button" onClick={() => runUpdateAction('download')} disabled={updateWorking}>
+          <Download /> Download {updateVersion ? `v${updateVersion}` : 'Update'}
+        </button>
+      );
+    }
+
+    if (updateState === 'downloading') {
+      return (
+        <button type="button" disabled>
+          <Download /> Downloading {updatePercent}%
+        </button>
+      );
+    }
+
+    if (updateState === 'installing') {
+      return (
+        <button type="button" disabled>
+          <RefreshCw className="spinning" /> Restarting…
+        </button>
+      );
+    }
+
+    if (['development', 'unavailable', 'loading'].includes(updateState)) {
+      return (
+        <button type="button" disabled>
+          <RefreshCw /> Installed Builds Only
+        </button>
+      );
+    }
+
+    return (
+      <button type="button" onClick={() => runUpdateAction('check')} disabled={updateWorking}>
+        <RefreshCw className={updateState === 'checking' ? 'spinning' : ''} />
+        {updateState === 'checking' ? 'Checking…' : 'Check for Updates'}
+      </button>
+    );
+  }
 
   return (
     <section className="aboutHelpPage">
@@ -316,6 +448,45 @@ export function AboutHelpPage({
           </div>
         </section>
       </div>
+
+      <section className={`aboutUpdatePanel state-${updateState}`}>
+        <div className="aboutUpdateIcon">
+          <Download />
+        </div>
+        <div className="aboutUpdateCopy">
+          <p>Windows App Updates</p>
+          <h2>
+            {updateState === 'downloaded'
+              ? `v${updateVersion || 'Next'} is ready`
+              : updateState === 'available'
+                ? `Update v${updateVersion || 'available'}`
+                : 'Keep JoeAnimeDB current'}
+          </h2>
+          <span>{updateStatus?.message || 'Check GitHub for the latest JoeAnimeDB installer.'}</span>
+          {updateState === 'downloading' && (
+            <div
+              className="aboutUpdateProgress"
+              role="progressbar"
+              aria-label="Update download progress"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              aria-valuenow={updatePercent}
+            >
+              <i style={{ width: `${updatePercent}%` }} />
+            </div>
+          )}
+          <small>
+            Update installs replace application files only. Your library and JoeAI data remain
+            in the Windows data folder.
+          </small>
+        </div>
+        <div className="aboutUpdateActions">
+          {updateActionButton()}
+          <button type="button" className="secondary" onClick={() => openExternal(RELEASE_NOTES_URL)}>
+            Release Notes <ExternalLink />
+          </button>
+        </div>
+      </section>
 
       <section className="aboutReleaseNotes">
         <div>
