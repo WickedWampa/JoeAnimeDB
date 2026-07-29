@@ -32,7 +32,17 @@ jobs:
           }
 
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        run: npm ci --include=dev --no-audit --no-fund
+
+      - name: Verify build tools
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "node_modules/.bin/vite.cmd")) {
+            throw "Vite was not installed."
+          }
+          if (-not (Test-Path "node_modules/.bin/electron-builder.cmd")) {
+            throw "electron-builder was not installed."
+          }
 
       - name: Build and publish Windows update
         run: npm run release:win
