@@ -2,6 +2,13 @@ import { importAnimeByTitle, mergeAnimeMetadata, findLocalTitleMatches, searchAn
 import { answerLibraryQuestion } from './libraryIntelligence';
 import { maybeSimilarRecommendation } from './similarityEngine';
 import { maybeKnowledgeFirstRecommendation } from './knowledgeFirstRecommender';
+import { routeJoeAIConversation } from './conversation/conversationEngine';
+import { explainGenreDNA } from './genreDNAExplainer';
+import { explainTastePattern } from './tastePatternExplainer';
+import {
+  inferFeedbackTraits,
+  normalizeJoeAIKey
+} from './intelligence/joeAIIntelligence';
 
 export function makeTextResult(text) {
   return { type: 'text', text };
@@ -87,7 +94,7 @@ function shouldAskRemoteCandidateSelection(query, results = []) {
   const topKeys = candidateKeys(top);
   const topIsExact = topKeys.includes(queryKey) || top.importLabel === 'Exact Match';
 
-  // If Jikan found one obvious exact match, let the import proceed normally.
+  // If the metadata provider found one obvious exact match, let the import proceed normally.
   if (topIsExact && Number(top.importConfidence || 0) >= 96) return false;
 
   // Otherwise, if there are several plausible matches, ask the user instead of guessing.
@@ -284,6 +291,15 @@ export async function executeSingleAddCommand({ anime = [], updateAnime, command
 
   await updateAnime(nextAnime);
 
+  if (result.metadataLookupFailed || nextAnime.metadataNeedsRefresh) {
+    return makeTextResult([
+      `Added ${nextAnime.officialTitle || nextAnime.title} as ${nextAnime.status}.`,
+      '',
+      '🍜 Metadata is unavailable or incomplete right now, so I saved the title locally instead of guessing.',
+      'Your library entry is safe. Run Update Database when connected to complete its poster, studio, genres, and other details.'
+    ].join('\n'));
+  }
+
   return makeTextResult(
     `Added ${nextAnime.officialTitle || nextAnime.title} as ${nextAnime.status}. Metadata fetched.`
   );
@@ -375,64 +391,90 @@ export function answerWatchingList({ anime = [] }) {
 }
 
 export function answerHelp() {
-  return makeTextResult([
-    '🍜 Hey — I’m JoeAI.',
-    '',
-    'Think of me as your anime nerd that never forgets your library.',
-    '',
-    'I can recommend shows by vibe, explain why people love an anime, organize your collection, analyze your taste, and help you figure out what to watch next.',
-    '',
-    '🔥 Try asking me:',
-    '',
-    '• I want something like Dorohedoro',
-    '• Recommend an anime like Initial D',
-    '• Recommend something like Bleach',
-    '• Why is Frieren so highly rated?',
-    '• What should I binge this weekend?',
-    '• Analyze my library',
-    '',
-    '✅ Available Today',
-    '',
-    '🎭 Knowledge-First Recommendations',
-    '• I want to watch something like Dorohedoro',
-    '• recommend something like Bleach',
-    '• I want something like Initial D',
-    '',
-    '🧠 Critic / Knowledge Mode',
-    '• explain why people love Dorohedoro',
-    '• what makes Bleach special?',
-    '• why should I watch Made in Abyss?',
-    '',
-    '📚 Library Management',
-    '• add Frieren as completed',
-    '• I finished World Trigger',
-    '• I am watching Magi',
-    '• add as completed Bleach, Naruto, One Piece',
-    '',
-    '📊 Collection Analysis',
-    '• how much anime have I watched?',
-    '• what are my top genres?',
-    '• what studio do I watch most?',
-    '• show me unrated anime',
-    '',
-    '🧪 Current JoeAI Brain',
-    '✓ Library Intelligence',
-    '✓ Anime DNA',
-    '✓ Critic Mode',
-    '✓ Personality Engine',
-    '✓ Knowledge Engine',
-    '✓ Knowledge-First Recommendations',
-    '✓ Franchise Detection',
-    '✓ Automatic Knowledge Enrichment',
-    '',
-    '🧬 Coming Soon: Project Anime Genome',
-    '• recommendations by domain, subdomain, mood, atmosphere, themes, and emotional tone',
-    '• better separation between street racing, soccer, boxing, volleyball, and other domains',
-    '• Core 100 expert knowledge profiles',
-    '• personal taste learning',
-    '',
-    'Translation: I’m getting smarter every sprint. Ask naturally. I’ll figure it out.'
-  ].join('\n'));
+  return {
+    type: 'helpCard',
+    title: '🍜 JoeAI Guide',
+    subtitle: 'I can manage your library, explain your Anime DNA, recommend shows with reasons, and remember how your taste evolves.',
+    sections: [
+      {
+        icon: '🎯',
+        title: 'Recommendations',
+        items: [
+          'recommend something like Slime',
+          'recommend something like Bleach',
+          'recommend something darker',
+          'what should I watch next?',
+          'surprise me'
+        ]
+      },
+      {
+        icon: '🧬',
+        title: 'Anime DNA',
+        items: [
+          'explain my Anime DNA',
+          'explain worldbuilding',
+          'why do I like Bleach?',
+          'how has my taste changed?',
+          'prediction accuracy'
+        ]
+      },
+      {
+        icon: '🧠',
+        title: 'JoeAI Memory',
+        items: [
+          'what did you learn?',
+          'what changed recently?',
+          'what surprised you most?',
+          'when did you learn worldbuilding?',
+          'daily thought'
+        ]
+      },
+      {
+        icon: '🎓',
+        title: 'Teach JoeAI',
+        items: [
+          'I liked One Piece for the crew',
+          "I don't care about studio",
+          'Long anime are not a problem',
+          "Don't recommend recap movies"
+        ]
+      },
+      {
+        icon: '📚',
+        title: 'Library',
+        items: [
+          'I finished Frieren',
+          'I am watching Magi',
+          'add Bleach as completed',
+          'add these as completed: Bleach, Naruto, One Piece',
+          'what am I watching?'
+        ]
+      },
+      {
+        icon: '📊',
+        title: 'Stats',
+        items: [
+          'library stats',
+          'top genres',
+          'top studios',
+          'top rated anime',
+          'show me unrated anime'
+        ]
+      },
+      {
+        icon: '🎲',
+        title: 'No idea what to ask?',
+        items: [
+          'what are your strongest signals?',
+          'what are you least certain about?',
+          'recommend a hidden gem',
+          'compare Slime and Overlord',
+          'predict my next favorite anime'
+        ]
+      }
+    ],
+    footer: 'Click any prompt to load it, then hit Ask — or just type naturally. JoeAI will route it.'
+  };
 }
 
 
@@ -449,8 +491,97 @@ function topList(items, label) {
   return items.map(([name, count], index) => `${index + 1}. ${name} — ${count}`).join('\n');
 }
 
-function answerConversationalQuestion({ text = '', anime = [], catalog = [], brain }) {
+function answerConversationalQuestion({ text = '', anime = [], catalog = [], brain, joeAIState = {} }) {
   const lower = String(text).toLowerCase();
+
+  // Dashboard and chat DNA explanations must be handled before any
+  // recommendation fallback. Examples: "explain Action", "explain Fantasy".
+  const dnaExplainMatch = String(text || '').trim().match(
+    /^(?:please\s+)?explain(?:\s+why)?\s+(action|adventure|fantasy|isekai|romance|comedy|drama|horror|mecha|sports|mystery|sci[- ]?fi|supernatural|shounen|seinen)\b/i
+  );
+
+  if (dnaExplainMatch) {
+    const requested = dnaExplainMatch[1];
+    const normalizedRequested = requested.toLowerCase().replace(/[-\s]+/g, '');
+
+    const matching = anime.filter((item) =>
+      (item.genres || []).some((genre) =>
+        String(genre || '').toLowerCase().replace(/[-\s]+/g, '') === normalizedRequested
+      )
+    );
+
+    const rated = matching
+      .map((item) => ({
+        item,
+        score: Number(item.joeScore ?? item.score ?? item.finalScore ?? item.rating ?? 0)
+      }))
+      .filter(({ score }) => Number.isFinite(score) && score > 0);
+
+    const average = rated.length
+      ? (rated.reduce((sum, entry) => sum + entry.score, 0) / rated.length).toFixed(2)
+      : null;
+
+    const topTitles = [...matching]
+      .sort((a, b) =>
+        Number(b.rewatches || 0) - Number(a.rewatches || 0) ||
+        Number(b.joeScore ?? b.score ?? b.finalScore ?? b.rating ?? 0) -
+        Number(a.joeScore ?? a.score ?? a.finalScore ?? a.rating ?? 0)
+      )
+      .slice(0, 5);
+
+    const companionGenres = localCountBy(
+      matching.flatMap((item) =>
+        (item.genres || []).filter((genre) =>
+          String(genre || '').toLowerCase().replace(/[-\s]+/g, '') !== normalizedRequested
+        )
+      )
+    ).slice(0, 4);
+
+    const rewatches = matching.reduce((sum, item) => sum + Number(item.rewatches || 0), 0);
+    const favorites = matching.filter((item) => item.favorite).length;
+    const label = requested
+      .replace(/sci[- ]?fi/i, 'Sci-Fi')
+      .replace(/^./, (char) => char.toUpperCase());
+
+    if (!matching.length) {
+      return makeTextResult([
+        `🧬 Why ${label} is not leading your Anime DNA yet`,
+        '',
+        `I could not find any ${label} titles in your current library metadata.`,
+        '',
+        'Run metadata refresh on titles missing genres, then ask again.'
+      ].join('\n'));
+    }
+
+    return makeTextResult([
+      `🧬 Why ${label} leads your Anime DNA`,
+      '',
+      `${label} appears in ${matching.length} title${matching.length === 1 ? '' : 's'} in your library${average ? ` with an average personal score of ${average}` : ''}.`,
+      rewatches ? `You also have ${rewatches} total rewatch${rewatches === 1 ? '' : 'es'} reinforcing this signal.` : '',
+      favorites ? `${favorites} of those titles ${favorites === 1 ? 'is' : 'are'} marked as a favorite.` : '',
+      '',
+      topTitles.length ? 'Strongest evidence:' : '',
+      ...topTitles.map((item) => {
+        const score = Number(item.joeScore ?? item.score ?? item.finalScore ?? item.rating ?? 0);
+        const extras = [
+          Number.isFinite(score) && score > 0 ? `★ ${score.toFixed(1)}` : '',
+          Number(item.rewatches || 0) > 0 ? `↻ ${item.rewatches}x` : '',
+          item.favorite ? 'favorite' : ''
+        ].filter(Boolean).join(' · ');
+        return `• ${item.officialTitle || item.title}${extras ? ` — ${extras}` : ''}`;
+      }),
+      '',
+      companionGenres.length ? `What usually makes ${label} work for you:` : '',
+      ...companionGenres.map(([genre, count]) => `• ${genre} overlaps in ${count} title${count === 1 ? '' : 's'}`),
+      '',
+      `JoeAI's read: ${label} is not winning by itself. It becomes one of your strongest signals when it is paired with ${companionGenres.slice(0, 3).map(([genre]) => genre.toLowerCase()).join(', ') || 'the character and story patterns you repeatedly return to'}.`
+    ].filter(Boolean).join('\n'));
+  }
+
+  const conversationAnswer = routeJoeAIConversation({ text, anime, catalog, joeAIState });
+  if (conversationAnswer) {
+    return conversationAnswer;
+  }
 
   const knowledgeFirstAnswer = maybeKnowledgeFirstRecommendation(text, anime, catalog);
   if (knowledgeFirstAnswer) {
@@ -491,7 +622,17 @@ const intelligenceAnswer = answerLibraryQuestion(text, anime, catalog);
   return makeTextResult(brain?.answer?.(text || '') || 'Ask me what I can do.');
 }
 
-export async function executeJoeAICommand({ intent, anime = [], catalog = [], updateAnime, brain, onProgress }) {
+export async function executeJoeAICommand({
+  intent,
+  anime = [],
+  catalog = [],
+  updateAnime,
+  brain,
+  joeAIState = {},
+  recordRecommendationFeedback,
+  setJoeAIPreference,
+  onProgress
+}) {
   switch (intent.kind) {
     case 'help':
       return answerHelp();
@@ -501,6 +642,42 @@ export async function executeJoeAICommand({ intent, anime = [], catalog = [], up
 
     case 'watchingList':
       return answerWatchingList({ anime });
+
+    case 'genreDNA':
+      return explainGenreDNA({ genre: intent.genre, anime });
+
+    case 'tastePattern':
+      return explainTastePattern({ pattern: intent.pattern, anime });
+
+    case 'teaching': {
+      const teaching = intent.teaching || {};
+
+      if (teaching.kind === 'preference' && teaching.preference) {
+        await setJoeAIPreference?.(teaching.preference);
+        return makeTextResult(`🧠 ${teaching.response || 'Preference remembered.'}`);
+      }
+
+      if (teaching.kind === 'titleFeedback' && teaching.title) {
+        const matched = [...anime, ...catalog].find((item) => {
+          const titles = [item.title, item.officialTitle, ...(item.titleSynonyms || [])];
+          return titles.some((title) => normalizeJoeAIKey(title) === normalizeJoeAIKey(teaching.title));
+        });
+        await recordRecommendationFeedback?.({
+          animeKey: matched
+            ? (matched.malId ? `mal:${matched.malId}` : `title:${normalizeJoeAIKey(matched.title)}`)
+            : `title:${normalizeJoeAIKey(teaching.title)}`,
+          title: matched?.officialTitle || matched?.title || teaching.title,
+          action: teaching.action,
+          reason: teaching.reason || '',
+          traits: inferFeedbackTraits(matched || { title: teaching.title }, teaching.reason),
+          sourcePrompt: intent.text || '',
+          algorithmVersion: 'joeai-intelligence-v1'
+        });
+        return makeTextResult(`🧠 ${teaching.response || 'JoeAI learned from that.'}`);
+      }
+
+      return makeTextResult('I heard the correction, but I could not turn it into a saved preference yet.');
+    }
 
     case 'singleAdd':
       return executeSingleAddCommand({
@@ -558,8 +735,26 @@ export async function executeJoeAICommand({ intent, anime = [], catalog = [], up
       ].join('\n'));
     }
 
+    case 'recommendationExplanation': {
+      const title = String(intent.title || '').trim();
+      const explanationPrompt = title
+        ? `why did you recommend ${title}?`
+        : String(intent.text || 'why did you recommend this?');
+
+      return answerConversationalQuestion({
+        text: explanationPrompt,
+        anime,
+        catalog,
+        brain,
+        joeAIState
+      });
+    }
+
     case 'recommendation': {
-      const picks = brain?.recommendations?.(5) || [];
+      const picks = brain?.recommendations?.(5, {
+        prompt: intent.text || '',
+        joeAIState
+      }) || [];
 
       return picks.length
         ? {
@@ -573,6 +768,6 @@ export async function executeJoeAICommand({ intent, anime = [], catalog = [], up
 
     case 'question':
     default:
-      return answerConversationalQuestion({ text: intent.text || '', anime, catalog, brain });
+      return answerConversationalQuestion({ text: intent.text || '', anime, catalog, brain, joeAIState });
   }
 }

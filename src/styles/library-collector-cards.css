@@ -1,0 +1,131 @@
+/* Library collector cards — final proportion pass */
+
+.libraryPosterGrid .animeCard {
+  height: 376px !important;
+  border-width: 1px !important;
+  box-shadow:
+    0 8px 20px rgba(0, 0, 0, .22),
+    0 0 10px color-mix(in srgb, var(--gold) 8%, transparent) !important;
+  transition:
+    transform .22s ease,
+    box-shadow .22s ease,
+    filter .22s ease !important;
+}
+
+.libraryPosterGrid .animeCard:hover,
+.libraryPosterGrid .animeCard:focus-visible {
+  transform: translateY(-6px) scale(1.012) !important;
+  box-shadow:
+    0 16px 30px rgba(0, 0, 0, .30),
+    0 0 20px color-mix(in srgb, var(--cyan) 15%, transparent) !important;
+  z-index: 5;
+}
+
+.libraryPosterGrid .animePoster.posterLibrary {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background: #050b16 !important;
+}
+
+.libraryPosterGrid .animePoster.posterLibrary::before {
+  content: "";
+  position: absolute;
+  inset: -14px;
+  z-index: 0;
+  background-image: var(--library-poster-backdrop);
+  background-size: cover;
+  background-position: center;
+  filter: blur(20px) saturate(.85);
+  opacity: .28;
+  transform: scale(1.1);
+}
+
+.libraryPosterGrid .animePoster.posterLibrary img {
+  position: relative !important;
+  z-index: 1 !important;
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+  max-height: none !important;
+  object-fit: cover !important;
+  object-position: center top !important;
+  transform: none !important;
+  background: transparent !important;
+  transition:
+    transform .22s ease,
+    filter .22s ease !important;
+}
+
+.libraryPosterGrid .animeCard:hover .animePoster.posterLibrary img,
+.libraryPosterGrid .animeCard:focus-visible .animePoster.posterLibrary img {
+  transform: scale(1.02) !important;
+  filter: brightness(1.035) saturate(1.03);
+}
+
+.libraryPosterGrid .animePoster.posterLibrary::after {
+  display: none !important;
+  content: none !important;
+}
+
+.libraryPosterGrid .cardGradient {
+  background:
+    linear-gradient(
+      180deg,
+      transparent 48%,
+      rgba(4, 8, 15, .14) 60%,
+      rgba(4, 8, 15, .78) 100%
+    ) !important;
+}
+
+.libraryPosterGrid .cardInfo {
+  transform: translateY(-6px);
+  padding-top: 14px !important;
+  padding-bottom: 12px !important;
+}
+
+.libraryPosterGrid .cardInfo h3 {
+  margin-bottom: 7px !important;
+  line-height: 1.2 !important;
+  text-shadow:
+    0 2px 8px rgba(0, 0, 0, .88),
+    0 0 10px rgba(0, 0, 0, .45);
+}
+
+.libraryPosterGrid .cardInfo p {
+  margin-bottom: 10px !important;
+}
+
+.libraryPosterGrid .cardInfo p,
+.libraryPosterGrid .metaPills,
+.libraryPosterGrid .tags {
+  text-shadow: 0 2px 7px rgba(0, 0, 0, .85);
+}
+
+.libraryPosterGrid .rankRibbon {
+  top: 10px !important;
+  left: 10px !important;
+}
+
+.libraryPosterGrid .scoreBadge {
+  top: 10px !important;
+  right: 10px !important;
+}
+
+.libraryPosterGrid .favoriteButton {
+  top: 54px !important;
+  right: 10px !important;
+}
+
+@media (min-width: 1650px) {
+  .libraryPosterGrid .animeCard {
+    height: 364px !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .libraryPosterGrid .animeCard {
+    height: 336px !important;
+  }
+}

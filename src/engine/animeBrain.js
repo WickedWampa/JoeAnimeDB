@@ -13,7 +13,7 @@ function formatList(items = []) {
   return `${clean.slice(0, -1).join(', ')} and ${clean[clean.length - 1]}`;
 }
 
-export function createAnimeBrain(library = [], catalog = []) {
+export function createAnimeBrain(library = [], catalog = [], intelligence = {}) {
   const anime = Array.isArray(library) ? library : [];
   const animeCatalog = Array.isArray(catalog) ? catalog : [];
   const dna = generateAnimeDNA(anime);
@@ -49,8 +49,12 @@ export function createAnimeBrain(library = [], catalog = []) {
       .slice(0, limit);
   }
 
-  function recommendations(limit = 5) {
-    return recommendAnime(anime, animeCatalog, { limit });
+  function recommendations(limit = 5, request = {}) {
+    return recommendAnime(anime, animeCatalog, {
+      limit,
+      joeAIState: request.joeAIState || intelligence.joeAIState || {},
+      prompt: request.prompt || ''
+    });
   }
 
   function catalogStatus() {

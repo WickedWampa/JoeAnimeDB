@@ -1,5 +1,61 @@
 export const ENHANCED_BATTLE_PACK_2 = [
   {
+    "id": "dragon-ball",
+    "titles": [
+      "Dragon Ball"
+    ],
+    "franchiseId": "dragon-ball",
+    "domain": "martial arts adventure shonen",
+    "subdomain": "comedic quest adventure and martial arts growth",
+    "signature": "A playful martial-arts adventure about Goku growing up, chasing Dragon Balls, meeting lifelong friends, and discovering that the world is much bigger than he imagined.",
+    "coreFantasy": "Travel an enormous, strange world with a pure-hearted martial-arts prodigy, finding rivals, masters, monsters, tournaments, and friends around every corner.",
+    "viewerFantasy": {
+      "pillars": [
+        "adventure",
+        "martial arts discovery",
+        "comedy",
+        "found family",
+        "steady personal growth"
+      ],
+      "rewardLoop": "new destination → strange encounter → training or tournament → stronger rival → bigger world",
+      "bestFor": [
+        "classic adventure fan",
+        "martial arts fan",
+        "tournament arc lover",
+        "comedy-action viewer",
+        "coming-of-age shonen fan"
+      ]
+    },
+    "viewerMotivations": [
+      "watching Goku grow up",
+      "martial arts tournaments",
+      "exploration",
+      "goofy comedy",
+      "meeting the original Dragon Ball cast",
+      "seeing the foundation of the franchise"
+    ],
+    "emotionalProfile": [
+      "playful",
+      "adventurous",
+      "hopeful",
+      "nostalgic",
+      "occasionally intense"
+    ],
+    "idealFollowUps": [
+      "dragon-ball-z",
+      "one-piece",
+      "hunter-x-hunter",
+      "naruto",
+      "yu-yu-hakusho"
+    ],
+    "antiRecommendations": [
+      "monster",
+      "berserk"
+    ],
+    "rewatchValue": "High for adventure, comedy, tournament arcs, and franchise history",
+    "joeNote": "Treat original Dragon Ball as adventure-comedy and martial-arts coming-of-age first. Do not collapse it into Dragon Ball Z's transformation and power-escalation identity."
+  },
+  {
     "id": "dragon-ball-z",
     "titles": [
       "Dragon Ball Z",

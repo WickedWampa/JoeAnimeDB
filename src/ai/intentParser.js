@@ -1,4 +1,5 @@
 import { findGenomeCardByTitle } from './genome/genomeRegistry';
+import { parseJoeAITeaching } from './intelligence/joeAIIntelligence';
 export function normalizeStatus(value = '') {
   const lower = String(value).toLowerCase();
 
@@ -39,17 +40,14 @@ function stripStatusWords(value = '') {
 function removeExplicitBulkPrefix(raw = '') {
   let body = String(raw).trim();
 
-  // Important: only treat a colon as the command separator when it appears
-  // before the first comma/newline. This prevents anime titles like
-  // "Cyberpunk: Edgerunners" and "Fate/stay night: UBW" from deleting
-  // everything before the title colon.
+  // A colon is a command separator only when everything before it is the
+  // command itself. In "add Fullmetal Alchemist: Brotherhood, Attack on Titan"
+  // the colon belongs to the title and must be preserved.
   const firstColon = body.indexOf(':');
-  const firstComma = body.indexOf(',');
-  const firstNewline = body.search(/\r?\n/);
+  const beforeColon = firstColon === -1 ? '' : body.slice(0, firstColon).trim();
   const colonIsCommandSeparator =
     firstColon !== -1 &&
-    (firstComma === -1 || firstColon < firstComma) &&
-    (firstNewline === -1 || firstColon < firstNewline);
+    /^(?:please\s+)?(?:joeai\s+)?(?:add these|import these|bulk add|add list|import list|add|import)$/i.test(beforeColon);
 
   if (colonIsCommandSeparator) {
     body = body.slice(firstColon + 1);
@@ -70,6 +68,46 @@ function parseTitles(value = '') {
       .map(stripStatusWords)
       .filter(Boolean)
   )];
+}
+
+function parseLibraryCommand(raw = '', status = 'Watching') {
+  const explicitBulk =
+    /^(?:please\s+)?(?:joeai\s+)?(add these|import these|bulk add|add list|import list)\b/i.test(raw);
+
+  const commandLike =
+    /^(?:please\s+)?(?:joeai\s+)?(add|import|bulk add|add list|import list|mark|set|put|i finished|i completed|i watched|i started|finished|completed|watched|started)\b/i.test(raw);
+
+  // A comma by itself is not enough to mutate the library. Requiring an
+  // action word prevents questions such as "compare Bleach, Naruto, and One
+  // Piece" from becoming accidental imports.
+  if (!explicitBulk && !commandLike) return null;
+
+  const titles = parseTitles(removeExplicitBulkPrefix(raw));
+
+  if (titles.length > 1) {
+    return {
+      kind: 'bulkAdd',
+      titles,
+      status
+    };
+  }
+
+  if (titles.length === 1 && commandLike) {
+    return {
+      kind: 'singleAdd',
+      title: titles[0],
+      status
+    };
+  }
+
+  return null;
+}
+
+function containsMoodPhrase(value = '', phrase = '') {
+  const escaped = String(phrase)
+    .replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  return new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`, 'i').test(value);
 }
 
 
@@ -111,14 +149,110 @@ export function parseJoeAIIntent(input = '') {
 
   const lower = raw.toLowerCase();
   const status = normalizeStatus(raw);
+  const teaching = parseJoeAITeaching(raw);
 
-  // Similarity/title-like requests are handled by the recommendation router.
-  // Keep them as questions so routeJoeAIRecommendation() can decide whether this is
-  // a "similar to X" request, a known Genome title lookup, or normal fallback.
-  const similarityPrompt = /\b(like|similar to|something like|anime like|show like|shows like|show me something like)\b/i.test(raw);
+  if (teaching) {
+    return { kind: 'teaching', teaching, text: raw };
+  }
+
+  // Library mutations must be resolved before recommendation/mood routing.
+  // Long anime lists naturally contain words such as "AI", "dark", or
+  // "classic"; those title fragments must never turn an explicit add command
+  // into a recommendation request.
+  const libraryCommand = parseLibraryCommand(raw, status);
+  if (libraryCommand) return libraryCommand;
+
+  // Broad taste questions must be analyzed as personal patterns before any
+  // title/recommendation lookup sees words such as "adventures" as a show name.
+  // Examples: "why do I like long adventures?", "why am I drawn to dark fantasy?"
+  const tastePatternPatterns = [
+    /^(?:please\s+)?why\s+do\s+i\s+like\s+(.+?)[?.!]*$/i,
+    /^(?:please\s+)?why\s+am\s+i\s+(?:drawn|attracted)\s+to\s+(.+?)[?.!]*$/i,
+    /^(?:please\s+)?explain\s+why\s+i\s+like\s+(.+?)[?.!]*$/i,
+    /^(?:please\s+)?what\s+makes\s+me\s+like\s+(.+?)[?.!]*$/i
+  ];
+
+  for (const pattern of tastePatternPatterns) {
+    const match = raw.match(pattern);
+    if (match?.[1]) {
+      return { kind: 'tastePattern', pattern: match[1].trim(), text: raw };
+    }
+  }
+
+  // Genre DNA explanations are explicit analysis requests, not recommendations.
+  // Keep the captured genre dynamic so this works for every user's genre list.
+  const genreDNAPatterns = [
+    /^(?:please\s+)?explain(?:\s+why)?\s+(.+?)\s+(?:is|appears|shows up)\s+(?:a\s+)?part\s+of\s+my\s+(?:anime\s+)?dna[?.!]*$/i,
+    /^why\s+is\s+(.+?)\s+(?:a\s+)?part\s+of\s+my\s+(?:anime\s+)?dna[?.!]*$/i,
+    /^(?:please\s+)?explain\s+my\s+(.+?)\s+(?:anime\s+)?dna[?.!]*$/i,
+    /^(?:please\s+)?explain\s+the\s+(.+?)\s+signal\s+in\s+my\s+(?:anime\s+)?dna[?.!]*$/i
+  ];
+
+  for (const pattern of genreDNAPatterns) {
+    const match = raw.match(pattern);
+    if (match?.[1]) {
+      return { kind: 'genreDNA', genre: match[1].trim(), text: raw };
+    }
+  }
+
+  // Recommendation explanations must be routed as reasoning questions before
+  // the broad recommendation matcher sees the word "recommend". This powers
+  // Pick of the Day's Why This? button and natural prompts such as
+  // "why did you recommend Frieren?" without generating a fresh pick list.
+  const recommendationExplanationPatterns = [
+    /^(?:please\s+)?(?:tell\s+me\s+)?why\s+you\s+(?:recommend|recommended|suggest|suggested)\s+(.+?)[?.!]*$/i,
+    /^(?:please\s+)?(?:tell\s+me\s+)?why\s+(?:did|do|would)\s+you\s+(?:recommend|suggest)\s+(.+?)[?.!]*$/i,
+    /^(?:please\s+)?explain\s+why\s+you\s+(?:recommended|recommend|suggested|suggest)\s+(.+?)[?.!]*$/i,
+    /^(?:please\s+)?why\s+(?:this|that)\s+(?:pick|recommendation)[?.!]*$/i
+  ];
+
+  for (const pattern of recommendationExplanationPatterns) {
+    const match = raw.match(pattern);
+    if (!match) continue;
+
+    return {
+      kind: 'recommendationExplanation',
+      title: match[1]?.trim() || '',
+      text: raw
+    };
+  }
+
+  const memoryPrompt =
+    /\b(what do you know about me|analyze my taste|analyse my taste|taste profile|joeai memory|anime taste|my taste|taste memory|what have you learned about me|what have you learned|what did you learn|what changed recently|what surprised you most|daily thought|prediction accuracy|least certain|strongest signals|how has my taste changed|when did you learn|when did you realize)\b/i.test(raw);
+
+  if (memoryPrompt) {
+    return { kind: 'memory', text: raw };
+  }
+
+  const hasSimilarityWording =
+    /\b(similar to|something like|anime like|show like|shows like|show me something like)\b/i.test(raw);
+
+  // An exact known title wins before broad recommendation wording. This keeps
+  // "recommend One Piece" on its direct Genome answer while
+  // "recommend something like One Piece" still produces explained picks.
+  if (!hasSimilarityWording && isKnownGenomeTitleQuery(raw)) {
+    return {
+      kind: 'question',
+      text: raw,
+      knownTitle: cleanKnownTitleQueryForGenome(raw)
+    };
+  }
+
+  // Explicit recommendation requests own broad and similarity searches.
+  const explicitRecommendationPrompt =
+    /\b(recommend|suggest|find|give me|show me|what should i watch|watch next|something to watch|hidden gem|surprise me|next anime)\b/i.test(raw);
+
+  if (explicitRecommendationPrompt) {
+    return { kind: 'recommendation', text: raw };
+  }
+
+  // Direct similarity wording is a recommendation request even when the user
+  // omits the word "recommend". Questions such as "would I like X?" remain
+  // normal questions because a bare "like" is intentionally not enough here.
+  const similarityPrompt = hasSimilarityWording;
 
   if (similarityPrompt) {
-    return { kind: 'question', text: raw };
+    return { kind: 'recommendation', text: raw };
   }
 
 
@@ -202,38 +336,8 @@ export function parseJoeAIIntent(input = '') {
     'mecha'
   ];
 
-  if (moodRecommendationWords.some((word) => lower.includes(word))) {
+  if (moodRecommendationWords.some((word) => containsMoodPhrase(lower, word))) {
     return { kind: 'recommendation' };
-  }
-
-  const explicitBulk =
-    /^(add these|import these|bulk add|add list|import list)\b/i.test(raw);
-
-  const commandLike =
-    /^(add|import|bulk add|add list|import list|mark|set|put|i finished|i completed|i watched|i started|finished|completed|watched|started)\b/i.test(raw);
-
-  const hasListSeparator = raw.includes(',') || /\r?\n/.test(raw);
-
-  if (explicitBulk || commandLike || hasListSeparator) {
-    let body = removeExplicitBulkPrefix(raw);
-
-    const titles = parseTitles(body);
-
-    if (titles.length > 1) {
-      return {
-        kind: 'bulkAdd',
-        titles,
-        status
-      };
-    }
-
-    if (titles.length === 1 && commandLike) {
-      return {
-        kind: 'singleAdd',
-        title: titles[0],
-        status
-      };
-    }
   }
 
   if (lower.includes('recommend') || lower.includes('next') || lower.includes('watch') || lower.includes('new anime')) {

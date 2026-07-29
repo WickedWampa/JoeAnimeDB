@@ -1,0 +1,171 @@
+/* ===== Library + Detail Card release readiness ===== */
+
+.libraryStateCard {
+  width: min(720px, calc(100% - 32px));
+  margin: 34px auto;
+  padding: clamp(28px, 5vw, 52px);
+  text-align: center;
+  border: 1px solid color-mix(in srgb, var(--cyan) 34%, var(--line));
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--cyan) 14%, transparent), transparent 48%),
+    linear-gradient(145deg, color-mix(in srgb, var(--panel) 92%, transparent), color-mix(in srgb, var(--panel2, var(--panel)) 88%, transparent));
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .24);
+}
+
+.libraryStateCard.noResults {
+  border-color: color-mix(in srgb, var(--pink) 38%, var(--line));
+  background:
+    radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--pink) 12%, transparent), transparent 48%),
+    color-mix(in srgb, var(--panel) 94%, transparent);
+}
+
+.libraryStateIcon {
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 18px;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--cyan) 46%, transparent);
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--cyan) 11%, var(--panel));
+  color: var(--cyan);
+  font-size: 34px;
+  box-shadow: 0 0 34px color-mix(in srgb, var(--cyan) 13%, transparent);
+}
+
+.libraryStateCard h2 {
+  margin: 6px 0 10px;
+  color: var(--text);
+  font-size: clamp(25px, 4vw, 36px);
+}
+
+.libraryStateCard > p:not(.eyebrow) {
+  max-width: 560px;
+  margin: 0 auto;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.libraryStateActions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 24px;
+}
+
+.libraryStateActions button {
+  border: 1px solid color-mix(in srgb, var(--cyan) 46%, var(--line));
+  border-radius: 999px;
+  padding: 11px 17px;
+  background: color-mix(in srgb, var(--cyan) 10%, var(--panel));
+  color: var(--text);
+  font-weight: 950;
+  cursor: pointer;
+}
+
+.libraryTitleStack {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.metadataReviewBadge {
+  display: inline-flex;
+  align-items: center;
+  width: max-content;
+  max-width: 100%;
+  border: 1px solid color-mix(in srgb, #ffc759 50%, transparent);
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: color-mix(in srgb, #ffc759 13%, var(--panel));
+  color: color-mix(in srgb, #ffc759 88%, white);
+  font-size: 10px;
+  font-weight: 1000;
+  line-height: 1;
+  letter-spacing: .025em;
+  white-space: nowrap;
+}
+
+.metadataReviewBadge.identityReview {
+  border-color: color-mix(in srgb, #ff7f96 54%, transparent);
+  background: color-mix(in srgb, #ff607d 14%, var(--panel));
+  color: #ffc1cc;
+}
+
+.cardReviewBadge {
+  position: absolute;
+  z-index: 5;
+  top: 52px;
+  left: 10px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, .32);
+}
+
+.detailNavigation {
+  justify-content: flex-start;
+}
+
+.detailNavigationPosition {
+  min-width: 104px;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+}
+
+.detailNavigationPosition span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.detailMetadataReview {
+  margin: 15px 0;
+  padding: 13px 15px;
+  border: 1px solid color-mix(in srgb, #ffc759 44%, transparent);
+  border-radius: 15px;
+  background: color-mix(in srgb, #ffc759 9%, var(--panel));
+}
+
+.detailMetadataReview.identityReview {
+  border-color: color-mix(in srgb, #ff607d 46%, transparent);
+  background: color-mix(in srgb, #ff607d 9%, var(--panel));
+}
+
+.detailMetadataReview strong {
+  color: color-mix(in srgb, #ffc759 86%, white);
+}
+
+.detailMetadataReview.identityReview strong {
+  color: #ffc1cc;
+}
+
+.detailMetadataReview p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.scoreSaving {
+  color: var(--muted);
+  font-weight: 850;
+}
+
+.removeError {
+  color: #ffb0b0 !important;
+  font-weight: 850;
+}
+
+@media (max-width: 620px) {
+  .libraryStateCard {
+    width: calc(100% - 20px);
+    margin-block: 20px;
+  }
+
+  .metadataReviewBadge {
+    white-space: normal;
+  }
+}

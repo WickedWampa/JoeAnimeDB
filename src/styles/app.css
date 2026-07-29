@@ -490,3 +490,310 @@ button,input{font:inherit}.shell{display:grid;grid-template-columns:260px 1fr;mi
   opacity: .55;
   cursor: wait;
 }
+
+/* JoeAI Taste Profile v3 */
+.tasteProfilePage { max-width: 1180px; margin: 0 auto; }
+.tasteProfileChat { max-width: none !important; width: 100%; padding: 0 !important; background: transparent !important; border: 0 !important; }
+.tasteProfileV3 { display: grid; gap: 16px; color: var(--text); }
+.tasteHero { border: 1px solid var(--line); border-radius: 26px; padding: 24px 26px; background: radial-gradient(circle at 8% 0%, rgba(55,234,255,.20), transparent 38%), radial-gradient(circle at 92% 0%, rgba(255,92,200,.16), transparent 34%), rgba(9,16,28,.82); display: grid; grid-template-columns: 1fr auto; gap: 18px; align-items: center; box-shadow: 0 20px 80px rgba(0,0,0,.24); }
+.tasteHero h1 { margin: 0 0 8px; font-size: clamp(34px, 4vw, 58px); line-height: .95; }
+.tasteHero p { margin: 0; color: var(--muted); font-size: 16px; line-height: 1.55; max-width: 760px; }
+.tasteEyebrow { color: var(--cyan) !important; font-weight: 950; letter-spacing: .14em; text-transform: uppercase; margin: 0 0 9px !important; font-size: 12px !important; }
+.viewerClassPill { justify-self: end; display: inline-flex; align-items: center; gap: 10px; border: 1px solid rgba(185,132,255,.45); background: linear-gradient(135deg, rgba(185,132,255,.22), rgba(55,234,255,.08)); border-radius: 999px; padding: 12px 16px; font-weight: 1000; box-shadow: 0 0 30px rgba(185,132,255,.12); white-space: nowrap; }
+.viewerClassPill span { font-size: 22px; }
+.tasteConfidenceCard { border: 1px solid var(--line); border-radius: 24px; background: rgba(8,15,25,.82); padding: 22px; display: grid; grid-template-columns: 190px 1fr 1.25fr; gap: 22px; align-items: center; }
+.confidenceBig strong { display: block; font-size: clamp(54px, 8vw, 86px); line-height: .9; color: var(--cyan); text-shadow: 0 0 34px rgba(55,234,255,.28); }
+.confidenceBig span { display: block; color: var(--muted); font-weight: 900; margin-top: 8px; }
+.confidenceBody p { margin: 12px 0 0; color: var(--muted); line-height: 1.45; }
+.tasteProgress { height: 15px; border-radius: 999px; background: rgba(255,255,255,.09); overflow: hidden; border: 1px solid rgba(255,255,255,.08); }
+.tasteProgress div { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--cyan), var(--purple), var(--pink)); box-shadow: 0 0 24px rgba(55,234,255,.22); }
+.tasteStatsGrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.tasteStatsGrid div { border-left: 1px solid rgba(255,255,255,.09); padding: 10px 12px; text-align: center; }
+.tasteStatsGrid strong { display: block; color: var(--text); font-size: 30px; line-height: 1; }
+.tasteStatsGrid span { display: block; color: var(--muted); margin-top: 8px; font-size: 12px; font-weight: 800; }
+.tasteMainGrid { display: grid; grid-template-columns: 1.15fr 1fr 1.05fr; gap: 16px; }
+.tasteBottomGrid { display: grid; grid-template-columns: .95fr 1.05fr 1.25fr; gap: 16px; }
+.tasteAchievementGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.tastePanel { border: 1px solid var(--line); border-radius: 22px; background: rgba(8,15,25,.78); padding: 18px; min-width: 0; box-shadow: inset 0 1px 0 rgba(255,255,255,.04); }
+.tastePanelHeader { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; }
+.tastePanelHeader h2 { margin: 0; font-size: 18px; }
+.tastePanelHeader span { color: var(--muted); font-size: 12px; font-weight: 800; }
+.dnaTraitList { display: grid; gap: 12px; }
+.dnaTraitRow { display: grid; grid-template-columns: minmax(145px,1fr) 105px minmax(70px,.55fr) 34px; gap: 10px; align-items: center; }
+.dnaTraitName { display: flex; gap: 9px; align-items: center; min-width: 0; }
+.dnaTraitName span { font-size: 18px; }
+.dnaTraitName strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dnaStars { color: var(--gold); letter-spacing: 1px; font-size: 14px; white-space: nowrap; text-shadow: 0 0 18px rgba(255,201,40,.16); }
+.miniBar { height: 8px; border-radius: 999px; background: rgba(255,255,255,.10); overflow: hidden; }
+.miniBar div { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--cyan), var(--green)); }
+.dnaScore { color: var(--muted); font-size: 12px; font-weight: 900; text-align: right; }
+.comfortList { display: grid; gap: 10px; }
+.comfortRow { display: grid; grid-template-columns: 34px 58px 1fr; gap: 10px; align-items: center; border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.035); border-radius: 16px; padding: 9px; }
+.comfortMedal { font-size: 22px; text-align: center; }
+.comfortPoster { width: 58px; height: 76px; border-radius: 10px; overflow: hidden; background: rgba(255,255,255,.06); }
+.comfortRow strong { display: block; font-size: 15px; }
+.comfortRow span { display: block; margin-top: 5px; color: var(--muted); font-size: 12px; font-weight: 800; }
+.tasteRadar { width: 100%; max-width: 310px; display: block; margin: 0 auto; overflow: visible; }
+.radarGrid { fill: none; stroke: rgba(255,255,255,.18); stroke-width: 1; }
+.radarGrid.soft { stroke: rgba(255,255,255,.09); }
+.radarShape { fill: rgba(55,234,255,.24); stroke: var(--cyan); stroke-width: 3; filter: drop-shadow(0 0 10px rgba(55,234,255,.4)); }
+.radarLabel { fill: var(--muted); font-size: 10px; font-weight: 800; }
+.tasteTrend { display: grid; grid-template-columns: 28px 1fr auto; gap: 8px; align-items: center; padding: 9px 0; border-bottom: 1px solid rgba(255,255,255,.06); }
+.tasteTrend span { font-size: 18px; }
+.tasteTrend.up span, .tasteTrend.up em { color: var(--green); }
+.tasteTrend.down span, .tasteTrend.down em { color: var(--pink); }
+.tasteTrend strong { font-size: 14px; }
+.tasteTrend em { font-style: normal; font-weight: 1000; }
+.tasteChipCloud { display: flex; flex-wrap: wrap; gap: 9px; }
+.tasteChipCloud span { border: 1px solid rgba(55,234,255,.24); background: rgba(55,234,255,.08); color: #dffbff; border-radius: 999px; padding: 8px 11px; font-weight: 900; font-size: 12px; }
+.joeThoughtsPanel { border-color: rgba(185,132,255,.48); box-shadow: 0 0 34px rgba(185,132,255,.11), inset 0 1px 0 rgba(255,255,255,.05); background: radial-gradient(circle at top right, rgba(185,132,255,.18), transparent 42%), rgba(8,15,25,.82); }
+.joeThoughtsPanel p { color: #dfeaf7; line-height: 1.62; margin: 0; }
+.thoughtFooter { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-top: 18px; border-top: 1px solid rgba(255,255,255,.08); padding-top: 14px; color: var(--muted); }
+.thoughtFooter strong { color: var(--cyan); font-size: 18px; }
+.smallTastePanel strong { display: block; font-size: 22px; color: var(--gold); margin: 8px 0; }
+.smallTastePanel p { color: var(--muted); line-height: 1.45; margin-bottom: 0; }
+@media (max-width: 1250px) { .tasteMainGrid, .tasteBottomGrid, .tasteAchievementGrid, .tasteConfidenceCard { grid-template-columns: 1fr; } .tasteStatsGrid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 700px) { .tasteHero { grid-template-columns: 1fr; } .viewerClassPill { justify-self: start; } .dnaTraitRow { grid-template-columns: 1fr; } .dnaStars, .dnaScore { text-align: left; } }
+
+/* JoeAI Taste Profile v3.1 polish: spacing + DNA row alignment */
+.tasteProfilePage {
+  max-width: 1220px;
+}
+
+.tasteProfileV3 {
+  gap: 18px;
+}
+
+.tasteMainGrid,
+.tasteBottomGrid,
+.tasteAchievementGrid {
+  gap: 24px;
+}
+
+.tastePanel {
+  overflow: hidden;
+}
+
+.dnaTraitList {
+  gap: 14px;
+  overflow: hidden;
+}
+
+.dnaTraitRow {
+  grid-template-columns: minmax(0, 1fr) 80px minmax(74px, 88px) 34px;
+  gap: 8px;
+  width: 100%;
+  overflow: hidden;
+}
+
+.dnaTraitName {
+  min-width: 0;
+}
+
+.dnaTraitName strong {
+  display: block;
+  max-width: 100%;
+}
+
+.dnaStars {
+  font-size: 12px;
+  letter-spacing: 0;
+  text-align: left;
+  overflow: hidden;
+}
+
+.miniBar {
+  width: 100%;
+  min-width: 0;
+}
+
+.dnaScore {
+  width: 34px;
+  min-width: 34px;
+  text-align: right;
+  justify-self: end;
+  opacity: .82;
+}
+
+.comfortRow {
+  grid-template-columns: 30px 58px minmax(0, 1fr);
+}
+
+.comfortRow strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (min-width: 1251px) {
+  .tasteMainGrid {
+    grid-template-columns: minmax(360px, 1.05fr) minmax(320px, .95fr) minmax(330px, 1fr);
+  }
+}
+
+@media (max-width: 700px) {
+  .dnaTraitRow {
+    grid-template-columns: minmax(0, 1fr) 72px;
+  }
+
+  .dnaStars {
+    display: none;
+  }
+
+  .miniBar {
+    grid-column: 1 / -1;
+  }
+
+  .dnaScore {
+    grid-column: 2;
+    grid-row: 1;
+  }
+}
+
+
+/* PATCH_0067 JoeAI Memory Search Cards */
+.memoryInsightCard {
+  width: min(880px, 100%);
+  border: 1px solid rgba(55, 234, 255, 0.26);
+  background:
+    radial-gradient(circle at top left, rgba(55, 234, 255, 0.13), transparent 38%),
+    radial-gradient(circle at bottom right, rgba(255, 92, 200, 0.10), transparent 42%),
+    rgba(7, 17, 28, 0.92);
+  border-radius: 24px;
+  padding: 20px;
+  box-shadow: 0 18px 55px rgba(0,0,0,.28), 0 0 34px rgba(55,234,255,.08);
+}
+
+.memoryInsightHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 14px;
+}
+
+.memoryInsightHeader h2 {
+  margin: 0 0 6px;
+  color: var(--cyan);
+  font-size: 28px;
+}
+
+.memoryInsightHeader p {
+  margin: 0;
+  color: #c6ddf4;
+  line-height: 1.45;
+}
+
+.memoryInsightHeader > strong {
+  flex: 0 0 auto;
+  min-width: 86px;
+  text-align: center;
+  color: var(--cyan);
+  font-size: 34px;
+  line-height: 1;
+  border: 1px solid rgba(55,234,255,.34);
+  background: rgba(55,234,255,.10);
+  border-radius: 18px;
+  padding: 14px 12px;
+  box-shadow: 0 0 28px rgba(55,234,255,.10);
+}
+
+.memoryInsightConfidence {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  margin: 14px 0 18px;
+  color: #b9cdf0;
+  font-weight: 900;
+}
+
+.memoryInsightConfidence > div {
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.09);
+  overflow: hidden;
+}
+
+.memoryInsightConfidence > div > div {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--cyan), var(--pink));
+}
+
+.memoryInsightSections {
+  display: grid;
+  gap: 12px;
+}
+
+.memoryInsightSections section {
+  border: 1px solid rgba(255,255,255,.09);
+  background: rgba(0,0,0,.18);
+  border-radius: 18px;
+  padding: 14px;
+}
+
+.memoryInsightSections h3 {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 0 0 8px;
+  color: #f2f9ff;
+}
+
+.memoryInsightSections p {
+  margin: 0;
+  color: #c6ddf4;
+  line-height: 1.45;
+}
+
+.memoryInsightChips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.memoryInsightChips span {
+  border: 1px solid rgba(55,234,255,.30);
+  background: rgba(55,234,255,.10);
+  color: #d9fbff;
+  border-radius: 999px;
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+
+/* PATCH: Electron caret repaint/focus visibility after database sync */
+input,
+textarea,
+.search input,
+.joeaiChatInput textarea {
+  caret-color: var(--cyan, #37eaff) !important;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+input:focus,
+textarea:focus,
+.search input:focus,
+.joeaiChatInput textarea:focus {
+  caret-color: var(--cyan, #37eaff) !important;
+}
+
+body.joeCaretRepaint input,
+body.joeCaretRepaint textarea {
+  transform: translateZ(0);
+  animation: joeCaretRepaintNudge 180ms linear 1;
+}
+
+@keyframes joeCaretRepaintNudge {
+  0% { opacity: .995; }
+  50% { opacity: 1; }
+  100% { opacity: .995; }
+}
+
+
+/* Detail modal previous/next navigation */
+.detailNavigation{display:flex;align-items:center;gap:10px;margin:0 0 12px}.detailNavigation .eyebrow{margin:0}.detailNavigationButton{width:34px;height:30px;display:grid;place-items:center;border:1px solid rgba(55,234,255,.3);border-radius:10px;background:rgba(55,234,255,.08);color:var(--cyan);font-size:25px;line-height:1;cursor:pointer;transition:transform .14s ease,border-color .14s ease,background .14s ease}.detailNavigationButton:hover:not(:disabled){transform:translateY(-1px);border-color:rgba(55,234,255,.65);background:rgba(55,234,255,.15)}.detailNavigationButton:disabled{opacity:.24;cursor:default}

@@ -1,11 +1,35 @@
-import { fetchMetadataFromProvider, getManualMetadataForAnime, applyMetadataToAnime } from './metadataProvider';
+import { animeIdentityKeys } from './titleIdentity';
+import { getManualMetadataForAnime, applyMetadataToAnime } from './metadataProvider';
 import { cleanTitle } from './metadata';
+import { fetchKitsuMetadata, searchKitsuAnime } from './kitsuProvider';
+import { enrichMissingMetadata, needsWikidataRepair } from './wikidataRepair';
 import { enrichAnimeKnowledge } from '../ai/knowledge/knowledgeRegistry';
 
-const BLOCKED_TYPES = new Set(['Music', 'CM', 'PV', 'Unknown']);
-const SIDE_CONTENT_RE = /picture drama|recap|summary|special|ova|ona|omake|chibi|mini|digest|pv|cm|music|trailer/i;
-const SEQUEL_RE = /\b(part\s*2|part\s*3|season\s*2|season\s*3|2nd|3rd|second season|third season|ii|iii|final)\b/i;
-const QUERY_SEQUEL_RE = /\b(part|season|2|3|ii|iii|second|third|final)\b/i;
+const IMPORT_KITSU_ATTEMPTS = 2;
+const IMPORT_WIKIDATA_ATTEMPTS = 2;
+const IMPORT_RETRY_DELAY_MS = 900;
+
+function wait(ms = 0) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function retryImportStage(label, operation, { attempts = 2, delayMs = IMPORT_RETRY_DELAY_MS } = {}) {
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await operation(attempt);
+    } catch (error) {
+      lastError = error;
+      if (attempt >= attempts) break;
+      console.warn(`${label} failed on attempt ${attempt}; retrying...`, error);
+      await wait(delayMs * attempt);
+    }
+  }
+
+  throw lastError || new Error(`${label} failed`);
+}
+
 const EXTRA_STOP_WORDS = new Set([
   'the', 'of', 'and', 'a', 'an', 'season', 'part', 'tv', 'movie', 'ova',
   'special', 'specials', 'second', 'third', 'final'
@@ -38,25 +62,6 @@ function allCandidateTitleKeys(candidate = {}) {
     .filter(Boolean)
     .map(titleKey)
     .filter(Boolean);
-}
-
-function remoteCover(match) {
-  return (
-    match.images?.jpg?.large_image_url ||
-    match.images?.webp?.large_image_url ||
-    match.images?.jpg?.image_url ||
-    match.images?.webp?.image_url ||
-    ''
-  );
-}
-
-function getAllTitles(match) {
-  return [
-    match.title,
-    match.title_english,
-    match.title_japanese,
-    ...(match.title_synonyms || [])
-  ].filter(Boolean);
 }
 
 function getCandidateTitles(result) {
@@ -128,14 +133,6 @@ function labelWeight(label) {
   }
 }
 
-function extraWordPenalty(match, query) {
-  const queryWords = importantWords(query);
-  const titleWords = importantWords(match.title_english || match.title || '');
-  if (!queryWords.length || !titleWords.length) return 0;
-  const extra = Math.max(0, titleWords.length - queryWords.length);
-  return Math.min(55, extra * 5);
-}
-
 function confidenceFromScore(score, label) {
   const base = Math.max(0, Math.min(99, Math.round(score / 6)));
   const floor = {
@@ -162,24 +159,35 @@ function confidenceFromScore(score, label) {
 }
 
 export function animeIdFromTitle(item) {
-  return `anime-${String(item?.malId || item?.mal_id || item?.id || titleKey(item?.title)).replace(/[^a-z0-9-]+/gi, '-').toLowerCase()}`;
+  const providerId = item?.kitsuId
+    ? `kitsu-${item.kitsuId}`
+    : item?.malId || item?.mal_id || item?.id || titleKey(item?.title);
+
+  return `anime-${String(providerId).replace(/[^a-z0-9-]+/gi, '-').toLowerCase()}`;
 }
 
 export function findDuplicateAnime(library = [], candidate = {}) {
+  const candidateKitsuId = candidate.kitsuId;
   const candidateMalId = candidate.malId || candidate.mal_id;
-  const candidateKeys = new Set(allCandidateTitleKeys(candidate));
+  const candidateKeys = new Set([
+    ...allCandidateTitleKeys(candidate),
+    ...animeIdentityKeys(candidate)
+  ]);
 
   return library.find((item) => {
+    const itemKitsuId = item.kitsuId;
     const itemMalId = item.malId || item.mal_id;
+    if (candidateKitsuId && itemKitsuId && String(candidateKitsuId) === String(itemKitsuId)) return true;
     if (candidateMalId && itemMalId && String(candidateMalId) === String(itemMalId)) return true;
 
-    const itemKeys = allCandidateTitleKeys(item);
+    const itemKeys = [
+      ...allCandidateTitleKeys(item),
+      ...animeIdentityKeys(item)
+    ];
     if (itemKeys.some((key) => candidateKeys.has(key))) return true;
 
-    // Do not collapse franchise entries by prefix here.
-    // Example: "Trigun Stampede" must not silently update "Trigun".
-    // Fuzzy / shorthand decisions are handled by findLocalTitleMatches() so the UI can ask the user.
-
+    // Deliberately no generic prefix matching: separate franchise entries such
+    // as Trigun and Trigun Stampede must remain separate.
     return false;
   });
 }
@@ -271,6 +279,7 @@ export function mergeAnimeMetadata(existing = {}, incoming = {}, statusOverride)
     episodes: incoming.episodes || incoming.episodeCount || existing.episodes || existing.episodeCount || 0,
     communityScore: incoming.communityScore || existing.communityScore || '',
     malScore: incoming.malScore || incoming.communityScore || existing.malScore || existing.communityScore || '',
+    kitsuId: incoming.kitsuId || existing.kitsuId || '',
     malId: incoming.malId || existing.malId || '',
     officialTitle: incoming.officialTitle || existing.officialTitle || incoming.title || existing.title,
     japaneseTitle: incoming.japaneseTitle || existing.japaneseTitle || '',
@@ -279,74 +288,6 @@ export function mergeAnimeMetadata(existing = {}, incoming = {}, statusOverride)
     metadataUpdatedAt: incoming.metadataUpdatedAt || new Date().toISOString()
   });
 }
-
-export function normalizeJikanAnime(match, base = {}) {
-  // SPRINT4_AUTO_KNOWLEDGE_NORMALIZE
-  const genres = [
-    ...(match.genres || []),
-    ...(match.themes || []),
-    ...(match.demographics || [])
-  ].map((item) => item.name);
-
-  return enrichAnimeKnowledge({
-    ...base,
-    id: base.id || `anime-${match.mal_id}`,
-    malId: match.mal_id,
-    title: match.title_english || match.title || base.title,
-    officialTitle: match.title_english || match.title || base.title,
-    japaneseTitle: match.title_japanese || '',
-    titleSynonyms: match.title_synonyms || [],
-    cover: remoteCover(match) || base.cover || '',
-    trailerUrl: match.trailer?.url || base.trailerUrl || '',
-    synopsis: match.synopsis || base.synopsis || '',
-    type: match.type || base.type || 'TV',
-    year: match.year || base.year || '',
-    episodeCount: match.episodes || base.episodeCount || 0,
-    episodes: match.episodes || base.episodes || 0,
-    communityScore: match.score || base.communityScore || '',
-    malScore: match.score || base.malScore || '',
-    studio: match.studios?.length ? match.studios.map((studio) => studio.name).join(' / ') : base.studio || '',
-    genres: genres.length ? [...new Set([...(base.genres || []), ...genres])].slice(0, 8) : base.genres || [],
-    metadataUpdatedAt: new Date().toISOString()
-  });
-}
-
-function rankResult(match, query) {
-  const clean = cleanTitle(query);
-  const normalized = normalizeJikanAnime(match);
-  const label = classifyResult(normalized, clean);
-  const allKeys = getAllTitles(match).map(titleKey);
-  const wantedKey = titleKey(clean);
-  const wantedWords = importantWords(clean);
-  const primaryWords = importantWords(match.title_english || match.title || '');
-
-  let score = labelWeight(label); const allTitleText = getAllTitles(match).join(' ');
-
-  if (allKeys.some((key) => key === wantedKey)) score += 120;
-  if (allKeys.some((key) => key.startsWith(wantedKey))) score += 60;
-  if (wantedWords.length && wantedWords.every((word) => primaryWords.includes(word))) score += 45;
-
-  if (match.type === 'TV') score += 85;
-  if (match.type === 'Movie') score += 12;
-  if (match.type === 'OVA' || match.type === 'Special' || match.type === 'ONA') score -= 45;
-  if (BLOCKED_TYPES.has(match.type)) score -= 500;
-  if (SIDE_CONTENT_RE.test(allTitleText) && !SIDE_CONTENT_RE.test(clean)) score -= 160;
-  if (SEQUEL_RE.test(allTitleText) && !QUERY_SEQUEL_RE.test(clean)) score -= 80;
-  score -= extraWordPenalty(match, clean);
-
-  if (match.episodes) score += Math.min(match.episodes, 50) / 8;
-  if (match.score) score += match.score * 1.5; if (match.members) score += Math.min(45, Math.log10(match.members + 1) * 7);
-
-  if (label === 'Exact Match' || label === 'Best Match') {
-    const year = Number(match.year || 9999);
-    score += Math.max(0, 40 - Math.max(0, year - 2000) / 2);
-  }
-
-  if (label === 'Other Franchise') score -= 80;
-
-  return { score, label };
-}
-
 
 function createLocalFallbackAnime(title, status = 'Watching', reason = '') {
   return enrichAnimeKnowledge({
@@ -381,38 +322,182 @@ function findLocalTitleMatch(library = [], title = '') {
 }
 
 function localEntryHasUsableMetadata(item = {}) {
-  return Boolean(
-    item.malId ||
-    item.officialTitle ||
+  const hasGenres = Array.isArray(item.genres) && item.genres.length > 0;
+  const hasIdentity = Boolean(item.malId || item.kitsuId || item.officialTitle);
+  const hasCoreDetails = Boolean(
     item.synopsis ||
     item.description ||
-    item.studio ||
     item.year ||
     item.episodeCount ||
-    item.episodes ||
-    (Array.isArray(item.genres) && item.genres.length)
+    item.episodes
   );
+
+  return Boolean(hasGenres && hasIdentity && hasCoreDetails);
+}
+
+
+async function completeImportedMetadata(candidate = {}, library = []) {
+  if (!needsWikidataRepair(candidate)) {
+    return {
+      candidate: {
+        ...candidate,
+        metadataNeedsReview: false,
+        metadataReviewReason: ''
+      },
+      metadataEnrichment: {
+        attempted: false,
+        improved: false,
+        fields: [],
+        unresolved: false
+      }
+    };
+  }
+
+  let result = null;
+
+  for (let attempt = 1; attempt <= IMPORT_WIKIDATA_ATTEMPTS; attempt += 1) {
+    result = await enrichMissingMetadata(candidate, library);
+
+    if (!result.unresolved || attempt >= IMPORT_WIKIDATA_ATTEMPTS) break;
+
+    console.warn(
+      `Importer Wikidata completion unresolved for ${candidate.title || 'title'}; retrying (${attempt}/${IMPORT_WIKIDATA_ATTEMPTS})`,
+      result.reason || ''
+    );
+    await wait(IMPORT_RETRY_DELAY_MS * attempt);
+  }
+
+  return {
+    candidate: result.anime,
+    metadataEnrichment: {
+      attempted: true,
+      improved: Boolean(result.improved),
+      fields: result.fields || [],
+      unresolved: Boolean(result.unresolved),
+      reason: result.reason || '',
+      source: result.source || '',
+      matchedTitle: result.matchedTitle || '',
+      matchedQuery: result.matchedQuery || '',
+      confidence: result.confidence || 0,
+      candidates: result.candidates || []
+    }
+  };
+}
+
+
+export async function enrichAnimeCandidate({
+  candidate = {},
+  library = [],
+  status = 'Watching'
+} = {}) {
+  if (!candidate?.title && !candidate?.officialTitle) {
+    throw new Error('A resolved anime candidate is required.');
+  }
+
+  let enriched = {
+    ...candidate,
+    status: status || candidate.status || 'Watching'
+  };
+
+  const needsKitsuMetadata = Boolean(
+    enriched.kitsuId &&
+    (
+      !enriched.genres?.length ||
+      !enriched.studio ||
+      !(enriched.synopsis || enriched.description) ||
+      !(enriched.episodeCount || enriched.episodes)
+    )
+  );
+
+  if (needsKitsuMetadata) {
+    try {
+      const kitsuMetadata = await retryImportStage(
+        `Kitsu enrichment for ${enriched.title || enriched.officialTitle}`,
+        () => fetchKitsuMetadata(enriched),
+        { attempts: IMPORT_KITSU_ATTEMPTS }
+      );
+
+      enriched = {
+        ...enriched,
+        ...kitsuMetadata,
+        id: enriched.id || kitsuMetadata.id || animeIdFromTitle(kitsuMetadata),
+        title: enriched.title || kitsuMetadata.title,
+        officialTitle:
+          kitsuMetadata.officialTitle ||
+          kitsuMetadata.title ||
+          enriched.officialTitle ||
+          enriched.title,
+        status: status || enriched.status || kitsuMetadata.status || 'Watching'
+      };
+    } catch (error) {
+      console.warn(
+        'Selected anime Kitsu enrichment failed:',
+        enriched.title || enriched.officialTitle,
+        error
+      );
+    }
+  }
+
+  let metadataEnrichment = {
+    attempted: false,
+    improved: false,
+    fields: [],
+    unresolved: false
+  };
+
+  try {
+    const completion = await completeImportedMetadata(enriched, library);
+    enriched = completion.candidate;
+    metadataEnrichment = completion.metadataEnrichment;
+  } catch (error) {
+    console.warn(
+      'Selected anime metadata completion failed:',
+      enriched.title || enriched.officialTitle,
+      error
+    );
+
+    metadataEnrichment = {
+      attempted: true,
+      improved: false,
+      fields: [],
+      unresolved: true,
+      reason: error?.message || String(error)
+    };
+  }
+
+  return {
+    candidate: {
+      ...enriched,
+      id: enriched.id || animeIdFromTitle(enriched),
+      status: status || enriched.status || 'Watching',
+      metadataNeedsRefresh: Boolean(
+        enriched.metadataNeedsRefresh ||
+        metadataEnrichment.unresolved
+      )
+    },
+    metadataEnrichment
+  };
 }
 
 
 export async function searchAnimeCandidates(title, { limit = 8 } = {}) {
   const clean = cleanTitle(title);
-  const q = encodeURIComponent(clean);
-  const res = await fetch(`https://api.jikan.moe/v4/anime?q=${q}&limit=15&sfw=true`);
+  const kitsuResults = await searchKitsuAnime(clean, {
+    limit: Math.max(limit, 8)
+  });
 
-  if (!res.ok) throw new Error(`Jikan ${res.status}`);
-
-  const payload = await res.json();
-
-  return (payload.data || [])
-    .filter((item) => !BLOCKED_TYPES.has(item.type))
+  return kitsuResults
     .map((item) => {
-      const ranked = rankResult(item, clean);
-      const normalized = normalizeJikanAnime(item, { importScore: ranked.score });
+      const label = classifyResult(item, clean);
+      const score = labelWeight(label) + (label === 'Exact Match' ? 120 : 0);
+
       return {
-        ...normalized,
-        importLabel: ranked.label,
-        importConfidence: confidenceFromScore(ranked.score, ranked.label)
+        ...item,
+        importScore: score,
+        importLabel: label,
+        importConfidence: confidenceFromScore(score, label),
+        metadataSource: 'kitsu',
+        metadataNeedsRefresh: !item.genres?.length
       };
     })
     .sort((a, b) => {
@@ -424,9 +509,12 @@ export async function searchAnimeCandidates(title, { limit = 8 } = {}) {
     .slice(0, limit);
 }
 
-export async function importAnimeByTitle({ title, status = 'Watching', library = [] }) {
-  // Local-first duplicate check.
-  // If the title already exists and has usable metadata, do NOT hit Jikan.
+
+export async function importAnimeByTitle({
+  title,
+  status = 'Watching',
+  library = []
+}) {
   const localDuplicate = findLocalTitleMatch(library, title);
 
   if (localDuplicate && localEntryHasUsableMetadata(localDuplicate)) {
@@ -436,28 +524,67 @@ export async function importAnimeByTitle({ title, status = 'Watching', library =
         ...localDuplicate,
         status
       },
-      merged: mergeAnimeMetadata(localDuplicate, { ...localDuplicate, status }, status),
+      merged: mergeAnimeMetadata(
+        localDuplicate,
+        { ...localDuplicate, status },
+        status
+      ),
       results: [],
       localOnly: true,
-      skippedRemoteLookup: true
+      skippedRemoteLookup: true,
+      metadataEnrichment: {
+        attempted: false,
+        improved: false,
+        fields: [],
+        unresolved: false
+      }
     };
   }
 
+  let metadataEnrichment = {
+    attempted: false,
+    improved: false,
+    fields: [],
+    unresolved: false
+  };
+
   const manualMetadata = getManualMetadataForAnime(title);
+
   if (manualMetadata) {
-    const candidate = applyMetadataToAnime({
-      title,
-      status,
-      addedFrom: 'manual metadata override'
-    }, manualMetadata);
+    let candidate = applyMetadataToAnime(
+      {
+        title,
+        status,
+        addedFrom: 'manual metadata override'
+      },
+      manualMetadata
+    );
+
+    try {
+      const completion = await completeImportedMetadata(candidate, library);
+      candidate = completion.candidate;
+      metadataEnrichment = completion.metadataEnrichment;
+    } catch (error) {
+      console.warn('Automatic metadata completion failed:', title, error);
+      metadataEnrichment = {
+        attempted: true,
+        improved: false,
+        fields: [],
+        unresolved: true,
+        reason: error?.message || String(error)
+      };
+    }
 
     const duplicate = findDuplicateAnime(library, candidate) || localDuplicate;
 
     return {
       candidate,
       duplicate,
-      merged: duplicate ? mergeAnimeMetadata(duplicate, candidate, status) : undefined,
-      manualOverride: true
+      merged: duplicate
+        ? mergeAnimeMetadata(duplicate, candidate, status)
+        : undefined,
+      manualOverride: true,
+      metadataEnrichment
     };
   }
 
@@ -465,13 +592,135 @@ export async function importAnimeByTitle({ title, status = 'Watching', library =
   let lookupError = '';
 
   try {
-    results = await searchAnimeCandidates(title, { limit: 5 });
+    results = await retryImportStage(
+      `Kitsu search for ${title}`,
+      () => searchAnimeCandidates(title, { limit: 5 }),
+      { attempts: IMPORT_KITSU_ATTEMPTS }
+    );
   } catch (error) {
     lookupError = error?.message || String(error);
-    console.warn('Jikan unavailable, using local fallback for:', title, error);
+    console.warn(
+      'Kitsu search unavailable, using local fallback for:',
+      title,
+      error
+    );
   }
 
-  const candidate = results[0] || createLocalFallbackAnime(title, status, lookupError);
+  let candidate =
+    results[0] || createLocalFallbackAnime(title, status, lookupError);
+
+  const needsKitsuEnrichment = Boolean(
+    results.length &&
+      (
+        !candidate.genres?.length ||
+        !candidate.studio ||
+        !(candidate.synopsis || candidate.description) ||
+        !(candidate.episodeCount || candidate.episodes)
+      )
+  );
+
+  if (needsKitsuEnrichment) {
+    try {
+      const enrichmentInput = {
+        ...candidate,
+        title: candidate.title || title,
+        officialTitle: candidate.officialTitle || candidate.title || title,
+        status
+      };
+
+      const enriched = await retryImportStage(
+        `Kitsu enrichment for ${title}`,
+        () => fetchKitsuMetadata(enrichmentInput),
+        { attempts: IMPORT_KITSU_ATTEMPTS }
+      );
+
+      candidate = {
+        ...candidate,
+        ...enriched,
+        id: candidate.id || enriched.id || animeIdFromTitle(enriched),
+        title: candidate.title || enriched.title || title,
+        officialTitle:
+          enriched.officialTitle ||
+          enriched.title ||
+          candidate.officialTitle ||
+          candidate.title ||
+          title,
+        status,
+        genres: enriched.genres?.length
+          ? enriched.genres
+          : candidate.genres || [],
+        studio: enriched.studio || candidate.studio || '',
+        synopsis:
+          enriched.synopsis ||
+          enriched.description ||
+          candidate.synopsis ||
+          candidate.description ||
+          '',
+        description:
+          enriched.description ||
+          enriched.synopsis ||
+          candidate.description ||
+          candidate.synopsis ||
+          '',
+        episodeCount:
+          enriched.episodeCount ||
+          enriched.episodes ||
+          candidate.episodeCount ||
+          candidate.episodes ||
+          0,
+        episodes:
+          enriched.episodes ||
+          enriched.episodeCount ||
+          candidate.episodes ||
+          candidate.episodeCount ||
+          0,
+        metadataSource:
+          enriched.metadataSource ||
+          candidate.metadataSource ||
+          'kitsu',
+        metadataUpdatedAt:
+          enriched.metadataUpdatedAt ||
+          candidate.metadataUpdatedAt ||
+          new Date().toISOString()
+      };
+    } catch (error) {
+      console.warn('Importer Kitsu enrichment failed:', title, error);
+
+      candidate = {
+        ...candidate,
+        metadataNeedsRefresh: true,
+        syncStatus: {
+          ...(candidate.syncStatus || {}),
+          metadata: Boolean(
+            candidate.genres?.length ||
+              candidate.synopsis ||
+              candidate.description
+          ),
+          poster: Boolean(candidate.cover),
+          dirty: true,
+          metadataError: error?.message || String(error),
+          lastMetadataAttempt: new Date().toISOString()
+        }
+      };
+    }
+  }
+
+  // Automatic completion is best-effort. A Wikidata miss must never throw the
+  // whole title into the list-import Needs Review queue.
+  try {
+    const completion = await completeImportedMetadata(candidate, library);
+    candidate = completion.candidate;
+    metadataEnrichment = completion.metadataEnrichment;
+  } catch (error) {
+    console.warn('Automatic metadata completion failed:', title, error);
+    metadataEnrichment = {
+      attempted: true,
+      improved: false,
+      fields: [],
+      unresolved: true,
+      reason: error?.message || String(error)
+    };
+  }
 
   const duplicate = findDuplicateAnime(library, candidate) || localDuplicate;
 
@@ -482,7 +731,8 @@ export async function importAnimeByTitle({ title, status = 'Watching', library =
       merged: mergeAnimeMetadata(duplicate, candidate, status),
       results,
       metadataLookupFailed: Boolean(lookupError),
-      lookupError
+      lookupError,
+      metadataEnrichment
     };
   }
 
@@ -494,13 +744,22 @@ export async function importAnimeByTitle({ title, status = 'Watching', library =
       status,
       favorite: false,
       rewatches: 0,
-      notes: candidate.notes || (lookupError
-        ? 'Added locally. Metadata refresh needed.'
-        : 'Added from JoeAnimeDB importer.'),
-      metadataNeedsRefresh: candidate.metadataNeedsRefresh || Boolean(lookupError)
+      notes:
+        candidate.notes ||
+        (
+          lookupError
+            ? 'Added locally. Metadata refresh needed.'
+            : 'Added from JoeAnimeDB importer.'
+        ),
+      metadataNeedsRefresh: Boolean(
+        candidate.metadataNeedsRefresh ||
+          lookupError ||
+          metadataEnrichment.unresolved
+      )
     },
     results,
     metadataLookupFailed: Boolean(lookupError),
-    lookupError
+    lookupError,
+    metadataEnrichment
   };
 }

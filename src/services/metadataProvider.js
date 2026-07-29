@@ -1,12 +1,12 @@
 import { getManualMetadata, normalizeManualMetadataKey } from '../data/manualMetadataOverrides';
 import { manualMetadataToAnime } from './metadataResolver';
-import { fetchMetadata as fetchJikanMetadata } from './metadata';
+import { fetchKitsuMetadata } from './kitsuProvider';
 
 export function applyMetadataToAnime(item = {}, metadata = {}) {
   return {
     ...item,
     ...metadata,
-    id: item.id || metadata.id || metadata.malId || normalizeManualMetadataKey(metadata.title || item.title).replace(/\s+/g, '-'),
+    id: item.id || metadata.id || metadata.kitsuId || metadata.malId || normalizeManualMetadataKey(metadata.title || item.title).replace(/\s+/g, '-'),
     title: metadata.title || item.title,
     officialTitle: metadata.officialTitle || metadata.titleEnglish || metadata.title || item.officialTitle || item.title,
     description: metadata.description || metadata.synopsis || item.description || '',
@@ -37,16 +37,21 @@ export async function fetchMetadataFromProvider(item = {}) {
     return manualMetadataToAnime(item, manual);
   }
 
-  const fetched = await fetchJikanMetadata(item);
+  const fetched = await fetchKitsuMetadata(item);
+  const provider = 'kitsu';
+
+  const needsRefresh = Boolean(fetched.metadataNeedsRefresh);
 
   return {
     ...fetched,
-    metadataSource: fetched.metadataSource || 'jikan',
+    metadataSource: fetched.metadataSource || provider,
+    metadataNeedsRefresh: needsRefresh,
     syncStatus: {
       ...(fetched.syncStatus || item.syncStatus || {}),
       metadata: true,
+      metadataSource: provider,
       manualOverride: false,
-      dirty: false,
+      dirty: needsRefresh,
       lastMetadataSync: new Date().toISOString()
     }
   };

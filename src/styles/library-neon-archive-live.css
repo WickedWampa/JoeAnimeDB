@@ -1,0 +1,568 @@
+
+/* =========================================================
+   Library hero — live title, stats, and Add Anime button
+   over the approved neon archive artwork
+   ========================================================= */
+
+.libraryArchiveHeroLive {
+  --library-archive-art: none;
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  min-height: 0;
+  max-height: 560px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  overflow: hidden;
+  margin-bottom: 18px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--cyan) 30%, var(--pink));
+  border-radius: 24px;
+  background: #050b16;
+  box-shadow:
+    0 24px 64px rgba(0, 0, 0, .34),
+    0 0 36px color-mix(in srgb, var(--pink) 10%, transparent);
+}
+
+.libraryArchiveHeroLive::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: var(--library-archive-art);
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: center;
+  filter: none;
+  transform: none;
+}
+
+.libraryArchiveHeroLive::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  border-radius: inherit;
+  box-shadow:
+    inset 0 0 1px color-mix(in srgb, var(--cyan) 62%, white);
+}
+
+.libraryArchiveLiveCopy {
+  position: relative;
+  z-index: 2;
+  width: min(50%, 680px);
+  padding: 34px 38px 30px;
+  text-shadow:
+    0 4px 20px rgba(0,0,0,.86),
+    0 1px 3px rgba(0,0,0,.96);
+}
+
+.libraryArchiveHeroLive .eyebrow {
+  margin: 0 0 10px;
+  color: var(--cyan);
+  font-size: 12px;
+  font-weight: 1000;
+  letter-spacing: .22em;
+  text-transform: uppercase;
+}
+
+.libraryArchiveHeroLive h1 {
+  margin: 0;
+  width: fit-content;
+  color: transparent;
+  background: linear-gradient(100deg, var(--cyan), #b79cff 56%, var(--pink));
+  background-clip: text;
+  -webkit-background-clip: text;
+  font-size: clamp(52px, 6vw, 88px);
+  line-height: .92;
+  letter-spacing: -.055em;
+}
+
+.libraryArchiveLiveTagline {
+  max-width: 520px;
+  margin: 19px 0 0;
+  color: color-mix(in srgb, var(--text) 88%, var(--muted));
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+.libraryArchiveLiveStats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px 34px;
+  margin-top: 28px;
+}
+
+.libraryArchiveLiveStats > div {
+  display: grid;
+  grid-template-columns: 29px auto;
+  grid-template-areas:
+    "icon value"
+    "icon label";
+  align-items: center;
+  column-gap: 8px;
+}
+
+.libraryArchiveLiveStats span {
+  grid-area: icon;
+  align-self: center;
+  color: var(--cyan);
+  font-size: 25px;
+  text-shadow: 0 0 18px color-mix(in srgb, var(--cyan) 65%, transparent);
+}
+
+.libraryArchiveLiveStats div:nth-child(even) span,
+.libraryArchiveLiveStats div:nth-child(even) strong {
+  color: var(--pink);
+}
+
+.libraryArchiveLiveStats strong {
+  grid-area: value;
+  color: var(--cyan);
+  font-size: 25px;
+  line-height: 1;
+}
+
+.libraryArchiveLiveStats small {
+  grid-area: label;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .03em;
+}
+
+.libraryArchiveLiveAdd {
+  position: absolute;
+  z-index: 3;
+  right: 28px;
+  bottom: 28px;
+  min-width: 145px;
+  border-color: color-mix(in srgb, var(--cyan) 72%, white) !important;
+  background: rgba(2, 10, 18, .82) !important;
+  backdrop-filter: blur(12px);
+  box-shadow:
+    0 0 28px color-mix(in srgb, var(--cyan) 18%, transparent),
+    inset 0 0 20px rgba(0, 0, 0, .28);
+}
+
+.libraryArchiveLiveAdd:hover {
+  transform: translateY(-2px);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--pink) 76%, transparent),
+    color-mix(in srgb, var(--cyan) 76%, transparent)
+  ) !important;
+}
+
+.libraryArchiveHeroLive .libraryArchiveLiveAdd::before {
+  display: none;
+}
+
+/* Stable card widths stay consistent in windowed and full-screen modes. */
+.libraryPosterGrid {
+  grid-template-columns: repeat(auto-fill, minmax(230px, 270px)) !important;
+  justify-content: center;
+  align-items: start;
+  gap: 18px !important;
+}
+
+.libraryPosterGrid .animeCard {
+  width: 100%;
+  min-width: 0;
+  height: 410px;
+}
+
+@media (min-width: 1650px) {
+  .libraryPosterGrid {
+    grid-template-columns: repeat(auto-fill, minmax(220px, 250px)) !important;
+    gap: 16px !important;
+  }
+
+  .libraryPosterGrid .animeCard {
+    height: 390px;
+  }
+}
+
+@media (max-width: 1180px) {
+  .libraryArchiveHeroLive {
+    max-height: 520px;
+  }
+
+  .libraryArchiveLiveCopy {
+    width: min(58%, 640px);
+  }
+
+  .libraryPosterGrid {
+    grid-template-columns: repeat(auto-fill, minmax(220px, 250px)) !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .libraryArchiveHeroLive {
+    aspect-ratio: auto;
+    min-height: 500px;
+    max-height: none;
+    align-items: flex-end;
+  }
+
+  .libraryArchiveHeroLive::before {
+    background-position: center;
+  }
+
+  .libraryArchiveLiveCopy {
+    width: 100%;
+    padding: 190px 22px 28px;
+    text-shadow:
+      0 4px 20px rgba(0,0,0,.9),
+      0 1px 3px rgba(0,0,0,.98);
+  }
+
+  .libraryArchiveHeroLive h1 {
+    font-size: 52px;
+  }
+
+  .libraryArchiveLiveStats {
+    gap: 17px;
+  }
+
+  .libraryArchiveLiveAdd {
+    right: 18px;
+    bottom: 18px;
+  }
+
+  .libraryPosterGrid {
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)) !important;
+    justify-content: stretch;
+  }
+
+  .libraryPosterGrid .animeCard {
+    height: 360px;
+  }
+}
+
+
+/* =========================================================
+   v5 final Library hero positioning repair
+   Prevents the copy/stats from feeling pinned to the top-left
+   and keeps the Analytics-style hierarchy balanced.
+   ========================================================= */
+
+.libraryArchiveHeroLive {
+  align-items: stretch;
+}
+
+.libraryArchiveLiveCopy {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  width: min(760px, 54%);
+  max-width: 760px;
+  min-height: 100%;
+  padding: clamp(30px, 4vw, 58px);
+}
+
+.libraryArchiveLiveTagline {
+  width: 100%;
+  max-width: 610px;
+}
+
+.libraryArchiveLiveStats {
+  width: min(100%, 690px);
+  margin-top: auto;
+  padding-top: 28px;
+}
+
+@media (max-width: 980px) {
+  .libraryArchiveLiveCopy {
+    width: min(680px, 62%);
+  }
+}
+
+@media (max-width: 760px) {
+  .libraryArchiveLiveCopy {
+    width: 100%;
+    min-height: 520px;
+    justify-content: flex-end;
+    padding: 190px 22px 28px;
+  }
+
+  .libraryArchiveLiveStats {
+    width: 100%;
+  }
+}
+
+/* =========================================================
+   Final Analytics-title match
+   Typography only: preserves current layout, buttons, stats,
+   artwork, and positioning.
+   ========================================================= */
+
+.discoverHero h1,
+.libraryArchiveHeroLive h1 {
+  margin: 0 !important;
+  width: fit-content !important;
+  font-size: clamp(4.5rem, 7vw, 6.4rem) !important;
+  line-height: .92 !important;
+  letter-spacing: -.055em !important;
+  font-weight: 1000 !important;
+  color: transparent !important;
+  -webkit-text-fill-color: transparent !important;
+  background-clip: text !important;
+  -webkit-background-clip: text !important;
+  text-shadow: none !important;
+}
+
+.discoverHero h1 {
+  background:
+    linear-gradient(
+      100deg,
+      var(--discover-title-a, #35efff) 0%,
+      var(--discover-title-b, #aa72ff) 58%,
+      var(--discover-title-c, #ff5cc8) 100%
+    ) !important;
+  filter:
+    drop-shadow(0 3px 5px rgba(0,0,0,.95))
+    drop-shadow(0 0 22px color-mix(in srgb, var(--discover-title-b, #aa72ff) 42%, transparent)) !important;
+}
+
+.libraryArchiveHeroLive h1 {
+  background:
+    linear-gradient(
+      100deg,
+      var(--library-live-accent, #35efff) 0%,
+      var(--library-live-accent-2, #aa72ff) 58%,
+      var(--library-live-hot, #ff5cc8) 100%
+    ) !important;
+  filter:
+    drop-shadow(0 3px 5px rgba(0,0,0,.95))
+    drop-shadow(0 0 22px color-mix(in srgb, var(--library-live-accent-2, #aa72ff) 42%, transparent)) !important;
+}
+
+@media (max-width: 900px) {
+  .discoverHero h1,
+  .libraryArchiveHeroLive h1 {
+    font-size: clamp(3.6rem, 10vw, 5.4rem) !important;
+  }
+}
+
+@media (max-width: 680px) {
+  .discoverHero h1,
+  .libraryArchiveHeroLive h1 {
+    font-size: clamp(2.9rem, 14vw, 4.2rem) !important;
+  }
+}
+
+/* =========================================================
+   Emergency title rendering repair
+   Electron was painting the gradient as a rectangle because
+   these headings are flex containers. Use solid Analytics-style
+   title color with glow instead of background-clipped text.
+   ========================================================= */
+
+.discoverHero h1,
+.libraryArchiveHeroLive h1 {
+  color: #f7fbff !important;
+  background: none !important;
+  background-image: none !important;
+  background-clip: border-box !important;
+  -webkit-background-clip: border-box !important;
+  -webkit-text-fill-color: #f7fbff !important;
+  filter: none !important;
+  text-shadow:
+    0 3px 5px rgba(0,0,0,.96),
+    0 7px 24px rgba(0,0,0,.72),
+    0 0 22px color-mix(in srgb, var(--cyan) 32%, transparent) !important;
+}
+
+.discoverHero h1 {
+  color: color-mix(in srgb, var(--discover-title-b, #f7fbff) 72%, white) !important;
+  -webkit-text-fill-color: color-mix(in srgb, var(--discover-title-b, #f7fbff) 72%, white) !important;
+}
+
+.discoverHero h1 svg {
+  color: var(--discover-accent) !important;
+  -webkit-text-fill-color: initial !important;
+  filter: drop-shadow(0 0 16px color-mix(in srgb, var(--discover-accent) 52%, transparent)) !important;
+}
+
+.libraryArchiveHeroLive h1 {
+  color: #f7fbff !important;
+  -webkit-text-fill-color: #f7fbff !important;
+}
+
+.theme-sakura .libraryArchiveHeroLive h1,
+.theme-sakura .discoverHero h1 {
+  color: #fff2fa !important;
+  -webkit-text-fill-color: #fff2fa !important;
+}
+
+.theme-vapor .libraryArchiveHeroLive h1,
+.theme-vapor .discoverHero h1 {
+  color: #e9ddff !important;
+  -webkit-text-fill-color: #e9ddff !important;
+}
+
+.theme-ramen .libraryArchiveHeroLive h1,
+.theme-ramen .discoverHero h1 {
+  color: #ffe7b0 !important;
+  -webkit-text-fill-color: #ffe7b0 !important;
+}
+
+.theme-inferno .libraryArchiveHeroLive h1,
+.theme-inferno .discoverHero h1 {
+  color: #ffd27a !important;
+  -webkit-text-fill-color: #ffd27a !important;
+}
+
+.theme-amoled .libraryArchiveHeroLive h1,
+.theme-amoled .discoverHero h1 {
+  color: #eee8ff !important;
+  -webkit-text-fill-color: #eee8ff !important;
+}
+
+
+/* Exact Analytics theme palette */
+.theme-neon {
+  --shared-title-accent: #35efff;
+  --shared-title-accent-2: #aa72ff;
+  --shared-title-hot: #ff5cc8;
+}
+.theme-sakura {
+  --shared-title-accent: #ffd0e7;
+  --shared-title-accent-2: #ff7fbd;
+  --shared-title-hot: #ffb2d7;
+}
+.theme-vapor {
+  --shared-title-accent: #60f4ff;
+  --shared-title-accent-2: #b36cff;
+  --shared-title-hot: #ff64d8;
+}
+.theme-ramen {
+  --shared-title-accent: #ffe0a3;
+  --shared-title-accent-2: #ffb23e;
+  --shared-title-hot: #ff784d;
+}
+.theme-inferno {
+  --shared-title-accent: #ffd166;
+  --shared-title-accent-2: #ff8a2b;
+  --shared-title-hot: #ff3d2e;
+}
+.theme-amoled {
+  --shared-title-accent: #f6f7ff;
+  --shared-title-accent-2: #aa72ff;
+  --shared-title-hot: #7a4dff;
+}
+
+
+/* Analytics-style themed Library title without background rectangles */
+.libraryArchiveHeroLive:not(.favoritesArchiveHero) h1 {
+  display: block !important;
+  width: fit-content !important;
+  color: transparent !important;
+  -webkit-text-fill-color: transparent !important;
+  background: none !important;
+  filter: none !important;
+  font-size: 0 !important;
+  -webkit-text-stroke: 0 !important;
+  text-shadow: none !important;
+}
+
+.libraryArchiveHeroLive:not(.favoritesArchiveHero) h1::after {
+  content: "Library";
+  display: inline-block;
+  width: fit-content;
+  font-size: clamp(4.5rem, 7vw, 6.4rem);
+  line-height: .92;
+  letter-spacing: -.055em;
+  font-weight: 1000;
+  background: linear-gradient(
+    100deg,
+    var(--shared-title-accent),
+    var(--shared-title-accent-2) 58%,
+    var(--shared-title-hot)
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  filter: drop-shadow(
+    0 0 22px
+    color-mix(in srgb, var(--shared-title-accent-2) 42%, transparent)
+  );
+}
+
+@media (max-width: 680px) {
+  .libraryArchiveHeroLive:not(.favoritesArchiveHero) h1::after {
+    font-size: clamp(2.9rem, 14vw, 4.2rem);
+  }
+}
+
+/* =========================================================
+   Final title fix — use the exact Settings gradient method.
+   The heading itself is inline-block, so the gradient clips
+   to the letters instead of painting a rectangular area.
+   ========================================================= */
+
+.discoverHero h1,
+.libraryArchiveHeroLive:not(.favoritesArchiveHero) h1 {
+  display: inline-block !important;
+  width: fit-content !important;
+  margin: 0 !important;
+  font-size: clamp(3rem, 7vw, 6.4rem) !important;
+  line-height: .92 !important;
+  letter-spacing: -.055em !important;
+  font-weight: 1000 !important;
+  color: transparent !important;
+  background:
+    linear-gradient(
+      100deg,
+      var(--shared-title-accent),
+      var(--shared-title-accent-2) 58%,
+      var(--shared-title-hot)
+    ) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  filter:
+    drop-shadow(
+      0 0 22px
+      color-mix(in srgb, var(--shared-title-accent-2) 42%, transparent)
+    ) !important;
+  text-shadow: none !important;
+}
+
+/* Disable the pseudo-element workaround from the previous patch. */
+.discoverHero h1::after,
+.libraryArchiveHeroLive:not(.favoritesArchiveHero) h1::after {
+  content: none !important;
+  display: none !important;
+}
+
+/* Discover keeps its compass icon, but no longer uses flex on the h1. */
+.discoverHero h1 svg {
+  display: inline-block !important;
+  width: .8em !important;
+  height: .8em !important;
+  margin-right: 13px;
+  vertical-align: -.06em;
+  color: var(--shared-title-accent) !important;
+  -webkit-text-fill-color: initial !important;
+  filter:
+    drop-shadow(
+      0 0 18px
+      color-mix(in srgb, var(--shared-title-accent) 52%, transparent)
+    ) !important;
+}
+
+@media (max-width: 680px) {
+  .discoverHero h1,
+  .libraryArchiveHeroLive:not(.favoritesArchiveHero) h1 {
+    font-size: clamp(2.7rem, 14vw, 4rem) !important;
+  }
+}

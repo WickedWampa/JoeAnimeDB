@@ -1,0 +1,29 @@
+
+.settingsWorkshopGrid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(320px,1fr));
+  gap:22px;
+  margin-top:24px;
+}
+
+.settingsWorkshopCard{
+  border:1px solid var(--line);
+  border-radius:22px;
+  background:rgba(5,10,18,.86);
+  padding:22px;
+}
+
+.settingsWorkshopCard h3{
+  margin:0 0 18px;
+  color:var(--cyan);
+}
+
+.settingsWorkshopActions{
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+}
+
+.settingsWorkshopActions button{
+  width:100%;
+}

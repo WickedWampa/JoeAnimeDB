@@ -10,6 +10,8 @@ function findRoot(start) {
   return process.cwd();
 }
 
+const PROJECT_ROOT = findRoot(process.cwd());
+
 function slugify(value = '') {
   return String(value || '').toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
@@ -89,7 +91,7 @@ function stripJson(text = '') {
 
 
 function loadManualMetadataForGenerator(query) {
-  const overridePath = path.join(root, 'src', 'data', 'manualMetadataOverrides.js');
+  const overridePath = path.join(PROJECT_ROOT, 'src', 'data', 'manualMetadataOverrides.js');
 
   if (!fs.existsSync(overridePath)) return null;
 
@@ -173,43 +175,236 @@ function loadManualMetadataForGenerator(query) {
 }
 
 
-async function fetchJikanTitle(query) {
+function normalizeMetadataArray(value) {
+  if (!value) return [];
+
+  const source = Array.isArray(value) ? value : [value];
+
+  return source
+    .flatMap((item) => {
+      if (item == null) return [];
+      if (typeof item === 'string' || typeof item === 'number') return [String(item)];
+      if (typeof item === 'object') {
+        return [
+          item.name,
+          item.title,
+          item.label,
+          item.attributes?.name,
+          item.attributes?.title
+        ].filter(Boolean).map(String);
+      }
+      return [];
+    })
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function normalizedLookupTitle(value = '') {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/\b(the|a|an)\b/g, ' ')
+    .replace(/\b(dubbed|dub|subbed|sub|uncut)\b/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function titleCandidatesFromLibraryRecord(record = {}) {
+  return [
+    record.title,
+    record.canonicalTitle,
+    record.englishTitle,
+    record.titleEnglish,
+    record.romajiTitle,
+    record.japaneseTitle,
+    record.titleJapanese,
+    record.originalTitle,
+    ...(Array.isArray(record.synonyms) ? record.synonyms : []),
+    ...(Array.isArray(record.titleSynonyms) ? record.titleSynonyms : []),
+    ...(Array.isArray(record.aliases) ? record.aliases : [])
+  ].filter(Boolean);
+}
+
+function findLibrarySnapshotFile() {
+  const explicit = process.env.JOEANIME_LIBRARY_FILE;
+  const candidates = [
+    explicit,
+    process.env.APPDATA
+      ? path.join(process.env.APPDATA, 'joeanime-db', '.tmp-genome-library.json')
+      : '',
+    process.env.APPDATA
+      ? path.join(process.env.APPDATA, 'JoeAnimeDB', '.tmp-genome-library.json')
+      : '',
+    path.join(PROJECT_ROOT, '.tmp-genome-library.json')
+  ].filter(Boolean);
+
+  return candidates.find((candidate) => fs.existsSync(candidate)) || null;
+}
+
+function mapLibraryRecordToGenomeMetadata(record = {}, query = '') {
+  const titles = titleCandidatesFromLibraryRecord(record);
+  const primaryTitle =
+    record.title ||
+    record.canonicalTitle ||
+    record.englishTitle ||
+    record.titleEnglish ||
+    query;
+
+  const studios = normalizeMetadataArray([
+    ...(Array.isArray(record.studios) ? record.studios : []),
+    ...(Array.isArray(record.productionStudios) ? record.productionStudios : []),
+    record.studio,
+    record.animationStudio
+  ]);
+
+  const genres = normalizeMetadataArray(record.genres);
+  const themes = normalizeMetadataArray([
+    ...(Array.isArray(record.themes) ? record.themes : []),
+    ...(Array.isArray(record.tags) ? record.tags : [])
+  ]);
+  const demographics = normalizeMetadataArray(record.demographics);
+
+  return {
+    malId: record.malId ?? record.mal_id ?? null,
+    kitsuId:
+      record.kitsuId ??
+      record.kitsu_id ??
+      (String(record.id || '').startsWith('anime-kitsu-')
+        ? String(record.id).replace('anime-kitsu-', '')
+        : null),
+    title: primaryTitle,
+    titleEnglish:
+      record.englishTitle ||
+      record.titleEnglish ||
+      record.canonicalTitle ||
+      primaryTitle,
+    titleJapanese:
+      record.japaneseTitle ||
+      record.titleJapanese ||
+      '',
+    titleSynonyms: [
+      ...new Set(
+        titles.filter((title) => title && title !== primaryTitle)
+      )
+    ],
+    synopsis:
+      record.synopsis ||
+      record.description ||
+      record.summary ||
+      '',
+    background:
+      record.background ||
+      record.notes ||
+      '',
+    year:
+      record.year ??
+      record.startYear ??
+      record.releaseYear ??
+      null,
+    season:
+      record.season ||
+      record.seasonName ||
+      '',
+    type:
+      record.type ||
+      record.subtype ||
+      record.format ||
+      'TV',
+    episodes:
+      record.episodes ??
+      record.episodeCount ??
+      record.totalEpisodes ??
+      null,
+    status:
+      record.airingStatus ||
+      record.releaseStatus ||
+      record.status ||
+      '',
+    score:
+      record.communityScore ??
+      record.averageScore ??
+      record.rating ??
+      record.score ??
+      null,
+    rating:
+      record.ageRating ||
+      record.contentRating ||
+      '',
+    source:
+      record.sourceMaterial ||
+      record.source ||
+      '',
+    studios: [...new Set(studios)],
+    genres: [...new Set(genres)],
+    themes: [...new Set(themes)],
+    demographics: [...new Set(demographics)],
+    metadataSource:
+      record.metadataSource ||
+      record.provider ||
+      (record.kitsuId || String(record.id || '').startsWith('anime-kitsu-')
+        ? 'kitsu-library'
+        : 'local-library')
+  };
+}
+
+function loadLibraryMetadataForGenerator(query) {
+  const snapshotFile = findLibrarySnapshotFile();
+  if (!snapshotFile) return null;
+
+  let list;
+  try {
+    const parsed = JSON.parse(fs.readFileSync(snapshotFile, 'utf8'));
+    list = Array.isArray(parsed)
+      ? parsed
+      : Array.isArray(parsed?.anime)
+        ? parsed.anime
+        : [];
+  } catch (error) {
+    console.warn('Could not read temporary JoeAnimeDB library snapshot:', error.message);
+    return null;
+  }
+
+  const wanted = normalizedLookupTitle(query);
+  if (!wanted) return null;
+
+  let match = list.find((record) =>
+    titleCandidatesFromLibraryRecord(record).some(
+      (title) => normalizedLookupTitle(title) === wanted
+    )
+  );
+
+  if (!match) {
+    match = list.find((record) =>
+      titleCandidatesFromLibraryRecord(record).some((title) => {
+        const candidate = normalizedLookupTitle(title);
+        return candidate && (
+          candidate.includes(wanted) ||
+          wanted.includes(candidate)
+        );
+      })
+    );
+  }
+
+  return match ? mapLibraryRecordToGenomeMetadata(match, query) : null;
+}
+
+
+async function fetchGeneratorMetadata(query) {
+  const libraryMetadata = loadLibraryMetadataForGenerator(query);
+  if (libraryMetadata) {
+    console.log('Using JoeAnimeDB library metadata for:', query);
+    return libraryMetadata;
+  }
+
   const manual = loadManualMetadataForGenerator(query);
   if (manual) {
     console.log('Using manual metadata override for:', query);
     return manual;
   }
 
-  const searchUrl = `https://api.jikan.moe/v4/anime?q=${encodeURIComponent(query)}&limit=1`;
-  const search = await fetch(searchUrl).then((r) => r.json());
-  const item = search?.data?.[0];
-  if (!item?.mal_id) throw new Error(`No Jikan result found for: ${query}`);
-
-  const detailUrl = `https://api.jikan.moe/v4/anime/${item.mal_id}/full`;
-  const detail = await fetch(detailUrl).then((r) => r.json());
-  const data = detail?.data || item;
-
-  return {
-    malId: data.mal_id,
-    title: data.title,
-    titleEnglish: data.title_english,
-    titleJapanese: data.title_japanese,
-    titleSynonyms: data.title_synonyms || [],
-    synopsis: data.synopsis,
-    background: data.background,
-    year: data.year,
-    season: data.season,
-    type: data.type,
-    episodes: data.episodes,
-    status: data.status,
-    score: data.score,
-    rating: data.rating,
-    source: data.source,
-    studios: (data.studios || []).map((x) => x.name),
-    genres: (data.genres || []).map((x) => x.name),
-    themes: (data.themes || []).map((x) => x.name),
-    demographics: (data.demographics || []).map((x) => x.name)
-  };
+  throw new Error(
+    `No local JoeAnimeDB metadata found for: ${query}. Run the database metadata updater first.`
+  );
 }
 
 async function generateWithOpenAI(metadata, examples) {
@@ -418,7 +613,7 @@ function inferRichProfile(metadata = {}) {
 
   if (!profile.signature) {
     profile.signature = title + ' looks like a ' + profile.domain + ' story, but this draft needs review because metadata alone is limited.';
-    profile.coreFantasy = 'A provisional read based on genres, themes, synopsis, and Jikan metadata.';
+    profile.coreFantasy = 'A provisional read based on the metadata already stored in JoeAnimeDB.';
     profile.viewerMotivations.push(...[...new Set([...genres, ...themes])].slice(0, 6));
     profile.whoShouldWatch = 'Viewers interested in this show’s listed genres and themes.';
     profile.whoShouldAvoid = 'Unknown from metadata alone. Review needed.';
@@ -466,7 +661,7 @@ function buildDraftCard(metadata, ai = {}) {
     generated: true,
     needsReview: true,
     generatedAt: new Date().toISOString(),
-    source: { metadata: 'jikan', generator: ai.usedAI ? 'ai-assisted' : 'heuristic-v2', model: ai.model || null },
+    source: { metadata: metadata.metadataSource || 'local-library', generator: ai.usedAI ? 'ai-assisted' : 'heuristic-v2', model: ai.model || null },
 
     domain: ai.domain || rich.domain,
     subdomain: ai.subdomain || ai.subDomain || rich.subdomain,
@@ -524,12 +719,11 @@ async function main() {
     process.exit(1);
   }
 
-  const root = findRoot(process.cwd());
-  const outFile = path.join(root, 'src', 'ai', 'genome', 'generated', 'generatedGenomeCards.js');
+  const outFile = path.join(PROJECT_ROOT, 'src', 'ai', 'genome', 'generated', 'generatedGenomeCards.js');
   fs.mkdirSync(path.dirname(outFile), { recursive: true });
 
-  console.log(`Fetching metadata from Jikan for: ${titleArg}`);
-  const metadata = await fetchJikanTitle(titleArg);
+  console.log(`Loading JoeAnimeDB library metadata for: ${titleArg}`);
+  const metadata = await fetchGeneratorMetadata(titleArg);
 
   const examples = [
     { id: 'dorohedoro', signature: 'Like someone blended horror, black comedy, punk rock, mushrooms, and friendship into one filthy masterpiece.' },
@@ -548,14 +742,32 @@ async function main() {
 
   const card = buildDraftCard(metadata, ai || {});
   const existing = loadExistingCards(outFile);
-  const next = [card, ...existing.filter((item) => item.id !== card.id && item.malId !== card.malId)];
+  const next = [
+    card,
+    ...existing.filter((item) => {
+      const sameGenomeId = String(item.id || '') === String(card.id || '');
+      const bothHaveMalId =
+        item.malId !== null &&
+        item.malId !== undefined &&
+        item.malId !== '' &&
+        card.malId !== null &&
+        card.malId !== undefined &&
+        card.malId !== '';
+      const sameMalId = bothHaveMalId && String(item.malId) === String(card.malId);
+
+      // Missing identifiers are not identities. In particular, null === null
+      // must never make one Kitsu-generated card replace every other card that
+      // also lacks a MAL id.
+      return !sameGenomeId && !sameMalId;
+    })
+  ];
 
   saveGeneratedCards(outFile, next);
 
   console.log('');
   console.log(`Generated Genome draft: ${card.titles[0]} (${card.id})`);
   console.log(`Quality: ${card.quality} / needsReview: ${card.needsReview}`);
-  console.log(`Saved to: ${path.relative(root, outFile)}`);
+  console.log(`Saved to: ${path.relative(PROJECT_ROOT, outFile)}`);
   console.log('');
   console.log('Next run:');
   console.log('node scripts\\rebuildGenomeRegistry.cjs');

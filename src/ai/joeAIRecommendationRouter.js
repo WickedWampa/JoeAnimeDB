@@ -1,6 +1,8 @@
 import { maybeKnowledgeFirstRecommendation } from './knowledgeFirstRecommender';
 import { maybeGenomeIntentRecommendation } from './joeAIIntentEngine';
 import { ACTIVE_GENOME_REGISTRY, findGenomeCardFromRegistry, findGenomeCardByTitle } from './genome/genomeRegistry';
+import { getAnimeStudios, getAnimeTasteSignals, productionSearchText } from '../utils/metadataAdapters';
+import { parseTitleIdentity, titleAliases as metadataTitleAliases } from '../services/titleIdentity';
 
 function norm(value = '') {
   return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
@@ -8,6 +10,93 @@ function norm(value = '') {
 
 function title(card = {}) {
   return card.titles?.[0] || card.title || card.id || 'Unknown title';
+}
+
+function cleanDirectTitleQuestion(question = '') {
+  const raw = String(question || '').trim().replace(/[?!.,]+$/g, '');
+  const patterns = [
+    /^(?:please\s+)?(?:tell me|talk)\s+about\s+(.+)$/i,
+    /^(?:please\s+)?what\s+(?:is|'s)\s+(.+)$/i,
+    /^(?:please\s+)?whats\s+(.+)$/i,
+    /^(?:please\s+)?what\s+do\s+you\s+know\s+about\s+(.+)$/i,
+    /^(?:please\s+)?explain\s+(.+)$/i,
+    /^(?:please\s+)?(?:recommend|suggest)\s+(?!something\b|anime\b|shows?\b)(.+)$/i,
+    /^(?:please\s+)?how\s+many\s+episodes\s+(?:does|did)\s+(.+?)\s+have$/i,
+    /^(?:please\s+)?how\s+many\s+episodes\s+(?:are|were)\s+(?:in|there in)\s+(.+)$/i,
+    /^(?:please\s+)?(?:who|what studio)\s+(?:made|animated|produced)\s+(.+)$/i,
+    /^(?:please\s+)?when\s+did\s+(.+?)\s+(?:air|release|come out)$/i,
+    /^(?:please\s+)?is\s+(.+?)\s+(?:good|worth watching)$/i,
+    /^(?:please\s+)?why\s+is\s+(.+?)\s+(?:good|popular|worth watching)$/i,
+    /^(?:please\s+)?should\s+i\s+watch\s+(.+)$/i
+  ];
+
+  for (const pattern of patterns) {
+    const match = raw.match(pattern);
+    if (match?.[1]) {
+      return {
+        title: match[1].trim(),
+        explicit: true
+      };
+    }
+  }
+
+  return { title: raw, explicit: false };
+}
+
+function itemTitleNames(item = {}) {
+  return metadataTitleAliases(item)
+    .map((value) => ({ value, normalized: norm(value), identity: parseTitleIdentity(value) }))
+    .filter((entry) => entry.normalized);
+}
+
+function exactLibraryTitleMatch(query = '', anime = [], catalog = []) {
+  const normalized = norm(query);
+  const canonical = parseTitleIdentity(query);
+  const pool = [...(anime || []), ...(catalog || [])];
+
+  const matches = pool.filter((item) =>
+    itemTitleNames(item).some((entry) =>
+      entry.normalized === normalized ||
+      (canonical.key && entry.identity.key === canonical.key)
+    )
+  );
+
+  return matches
+    .sort((left, right) => {
+      const leftOwned = (anime || []).includes(left) ? 1 : 0;
+      const rightOwned = (anime || []).includes(right) ? 1 : 0;
+      return rightOwned - leftOwned;
+    })[0] || null;
+}
+
+function franchiseTitleMatches(query = '', anime = [], catalog = []) {
+  const wanted = parseTitleIdentity(query);
+  const wantedNormalized = norm(query);
+  if (!wanted.base) return [];
+
+  const pool = [...(anime || []), ...(catalog || [])];
+  const seen = new Set();
+
+  return pool.filter((item) => {
+    const related = itemTitleNames(item).some((entry) => {
+      if (entry.normalized === wantedNormalized) return false;
+      if (entry.identity.base && entry.identity.base === wanted.base) return true;
+      return wantedNormalized.length >= 4 && entry.normalized.startsWith(`${wantedNormalized} `);
+    });
+    const key = String(item.kitsuId || item.malId || item.id || item.officialTitle || item.title || '');
+    if (!related || !key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, 8);
+}
+
+function findItemForGenomeCard(card = {}, anime = [], catalog = []) {
+  const aliases = [card.id, card.title, ...(card.titles || []), ...(card.aliases || [])].filter(Boolean);
+  for (const alias of aliases) {
+    const match = exactLibraryTitleMatch(alias, anime, catalog);
+    if (match) return match;
+  }
+  return null;
 }
 
 function extractSimilarityTitle(question = '') {
@@ -66,14 +155,10 @@ function textBlob(item = {}) {
   return norm([
     item.title,
     item.officialTitle,
-    item.studio,
+    productionSearchText(item),
     item.synopsis,
     item.description,
-    ...(item.genres || []),
-    ...(item.themes || []),
-    ...(item.tags || []),
-    ...(item.viewerMotivations || []),
-    ...(item.fantasyPillars || [])
+    ...getAnimeTasteSignals(item)
   ].filter(Boolean).join(' '));
 }
 
@@ -160,7 +245,7 @@ function scoreMoodItem(item = {}, intent = {}, owned = false) {
   const blob = textBlob(item);
   let score = owned ? 8 : 0;
 
-  if (intent.studio && norm(item.studio).includes(norm(intent.studio))) score += 45;
+  if (intent.studio && getAnimeStudios(item).some((studio) => norm(studio).includes(norm(intent.studio)))) score += 45;
   if (intent.id === 'short') {
     const eps = Number(item.episodeCount || item.episodes || 0);
     if (eps > 0 && eps <= 13) score += 42;
@@ -291,45 +376,181 @@ function scoreRelatedCards(sourceCard) {
     .slice(0, 8);
 }
 
-function formatSimilarGenomeAnswer(sourceCard) {
+function findLibraryItemForCard(card = {}, anime = []) {
+  const cardNames = [card.id, card.title, ...(card.titles || []), ...(card.aliases || [])]
+    .filter(Boolean)
+    .map(norm);
+
+  return (anime || []).find((item) => {
+    const itemNames = [item.title, item.officialTitle, item.japaneseTitle, ...(item.titleSynonyms || [])]
+      .filter(Boolean)
+      .map(norm);
+    return itemNames.some((name) => cardNames.includes(name));
+  }) || null;
+}
+
+function sharedGenomeTags(sourceCard = {}, targetCard = {}) {
+  const source = new Set([
+    sourceCard.domain,
+    sourceCard.subdomain,
+    ...(sourceCard.viewerMotivations || []),
+    ...(sourceCard.themes || []),
+    ...(sourceCard.atmosphere || []),
+    ...(sourceCard.emotionalProfile || []),
+    ...(sourceCard.fantasyPillars || [])
+  ].filter(Boolean).map(norm));
+
+  const target = [
+    targetCard.domain,
+    targetCard.subdomain,
+    ...(targetCard.viewerMotivations || []),
+    ...(targetCard.themes || []),
+    ...(targetCard.atmosphere || []),
+    ...(targetCard.emotionalProfile || []),
+    ...(targetCard.fantasyPillars || [])
+  ].filter(Boolean);
+
+  const shared = target.filter((item) => source.has(norm(item)));
+  return [...new Set(shared)].slice(0, 5);
+}
+
+function genomeCardToRecommendationItem(card = {}, index = 0, sourceCard = {}, anime = []) {
+  const local = findLibraryItemForCard(card, anime);
+  const name = title(card);
+  const shared = sharedGenomeTags(sourceCard, card);
+  const preferredIds = sourceCard.idealFollowUps || sourceCard.successors || [];
+  const isPreferred = preferredIds.some((id) => norm(id) === norm(card.id) || norm(id) === norm(name));
+  const baseMatch = isPreferred ? 98 : Math.max(82, 96 - index * 3);
+
+  return {
+    ...(local || {}),
+    id: local?.id || card.id || name,
+    title: local?.title || name,
+    officialTitle: local?.officialTitle || name,
+    year: local?.year || card.year,
+    episodes: local?.episodes || local?.episodeCount || card.episodes,
+    studio: local?.studio || card.studio,
+    cover: local?.cover || card.cover || card.image,
+    communityScore: local?.communityScore || local?.malScore || card.communityScore || card.malScore,
+    owned: Boolean(local),
+    bucket: local ? 'library' : 'discovery',
+    match: Math.min(99, Math.max(72, baseMatch)),
+    matchLabel: isPreferred ? 'Genome Follow-up' : 'Genome Neighbor',
+    tags: shared.length ? shared : [card.domain, card.subdomain, ...(card.viewerMotivations || [])].filter(Boolean).slice(0, 5),
+    reasons: shared.length ? shared : [card.signature || card.coreFantasy || 'Shared Anime DNA'].filter(Boolean),
+    blurb: card.signature || card.coreFantasy || `${name} shares enough Anime DNA to be worth comparing.`,
+    joeAISummary: `${name} looks like a strong follow-up because it overlaps with the ${title(sourceCard)} Genome instead of only matching a surface genre.`,
+    deepDive: [
+      `Source Genome: ${title(sourceCard)}`,
+      `Candidate Genome: ${name}`,
+      shared.length ? `Shared traits: ${shared.join(', ')}` : 'Shared traits: broader Genome neighborhood match',
+      isPreferred ? 'Priority: listed as an ideal follow-up/successor.' : 'Priority: inferred from overlapping domain, mood, themes, and viewer motivations.'
+    ].join('\n')
+  };
+}
+
+function formatSimilarGenomeCards(sourceCard, anime = []) {
   const sourceTitle = title(sourceCard);
   const related = scoreRelatedCards(sourceCard);
 
-  const lines = [
-    `🧬 JoeAI Genome Match: ${sourceTitle}`,
-    '',
-    sourceCard.signature || sourceCard.note || `${sourceTitle} has a Genome profile.`,
-    ''
-  ];
-
-  if (sourceCard.viewerMotivations?.length) {
-    lines.push('What you are probably chasing:');
-    lines.push(sourceCard.viewerMotivations.slice(0, 6).map((item) => `• ${item}`).join('\n'));
-    lines.push('');
-  }
-
   if (!related.length) {
-    lines.push('I have the source Genome Card, but I do not have enough related cards yet. Add more module cards or catalog entries and I will get smarter.');
-    return lines.join('\n');
+    return {
+      type: 'text',
+      text: [
+        `🧬 JoeAI Genome Match: ${sourceTitle}`,
+        '',
+        sourceCard.signature || sourceCard.note || `${sourceTitle} has a Genome profile.`,
+        '',
+        'I have the source Genome Card, but I do not have enough related cards yet. Add more module cards or catalog entries and I will get smarter.'
+      ].join('\n')
+    };
   }
 
-  lines.push('Closest Genome follow-ups:');
-  lines.push('');
-  lines.push(related.map((card, index) => {
-    const why = card.signature || card.coreFantasy || 'Strong Genome neighbor.';
-    return `${index + 1}. ${title(card)}\n   • ${why}`;
-  }).join('\n\n'));
+  const chasing = (sourceCard.viewerMotivations || []).slice(0, 4);
+  const subtitle = chasing.length
+    ? `I think you are chasing ${chasing.join(', ')} — so I turned that into card-based follow-ups.`
+    : 'JoeAI turned the source Genome into card-based follow-ups instead of a wall of text.';
 
-  return lines.join('\n');
+  return {
+    type: 'recommendationCards',
+    title: `🍜 Because you like ${sourceTitle}`,
+    subtitle,
+    sourceAnime: sourceTitle,
+    fullAnalysis: [
+      `Source: ${sourceTitle}`,
+      sourceCard.signature || sourceCard.note || '',
+      chasing.length ? `Likely chase: ${chasing.join(', ')}` : '',
+      'Cards are ranked from ideal follow-ups plus inferred Genome neighbors.'
+    ].filter(Boolean).join('\\n'),
+    items: related.map((card, index) => genomeCardToRecommendationItem(card, index, sourceCard, anime))
+  };
 }
 
-function formatTitleGenomeAnswer(card) {
+function personalTitleFacts(item = {}) {
+  const facts = [];
+  const score = Number(item.joeScore ?? item.rating ?? 0);
+  if (item.status) facts.push(`Your status: ${item.status}`);
+  if (Number.isFinite(score) && score > 0) facts.push(`Your score: ${score.toFixed(1)}/10`);
+  if (item.favorite) facts.push('You marked it as a favorite');
+  if (Number(item.rewatches || 0) > 0) facts.push(`Rewatches: ${Number(item.rewatches)}×`);
+  return facts;
+}
+
+function directMetadataLead(question = '', item = {}, name = 'This title') {
+  if (/\bhow many episodes\b/i.test(question)) {
+    const episodes = Number(item.episodeCount || item.episodes || 0);
+    return episodes
+      ? `${name} has ${episodes} episode${episodes === 1 ? '' : 's'} in this entry.`
+      : `I know ${name}, but its episode count is missing from your local metadata.`;
+  }
+
+  if (/\b(?:who|what studio)\s+(?:made|animated|produced)\b/i.test(question)) {
+    const studios = getAnimeStudios(item);
+    return studios.length
+      ? `${name} was produced by ${studios.join(', ')}.`
+      : `I know ${name}, but its studio is missing from your local metadata.`;
+  }
+
+  if (/\bwhen did\b/i.test(question)) {
+    return item.year
+      ? `${name} is listed as a ${item.year} release.`
+      : `I know ${name}, but its release year is missing from your local metadata.`;
+  }
+
+  return '';
+}
+
+function formatTitleGenomeAnswer(card, item = {}, question = '') {
   const name = title(card);
+  const watchVerdict = /\b(?:should i watch|worth watching|why is .+ (?:good|popular))\b/i.test(question)
+    ? `${name} is worth considering if ${[
+        ...(card.viewerMotivations || []),
+        ...(card.fantasyPillars || [])
+      ].filter(Boolean).slice(0, 3).join(', ') || 'its core premise matches what you want right now'}.`
+    : '';
+  const directLead = watchVerdict || directMetadataLead(question, item, name);
   const lines = [
     `🧬 JoeAI Knows: ${name}`,
     '',
-    card.signature || card.note || `${name} has a Genome profile.`
+    directLead || card.signature || card.note || `${name} has a Genome profile.`
   ];
+
+  if (directLead && (card.signature || card.note)) {
+    lines.push('', card.signature || card.note);
+  }
+
+  const metadata = [
+    item.year,
+    item.type,
+    Number(item.episodeCount || item.episodes || 0) > 0
+      ? `${Number(item.episodeCount || item.episodes)} episodes`
+      : '',
+    ...getAnimeStudios(item)
+  ].filter(Boolean);
+
+  if (metadata.length) {
+    lines.push('', `Details: ${metadata.join(' · ')}`);
+  }
 
   if (card.coreFantasy) {
     lines.push('', 'Core Fantasy:');
@@ -352,15 +573,123 @@ function formatTitleGenomeAnswer(card) {
     lines.push('', `Joe Note: ${card.joeNote}`);
   }
 
-  if (card.idealFollowUps?.length) {
-    const related = cardsFromIds(card.idealFollowUps).slice(0, 5);
-    if (related.length) {
-      lines.push('', 'If that sounds good, nearby picks are:');
-      lines.push(related.map((item) => `• ${title(item)}`).join('\n'));
-    }
+  const personal = personalTitleFacts(item);
+  if (personal.length) {
+    lines.push('', 'Your library:');
+    lines.push(personal.map((fact) => `• ${fact}`).join('\n'));
   }
 
   return lines.join('\n');
+}
+
+function formatMetadataTitleAnswer(item = {}, question = '') {
+  const name = item.officialTitle || item.title || 'This title';
+  const lead = directMetadataLead(question, item, name);
+  const synopsis = item.synopsis || item.description || '';
+  const genres = getAnimeTasteSignals(item).slice(0, 6);
+  const studios = getAnimeStudios(item);
+  const details = [
+    item.year,
+    item.type,
+    Number(item.episodeCount || item.episodes || 0) > 0
+      ? `${Number(item.episodeCount || item.episodes)} episodes`
+      : '',
+    studios.length ? studios.join(', ') : ''
+  ].filter(Boolean);
+  const personal = personalTitleFacts(item);
+
+  return [
+    `🍜 JoeAI Knows: ${name}`,
+    '',
+    lead || synopsis || `${name} is in your local JoeAnimeDB knowledge.`,
+    details.length ? `Details: ${details.join(' · ')}` : '',
+    genres.length ? `Genres / signals: ${genres.join(', ')}` : '',
+    personal.length ? '' : '',
+    personal.length ? 'Your library:' : '',
+    ...personal.map((fact) => `• ${fact}`)
+  ].filter((line, index, lines) => line || (index > 0 && lines[index - 1])).join('\n');
+}
+
+function formatFranchiseClarification(query = '', matches = []) {
+  return [
+    `🍜 I recognize the ${query} franchise, but I do not want to guess the wrong entry.`,
+    '',
+    'I found:',
+    ...matches.map((item) => `• ${item.officialTitle || item.title}`),
+    '',
+    `Ask using the exact season or title you mean. I will keep the original, sequels, movies, and alternate versions separate.`
+  ].join('\n');
+}
+
+function formatUnknownTitle(query = '', offline = false) {
+  if (offline) {
+    return [
+      `🍜 I do not have “${query}” in the local library, catalog, or Genome cards yet.`,
+      '',
+      'You appear to be offline, so I cannot verify its metadata right now. JoeAI and your library are still safe—try again when connected, use an alternate title, or add it and run Update Database later.'
+    ].join('\n');
+  }
+
+  return [
+    `🍜 I do not recognize “${query}” in the library, catalog, or Genome cards yet.`,
+    '',
+    'Try its official or alternate title. You can also add it to the Library; JoeAI will use the local entry immediately and metadata can be completed by Update Database.'
+  ].join('\n');
+}
+
+function isBroadRecommendationDescription(question = '', query = '') {
+  if (!/^\s*(?:please\s+)?(?:recommend|suggest)\b/i.test(question)) return false;
+  return /\b(something|anime|shows?|dark(?:er)?|funny|comedy|romance|romantic|isekai|action|adventure|fantasy|horror|sports|mecha|sci[- ]?fi|emotional|cozy|comfort|hidden gems?|underrated|movies?|short|masterpiece|classic)\b/i.test(query);
+}
+
+export function routeJoeAITitleQuestion(question = '', anime = [], catalog = [], options = {}) {
+  const parsed = cleanDirectTitleQuestion(question);
+  const query = parsed.title;
+  if (!query) return null;
+
+  const item = exactLibraryTitleMatch(query, anime, catalog);
+  const possibleCard = findGenomeCardByTitle(query);
+  const cardNames = possibleCard
+    ? [possibleCard.id, possibleCard.title, ...(possibleCard.titles || []), ...(possibleCard.aliases || [])]
+    : [];
+  const card = parsed.explicit || cardNames.some((name) => norm(name) === norm(query))
+    ? possibleCard
+    : null;
+
+  if (card) {
+    return {
+      type: 'text',
+      text: formatTitleGenomeAnswer(card, item || findItemForGenomeCard(card, anime, catalog) || {}, question)
+    };
+  }
+
+  if (item) {
+    return {
+      type: 'text',
+      text: formatMetadataTitleAnswer(item, question)
+    };
+  }
+
+  const franchiseMatches = franchiseTitleMatches(query, anime, catalog);
+  if (franchiseMatches.length) {
+    return {
+      type: 'text',
+      text: formatFranchiseClarification(query, franchiseMatches)
+    };
+  }
+
+  if (isBroadRecommendationDescription(question, query)) return null;
+  if (!parsed.explicit) return null;
+
+  const offline = options.offline ?? (
+    typeof navigator !== 'undefined' &&
+    navigator.onLine === false
+  );
+
+  return {
+    type: 'text',
+    text: formatUnknownTitle(query, offline)
+  };
 }
 
 export function routeJoeAIRecommendation(question = '', anime = [], catalog = []) {
@@ -372,11 +701,13 @@ export function routeJoeAIRecommendation(question = '', anime = [], catalog = []
   // Example: "recommend something like Higurashi"
   const similarTitle = extractSimilarityTitle(question);
   if (similarTitle) {
+    const sourceCard = findGenomeCardByTitle(similarTitle);
+    if (sourceCard) return formatSimilarGenomeCards(sourceCard, anime);
+
+    // Only fall back to the older knowledge-first text path when there is no
+    // Genome source card to build structured recommendation cards from.
     const smart = maybeKnowledgeFirstRecommendation(question, anime, catalog);
     if (smart && !/^I heard:.+could not find/i.test(smart)) return smart;
-
-    const sourceCard = findGenomeCardByTitle(similarTitle);
-    if (sourceCard) return formatSimilarGenomeAnswer(sourceCard);
   }
 
   if (broadIntent) {
@@ -388,8 +719,16 @@ export function routeJoeAIRecommendation(question = '', anime = [], catalog = []
   // 2. Known title lookup should beat mood/vibe routing.
   // Example: "recommend Blue Eye Samurai" should show that card,
   // not fall through to generic samurai/cyberpunk recommendations.
+  const titleAnswer = routeJoeAITitleQuestion(question, anime, catalog);
+  if (titleAnswer) return titleAnswer;
+
   const card = findGenomeCardByTitle(question) || mentionedGenomeCard(question);
-  if (card) return formatTitleGenomeAnswer(card);
+  if (card) {
+    return {
+      type: 'text',
+      text: formatTitleGenomeAnswer(card, findItemForGenomeCard(card, anime, catalog) || {}, question)
+    };
+  }
 
   // 3. Mood/vibe requests only happen after known-title lookup fails.
   // Example: "I want horror" should still mean horror recommendations.

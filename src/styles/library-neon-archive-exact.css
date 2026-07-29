@@ -1,0 +1,64 @@
+
+/* Exact approved Library hero artwork */
+
+.libraryArchiveHeroExact {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-height: 0;
+  margin-bottom: 18px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--cyan) 28%, var(--pink));
+  border-radius: 24px;
+  background: #050b16;
+  box-shadow:
+    0 24px 64px rgba(0, 0, 0, .32),
+    0 0 34px color-mix(in srgb, var(--pink) 10%, transparent);
+}
+
+.libraryArchiveHeroExactImage {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+  user-select: none;
+  pointer-events: none;
+}
+
+/* Invisible real button over the button drawn into the approved artwork. */
+.libraryArchiveExactAdd {
+  position: absolute;
+  right: 1.8%;
+  bottom: 8%;
+  width: 12.2%;
+  height: 14%;
+  min-width: 128px;
+  min-height: 46px;
+  border: 0;
+  border-radius: 18px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.libraryArchiveExactAdd:hover,
+.libraryArchiveExactAdd:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: -2px;
+  box-shadow:
+    0 0 28px color-mix(in srgb, var(--cyan) 36%, transparent),
+    inset 0 0 20px color-mix(in srgb, var(--cyan) 12%, transparent);
+}
+
+@media (max-width: 900px) {
+  .libraryArchiveHeroExact {
+    border-radius: 18px;
+  }
+
+  .libraryArchiveExactAdd {
+    right: 1.4%;
+    bottom: 7%;
+    width: 14%;
+    min-width: 110px;
+  }
+}
