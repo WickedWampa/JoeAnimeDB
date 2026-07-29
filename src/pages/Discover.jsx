@@ -25,7 +25,14 @@ import {
   } from 'lucide-react';
 import { Poster } from '../components/Poster';
 import { sameAnimeIdentity } from '../services/titleIdentity';
+import { classifyAnimeRelease } from '../services/releaseState';
 import { buildDiscoverPlan } from '../services/recommendationEngineV3';
+import {
+  applyLearnedSignals,
+  hasSavedTitleDistinction,
+  inferFeedbackTraits,
+  recommendationKey
+} from '../ai/intelligence/joeAIIntelligence';
 import '../styles/discover.css';
 
 const titleOf = (item = {}) => item.officialTitle || item.title || 'Unknown title';
@@ -74,7 +81,7 @@ function canonicalSeasonTitle(value = '') {
     .replace(/\bseason\s*([0-9]+)\b/g, ' season $1 ');
 
   // Common title aliases that appear differently between older library data
-  // and current Jikan/catalog metadata.
+  // and current Kitsu/catalog metadata.
   text = text
     .replace(/\btybw\b/g, ' thousand year blood war ')
     .replace(/\bthousand[-\s]?year blood war\b/g, ' thousand year blood war ');
@@ -231,6 +238,9 @@ function identityKeys(item = {}) {
   const keys = new Set(allTitleKeys(item));
   const id = item.id;
 
+  if (item.kitsuId) keys.add(`kitsu:${String(item.kitsuId)}`);
+  const embeddedKitsuId = String(id || '').match(/(?:anime-kitsu|catalog-kitsu|kitsu)[-_]?(\d+)$/i);
+  if (embeddedKitsuId) keys.add(`kitsu:${embeddedKitsuId[1]}`);
   inferredMalIds(item).forEach((malId) => keys.add(`mal:${malId}`));
   if (id) keys.add(`id:${String(id)}`);
 
@@ -241,34 +251,37 @@ function identityKeys(item = {}) {
 const LIVE_DISCOVER_CACHE_KEY = 'joeanime-live-discover-cache-v1';
 const LIVE_DISCOVER_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
-function readLiveDiscoverCache() {
+function readLiveDiscoverCacheSnapshot() {
   try {
     const raw = localStorage.getItem(LIVE_DISCOVER_CACHE_KEY);
-    if (!raw) return [];
+    if (!raw) return { rows: [], savedAt: 0 };
 
     const parsed = JSON.parse(raw);
     const savedAt = Number(parsed?.savedAt || 0);
     const rows = Array.isArray(parsed?.rows) ? parsed.rows : [];
 
-    if (!rows.length) return [];
+    if (!rows.length) return { rows: [], savedAt };
 
     // Keep stale cache as a fallback if live providers are unavailable.
     // The timestamp is still retained so the UI can decide when to refresh.
-    return rows.filter(isValidCatalogEntry);
+    return {
+      rows: rows.filter(isValidCatalogEntry),
+      savedAt
+    };
   } catch (error) {
     console.warn('Could not read live Discover cache.', error);
-    return [];
+    return { rows: [], savedAt: 0 };
   }
 }
 
-function writeLiveDiscoverCache(rows = []) {
+function writeLiveDiscoverCache(rows = [], savedAt = Date.now()) {
   try {
     const validRows = (rows || []).filter(isValidCatalogEntry);
 
     localStorage.setItem(
       LIVE_DISCOVER_CACHE_KEY,
       JSON.stringify({
-        savedAt: Date.now(),
+        savedAt,
         rows: validRows
       })
     );
@@ -278,17 +291,8 @@ function writeLiveDiscoverCache(rows = []) {
 }
 
 function liveDiscoverCacheIsFresh() {
-  try {
-    const raw = localStorage.getItem(LIVE_DISCOVER_CACHE_KEY);
-    if (!raw) return false;
-
-    const parsed = JSON.parse(raw);
-    const savedAt = Number(parsed?.savedAt || 0);
-
-    return Boolean(savedAt && Date.now() - savedAt < LIVE_DISCOVER_CACHE_MAX_AGE_MS);
-  } catch {
-    return false;
-  }
+  const { savedAt } = readLiveDiscoverCacheSnapshot();
+  return Boolean(savedAt && Date.now() - savedAt < LIVE_DISCOVER_CACHE_MAX_AGE_MS);
 }
 
 const DELETED_CATALOG_TITLES = new Set([
@@ -375,28 +379,22 @@ function isValidCatalogEntry(item = {}) {
 }
 
 function uniqueCatalog(items = []) {
-  const seen = new Set();
+  const unique = [];
 
-  return items.filter((item) => {
+  items.forEach((item) => {
     if (!isValidCatalogEntry(item)) return false;
 
     const keys = identityKeys(item);
-    if (!keys.size) return false;
-
-    const duplicate = [...keys].some((key) => seen.has(key));
-    if (duplicate) return false;
-
-    keys.forEach((key) => seen.add(key));
-    return true;
+    if (!keys.size) return;
+    if (unique.some((candidate) => sameAnimeIdentity(candidate, item))) return;
+    unique.push(item);
   });
-}
 
-function isInLibrary(item, libraryKeys) {
-  return [...identityKeys(item)].some((key) => libraryKeys.has(key));
+  return unique;
 }
 
 function cardKey(item = {}) {
-  return String(item.malId || item.id || normalizeTitle(titleOf(item)));
+  return String(item.kitsuId || item.malId || item.id || normalizeTitle(titleOf(item)));
 }
 
 function franchiseKey(item = {}) {
@@ -410,19 +408,67 @@ function franchiseKey(item = {}) {
   return words.slice(0, 3).join('|') || cardKey(item);
 }
 
-function DiscoverCard({ item, onOpen, onAddWatching, onToggleFollow, adding = false, following = false, showRelease = false }) {
+const DISCOVER_REJECTION_REASONS = [
+  { value: 'too_dark', label: 'Too dark' },
+  { value: 'too_long', label: 'Too long' },
+  { value: 'too_romantic', label: 'Too romantic' },
+  { value: 'wrong_mood', label: 'Wrong mood' },
+  { value: 'bad_match', label: 'Bad match' }
+];
+
+function DiscoverCard({
+  item,
+  onOpen,
+  onAddWatching,
+  onToggleFollow,
+  onRecommendationFeedback,
+  feedbackSource = 'Discover',
+  adding = false,
+  following = false,
+  showRelease = false
+}) {
   const score = numericScore(item);
-  const releaseDate = item.airedFrom ? new Date(item.airedFrom) : null;
-  const releaseText = releaseDate && !Number.isNaN(releaseDate.getTime())
-    ? releaseDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
-    : (item.status || item.season || 'Date TBA');
+  const intelligence = item.joeAIRecommendation || null;
+  const receipt = intelligence?.confidenceReceipt || null;
+  const [whyOpen, setWhyOpen] = useState(false);
+  const [feedbackMenuOpen, setFeedbackMenuOpen] = useState(false);
+  const [feedbackStatus, setFeedbackStatus] = useState(
+    intelligence?.feedbackAction || ''
+  );
+  const release = classifyAnimeRelease(item);
+
+  useEffect(() => {
+    setFeedbackStatus(intelligence?.feedbackAction || '');
+  }, [intelligence?.feedbackAction, item.kitsuId, item.malId, item.id]);
+
+  async function sendFeedback(event, action, reason = '') {
+    event?.stopPropagation();
+    if (!onRecommendationFeedback) return;
+
+    if (action === 'not_for_me' && !reason) {
+      setFeedbackMenuOpen((current) => !current);
+      return;
+    }
+
+    const saved = await onRecommendationFeedback(item, action, reason, feedbackSource);
+    if (!saved) return;
+    setFeedbackStatus(action);
+    setFeedbackMenuOpen(false);
+  }
 
   return (
-    <article className="discoverCard" onClick={() => onOpen(item)}>
+    <article className={`discoverCard ${intelligence ? 'discoverSmartCard' : ''}`} onClick={() => onOpen(item)}>
       <div className="discoverPosterWrap">
         <Poster anime={item} className="discoverPoster" mode="thumb" />
         {score > 0 && <span className="discoverScore">★ {score.toFixed(2)}</span>}
-        {showRelease && <span className="discoverReleaseBadge"><CalendarClock /> {releaseText}</span>}
+        {intelligence?.tasteMatch > 0 && (
+          <span className="discoverTasteBadge">{intelligence.tasteMatch}% match</span>
+        )}
+        {showRelease && (
+          <span className={`discoverReleaseBadge release-${release.key}`}>
+            <CalendarClock /> {release.label} · {release.dateText}
+          </span>
+        )}
       </div>
 
       <div className="discoverCardCopy">
@@ -433,6 +479,48 @@ function DiscoverCard({ item, onOpen, onAddWatching, onToggleFollow, adding = fa
           {item.type && <b>{item.type}</b>}
           {(item.episodeCount || item.episodes) && <b>{item.episodeCount || item.episodes} eps</b>}
         </span>
+
+        {intelligence && (
+          <div className="discoverCardIntelligence">
+            <div className="discoverCardConfidence">
+              <span>Prediction <strong>{receipt?.predictionConfidence || intelligence.tasteMatch}%</strong></span>
+              <span>{receipt?.genomeTier || 'Metadata only'}</span>
+            </div>
+
+            <p>
+              {intelligence.reasons?.[0]
+                || `JoeAI sees a ${intelligence.tasteMatch}% taste match.`}
+            </p>
+
+            <button
+              type="button"
+              className="discoverWhyButton"
+              onClick={(event) => {
+                event.stopPropagation();
+                setWhyOpen((current) => !current);
+              }}
+            >
+              {whyOpen ? 'Hide reasoning' : 'Why this?'}
+            </button>
+
+            {whyOpen && (
+              <div className="discoverWhyPanel" onClick={(event) => event.stopPropagation()}>
+                {(intelligence.reasons || []).map((reason) => (
+                  <span key={reason}>✓ {reason}</span>
+                ))}
+                {(intelligence.warnings || []).map((warning) => (
+                  <span key={warning} className="warning">⚠ {warning}</span>
+                ))}
+                {receipt && (
+                  <small>
+                    Data {receipt.dataConfidence}% · Prediction {receipt.predictionConfidence}% · {receipt.genomeTier}
+                  </small>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="discoverCardActions">
           <button
             type="button"
@@ -457,12 +545,61 @@ function DiscoverCard({ item, onOpen, onAddWatching, onToggleFollow, adding = fa
             {following ? '🔔 Following' : '🔔 Follow'}
           </button>
         </div>
+
+        {intelligence && onRecommendationFeedback && (
+          <div className="discoverFeedbackControls" onClick={(event) => event.stopPropagation()}>
+            <button type="button" className={feedbackStatus === 'good_pick' ? 'active' : ''} onClick={(event) => sendFeedback(event, 'good_pick')}>
+              👍 Good
+            </button>
+            <button type="button" className={feedbackStatus === 'not_for_me' ? 'active negative' : ''} onClick={(event) => sendFeedback(event, 'not_for_me')}>
+              👎 Not for Me
+            </button>
+            <button type="button" onClick={(event) => sendFeedback(event, 'already_seen')}>
+              ✓ Seen
+            </button>
+            <button type="button" className={feedbackStatus === 'maybe_later' ? 'active' : ''} onClick={(event) => sendFeedback(event, 'maybe_later')}>
+              ◷ Later
+            </button>
+
+            {feedbackMenuOpen && (
+              <div className="discoverFeedbackReasonMenu">
+                <strong>What missed?</strong>
+                {DISCOVER_REJECTION_REASONS.map((reason) => (
+                  <button
+                    key={reason.value}
+                    type="button"
+                    onClick={(event) => sendFeedback(event, 'not_for_me', reason.value)}
+                  >
+                    {reason.label}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {feedbackStatus && (
+              <small className="discoverFeedbackSaved">
+                Saved: {String(feedbackStatus).replace(/_/g, ' ')}
+              </small>
+            )}
+          </div>
+        )}
       </div>
     </article>
   );
 }
 
-function Shelf({ icon, title, subtitle, items, onOpen, onBrowse, onAddWatching, onToggleFollow, addingKey }) {
+function Shelf({
+  icon,
+  title,
+  subtitle,
+  items,
+  onOpen,
+  onBrowse,
+  onAddWatching,
+  onToggleFollow,
+  onRecommendationFeedback,
+  addingKey
+}) {
   const railRef = useRef(null);
 
   function slide(direction) {
@@ -509,6 +646,8 @@ function Shelf({ icon, title, subtitle, items, onOpen, onBrowse, onAddWatching, 
               onOpen={onOpen}
               onAddWatching={onAddWatching}
               onToggleFollow={onToggleFollow}
+              onRecommendationFeedback={onRecommendationFeedback}
+              feedbackSource={`Discover shelf: ${title}`}
               following={Boolean(item.followed)}
               adding={addingKey === cardKey(item)}
             />
@@ -790,16 +929,33 @@ function CatalogBrowser({
   );
 }
 
-export function Discover({ anime = [], catalog = [], setSelected, setView, updateAnime, updateCatalogAnime, fetchMoreCatalogTitles, refreshLiveDiscover }) {
+export function Discover({
+  anime = [],
+  catalog = [],
+  setSelected,
+  setView,
+  updateAnime,
+  updateCatalogAnime,
+  joeAIState = {},
+  onRecommendationFeedback,
+  fetchMoreCatalogTitles,
+  refreshLiveDiscover
+}) {
+  const initialLiveCache = useRef(readLiveDiscoverCacheSnapshot()).current;
   const [catalogBrowser, setCatalogBrowser] = useState(null);
   const [addingKey, setAddingKey] = useState('');
   const [fetchingMore, setFetchingMore] = useState(false);
   const [refreshingLive, setRefreshingLive] = useState(false);
   const [catalogMessage, setCatalogMessage] = useState('');
   const [hubMode, setHubMode] = useState('recommendations');
+  const [surpriseMenuOpen, setSurpriseMenuOpen] = useState(false);
+  const [lastSurpriseKey, setLastSurpriseKey] = useState('');
+  const [dailyFeedbackMenuOpen, setDailyFeedbackMenuOpen] = useState(false);
+  const [liveState, setLiveState] = useState(
+    initialLiveCache.rows.length ? 'cached' : 'idle'
+  );
   const [liveCatalog, setLiveCatalog] = useState(() => {
-    const cached = readLiveDiscoverCache();
-    if (cached.length) return cached;
+    if (initialLiveCache.rows.length) return initialLiveCache.rows;
 
     return (catalog || []).filter((item) =>
       item?.discoverBucket === 'current' ||
@@ -815,7 +971,14 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
 
     if (tagged.length) {
       setLiveCatalog(tagged);
-      writeLiveDiscoverCache(tagged);
+      const newestSync = Math.max(
+        0,
+        ...tagged.map((item) => new Date(item.discoverSyncedAt || 0).getTime() || 0)
+      );
+      if (newestSync) writeLiveDiscoverCache(tagged, newestSync);
+      setLiveState((current) =>
+        current === 'idle' || current === 'cached' ? 'cached' : current
+      );
     }
   }, [catalog]);
 
@@ -834,12 +997,15 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
   }, []);
 
   const libraryLookup = useMemo(() => {
+    const kitsuIds = new Set();
     const malIds = new Set();
     const allFingerprints = new Set();
     const legacyFingerprints = new Set();
     const legacyTitles = [];
 
     anime.forEach((item) => {
+      const kitsuId = item.kitsuId || item.kitsu_id;
+      if (kitsuId) kitsuIds.add(String(kitsuId));
       const ids = inferredMalIds(item);
       ids.forEach((id) => malIds.add(String(id)));
 
@@ -855,37 +1021,25 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
       });
     });
 
-    return { malIds, allFingerprints, legacyFingerprints, legacyTitles };
+    return { kitsuIds, malIds, allFingerprints, legacyFingerprints, legacyTitles };
   }, [anime]);
 
   const discoverCatalog = useMemo(() => {
-    const liveByIdentity = new Map();
-
-    (liveCatalog || [])
-      .filter(isValidCatalogEntry)
-      .forEach((item) => {
-        identityKeys(item).forEach((key) => liveByIdentity.set(key, item));
-      });
+    const validLiveCatalog = (liveCatalog || []).filter(isValidCatalogEntry);
 
     const overlaid = (catalog || [])
       .filter(isValidCatalogEntry)
       .map((item) => {
-      const live = Array.from(identityKeys(item) || [])
-        .map((key) => liveByIdentity.get(key))
-        .find(Boolean);
+      const live = validLiveCatalog.find((candidate) =>
+        sameAnimeIdentity(candidate, item)
+      );
 
       return live ? { ...item, ...live, id: item.id || live.id } : item;
     });
 
-    const persistedKeys = new Set(
-      overlaid.flatMap((item) => identityKeys(item))
+    const missingLiveRows = validLiveCatalog.filter((item) =>
+      !overlaid.some((candidate) => sameAnimeIdentity(candidate, item))
     );
-
-    const missingLiveRows = (liveCatalog || [])
-      .filter(isValidCatalogEntry)
-      .filter((item) =>
-        !Array.from(identityKeys(item) || []).some((key) => persistedKeys.has(key))
-      );
 
     return uniqueCatalog([...overlaid, ...missingLiveRows]);
   }, [catalog, liveCatalog]);
@@ -896,7 +1050,16 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
     );
 
     return validCatalog.filter((item) => {
+      if (applyLearnedSignals(item, joeAIState).excluded) {
+        return false;
+      }
+
       const catalogMalIds = inferredMalIds(item);
+      const catalogKitsuId = item.kitsuId || item.kitsu_id;
+
+      if (catalogKitsuId && libraryLookup.kitsuIds.has(String(catalogKitsuId))) {
+        return false;
+      }
 
       if (
         catalogMalIds.length &&
@@ -920,7 +1083,7 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
 
       // If the catalog entry has an unmatched MAL ID, preserve legitimate
       // sequels. Broader fuzzy matching is only needed for ID-less legacy rows.
-      if (catalogMalIds.length) return true;
+      if (catalogKitsuId || catalogMalIds.length) return true;
 
       const legacyFingerprintMatch = catalogTitles.some((title) =>
         [...titleFingerprints(title)].some((key) =>
@@ -932,11 +1095,12 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
 
       return !catalogTitles.some((catalogTitle) =>
         libraryLookup.legacyTitles.some((libraryTitle) =>
-          strongTitleMatch(catalogTitle, libraryTitle)
+          !hasSavedTitleDistinction(catalogTitle, libraryTitle, joeAIState)
+          && strongTitleMatch(catalogTitle, libraryTitle)
         )
       );
     });
-  }, [discoverCatalog, libraryLookup]);
+  }, [discoverCatalog, joeAIState, libraryLookup]);
 
   const airingNow = useMemo(
     () => [...unseenCatalog]
@@ -1045,8 +1209,9 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
   const engineV3 = useMemo(() => buildDiscoverPlan({
     library: anime,
     candidates: unseenCatalog,
-    daySeed: daySeed()
-  }), [anime, unseenCatalog]);
+    daySeed: daySeed(),
+    joeAIState
+  }), [anime, unseenCatalog, joeAIState]);
 
   const dailyPick = engineV3.dailyPick;
   const primaryAnchor = engineV3.anchor;
@@ -1065,6 +1230,78 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
     movieNight: engineV3.movieNight,
     studioSpotlight: engineV3.studioSpotlight
   };
+
+  async function saveDiscoverFeedback(
+    item,
+    action,
+    reason = '',
+    sourcePrompt = 'Discover recommendation',
+    announce = true
+  ) {
+    if (!item || !onRecommendationFeedback) return null;
+
+    const intelligence = item.joeAIRecommendation || {};
+    let saved;
+    try {
+      saved = await onRecommendationFeedback({
+        animeKey: recommendationKey(item),
+        title: titleOf(item),
+        action,
+        reason,
+        traits: inferFeedbackTraits(item, reason),
+        sourcePrompt,
+        predictedMatch:
+          intelligence.confidenceReceipt?.tasteMatch
+          ?? intelligence.tasteMatch
+          ?? item.match
+          ?? null,
+        algorithmVersion: 'discover-intelligence-v2'
+      });
+    } catch (error) {
+      console.warn('Discover feedback save failed:', titleOf(item), error);
+      if (announce) {
+        setCatalogMessage(`JoeAI heard that feedback, but could not save it yet.`);
+      }
+      return null;
+    }
+
+    if (announce) {
+      const messages = {
+        good_pick: `JoeAI learned that ${titleOf(item)} looks like a good fit.`,
+        not_for_me: `${titleOf(item)} was removed from future recommendations.`,
+        already_seen: `${titleOf(item)} was marked as already seen and removed from Discover.`,
+        maybe_later: `${titleOf(item)} was saved as a maybe-later pick.`,
+        accepted: `JoeAI learned that you accepted ${titleOf(item)} from Discover.`
+      };
+      setCatalogMessage(messages[action] || `JoeAI saved your feedback for ${titleOf(item)}.`);
+    }
+
+    return saved;
+  }
+
+  async function saveDailyPickFeedback(action, reason = '') {
+    if (!dailyPick?.item || !onRecommendationFeedback) return;
+    if (action === 'not_for_me' && !reason) {
+      setDailyFeedbackMenuOpen((current) => !current);
+      return;
+    }
+
+    await saveDiscoverFeedback(
+      {
+        ...dailyPick.item,
+        joeAIRecommendation: {
+          tasteMatch: dailyPick.confidence,
+          reasons: dailyPick.reasons,
+          warnings: dailyPick.warnings,
+          confidenceReceipt: dailyPick.confidenceReceipt
+        }
+      },
+      action,
+      reason,
+      'JoeAI Pick of the Day'
+    );
+    setDailyFeedbackMenuOpen(false);
+  }
 
   async function addWatching(item) {
     if (!updateAnime || !item) return;
@@ -1092,16 +1329,31 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
           communityScore: existing.communityScore || existing.malScore || item.communityScore || item.malScore,
           malScore: existing.malScore || existing.communityScore || item.malScore || item.communityScore,
           status: 'Watching',
+          kitsuId: existing.kitsuId || existing.kitsu_id || item.kitsuId || item.kitsu_id || '',
+          recommendationAcceptedAt: new Date().toISOString(),
+          recommendationSource: 'Discover',
+          recommendationKey: recommendationKey(item),
           listUpdatedAt: new Date().toISOString()
         });
 
+        await saveDiscoverFeedback(
+          item,
+          'accepted',
+          '',
+          'Discover add to Watching',
+          false
+        );
         setCatalogMessage(`✓ ${existing.title || titleOf(item)} was already in your Library — marked as Watching.`);
         return;
       }
 
       await updateAnime({
         ...item,
-        id: item.malId ? `anime-${item.malId}` : `anime-${normalizeTitle(titleOf(item))}`,
+        id: item.kitsuId
+          ? `anime-kitsu-${item.kitsuId}`
+          : item.malId
+            ? `anime-${item.malId}`
+            : `anime-${normalizeTitle(titleOf(item))}`,
         title: titleOf(item),
         officialTitle: item.officialTitle || titleOf(item),
         status: 'Watching',
@@ -1109,9 +1361,19 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
         rewatches: 0,
         finalRank: anime.length + 1,
         notes: item.notes || 'Added from Discover.',
-        addedFrom: 'Discover'
+        addedFrom: 'Discover',
+        recommendationAcceptedAt: new Date().toISOString(),
+        recommendationSource: 'Discover',
+        recommendationKey: recommendationKey(item)
       });
 
+      await saveDiscoverFeedback(
+        item,
+        'accepted',
+        '',
+        'Discover add to Watching',
+        false
+      );
       setCatalogMessage(`✓ Added ${titleOf(item)} as Watching.`);
     } catch (error) {
       console.warn('Discover quick add failed:', titleOf(item), error);
@@ -1124,12 +1386,17 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
   async function toggleFollow(item) {
     if (!updateCatalogAnime || !item) return;
 
-    const following = !Boolean(item.followed);
+    const existing = catalog.find((candidate) => sameAnimeIdentity(candidate, item));
+    const persisted = existing || item;
+    const following = !Boolean(persisted.followed);
     await updateCatalogAnime({
       ...item,
+      ...persisted,
+      id: persisted.id || item.id,
+      kitsuId: persisted.kitsuId || item.kitsuId || '',
       followed: following,
       ignored: false,
-      followedAt: following ? (item.followedAt || new Date().toISOString()) : '',
+      followedAt: following ? (persisted.followedAt || new Date().toISOString()) : '',
       listUpdatedAt: new Date().toISOString()
     });
 
@@ -1144,6 +1411,7 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
     if (!refreshLiveDiscover || refreshingLive) return;
 
     setRefreshingLive(true);
+    setLiveState('loading');
     setCatalogMessage('Refreshing live anime feeds...');
 
     try {
@@ -1157,10 +1425,16 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
 
       if (refreshedLiveRows.length) {
         setLiveCatalog(refreshedLiveRows);
-        writeLiveDiscoverCache(refreshedLiveRows);
+        const previousSavedAt = readLiveDiscoverCacheSnapshot().savedAt;
+        writeLiveDiscoverCache(
+          refreshedLiveRows,
+          result.received > 0 ? Date.now() : previousSavedAt
+        );
       }
 
-      const cacheNote = result.usedCache ? ' Cached titles were kept where both providers were unavailable.' : '';
+      setLiveState(result.state || (result.partial ? 'partial' : 'live'));
+
+      const cacheNote = result.usedCache ? ' Cached Kitsu titles were kept for the unavailable feed.' : '';
       const providerNote = result.sources ? ` Sources: current ${result.sources.current}, upcoming ${result.sources.upcoming}.` : '';
       const partialNote = result.partial ? ' One or more feeds used a fallback or cache.' : '';
 
@@ -1169,7 +1443,13 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
       );
     } catch (error) {
       console.warn('Live Discover refresh failed:', error);
-      setCatalogMessage(error?.message || 'Could not refresh live anime right now.');
+      if (liveCatalog.length) {
+        setLiveState('offline');
+        setCatalogMessage('Kitsu is offline. Discover is safely showing the most recent cached catalog.');
+      } else {
+        setLiveState('error');
+        setCatalogMessage(error?.message || 'Could not refresh live anime right now.');
+      }
     } finally {
       setRefreshingLive(false);
     }
@@ -1199,9 +1479,28 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
     }
   }
 
-  function surpriseMe() {
-    if (!unseenCatalog.length) return;
-    setSelected?.(unseenCatalog[Math.floor(Math.random() * unseenCatalog.length)]);
+  function surpriseMe(mode = 'safe') {
+    const pool = engineV3.surprisePools?.[mode] || [];
+    if (!pool.length) {
+      setCatalogMessage('JoeAI does not have enough matching catalog data for that surprise mode yet.');
+      return;
+    }
+
+    const freshPool = pool.length > 1
+      ? pool.filter((item) => cardKey(item) !== lastSurpriseKey)
+      : pool;
+    const item = freshPool[Math.floor(Math.random() * freshPool.length)] || pool[0];
+    const labels = {
+      safe: 'Safe Bet',
+      hidden: 'Hidden Gem',
+      wild: 'Wild Card',
+      chaos: 'Pure Chaos'
+    };
+
+    setLastSurpriseKey(cardKey(item));
+    setSurpriseMenuOpen(false);
+    setCatalogMessage(`${labels[mode] || 'Surprise'}: ${titleOf(item)}`);
+    setSelected?.(item);
   }
 
   function browse(type = 'all', value = 'Entire Catalog') {
@@ -1236,12 +1535,49 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
             <button type="button" onClick={fetchMore} disabled={fetchingMore}>
               <LibraryBig /> {fetchingMore ? 'Fetching...' : 'Fetch More Titles'}
             </button>
-            <button type="button" onClick={surpriseMe}>
-              <Shuffle /> Surprise Me
-            </button>
+            <div className="discoverSurpriseControl">
+              <button
+                type="button"
+                className={surpriseMenuOpen ? 'active' : ''}
+                onClick={() => setSurpriseMenuOpen((current) => !current)}
+              >
+                <Shuffle /> Surprise Me
+              </button>
+
+              {surpriseMenuOpen && (
+                <div className="discoverSurpriseMenu">
+                  <button type="button" onClick={() => surpriseMe('safe')}>
+                    <strong>Safe Bet</strong>
+                    <small>One of your strongest matches</small>
+                  </button>
+                  <button type="button" onClick={() => surpriseMe('hidden')}>
+                    <strong>Hidden Gem</strong>
+                    <small>Strong fit with a smaller audience</small>
+                  </button>
+                  <button type="button" onClick={() => surpriseMe('wild')}>
+                    <strong>Wild Card</strong>
+                    <small>A credible step outside your usual lane</small>
+                  </button>
+                  <button type="button" onClick={() => surpriseMe('chaos')}>
+                    <strong>Pure Chaos</strong>
+                    <small>Roll the entire healthy unseen catalog</small>
+                  </button>
+                </div>
+              )}
+            </div>
             <button type="button" onClick={() => setView?.('assistant')}>
               <Sparkles /> Ask JoeAI
             </button>
+          </div>
+          <div className={`discoverDataState state-${liveState}`} role="status">
+            <span />
+            {liveState === 'loading' && 'Refreshing Kitsu — saved titles remain available.'}
+            {liveState === 'live' && 'Kitsu catalog is live and up to date.'}
+            {liveState === 'cached' && 'Showing the saved Kitsu catalog while freshness is checked.'}
+            {liveState === 'partial' && 'Kitsu returned partial data; cached rows filled the gaps.'}
+            {liveState === 'offline' && 'Kitsu is unavailable; showing the last saved catalog.'}
+            {liveState === 'error' && 'No live or cached Kitsu catalog is available yet.'}
+            {liveState === 'idle' && 'Kitsu catalog is ready to refresh.'}
           </div>
           {catalogMessage && <p className="discoverCatalogMessage">{catalogMessage}</p>}
         </div>
@@ -1263,6 +1599,7 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
           onOpen={setSelected}
           onAddWatching={addWatching}
           onToggleFollow={toggleFollow}
+          onRecommendationFeedback={saveDiscoverFeedback}
           addingKey={addingKey}
         />
       )}
@@ -1271,11 +1608,12 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
       <Shelf
         icon={<Radio />}
         title="Airing Now"
-        subtitle="Current-season anime from Jikan, with Kitsu fallback, filtered against your library."
+        subtitle="Live current-season anime, ranked against your taste and filtered against your library."
         items={recommendationPlan.airingNow}
         onOpen={setSelected}
         onAddWatching={addWatching}
         onToggleFollow={toggleFollow}
+        onRecommendationFeedback={saveDiscoverFeedback}
         addingKey={addingKey}
         onBrowse={() => browse('all', 'Entire Catalog')}
       />
@@ -1288,6 +1626,7 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
         onOpen={setSelected}
         onAddWatching={addWatching}
         onToggleFollow={toggleFollow}
+        onRecommendationFeedback={saveDiscoverFeedback}
         addingKey={addingKey}
         onBrowse={() => browse('all', 'Entire Catalog')}
       />
@@ -1306,6 +1645,14 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
               <strong>{dailyPick.confidence}% Match</strong>
               <span>Chosen from your strongest Anime DNA signals</span>
             </div>
+
+            {dailyPick.confidenceReceipt && (
+              <div className="dailyPickConfidenceReceipt">
+                <span>Data confidence <strong>{dailyPick.confidenceReceipt.dataConfidence}%</strong></span>
+                <span>Prediction confidence <strong>{dailyPick.confidenceReceipt.predictionConfidence}%</strong></span>
+                <span>{dailyPick.confidenceReceipt.genomeTier}</span>
+              </div>
+            )}
 
             <div className="dailyPickReasons">
               {(dailyPick.reasons.length ? dailyPick.reasons : [
@@ -1333,7 +1680,28 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
               >
                 {dailyPick.item.followed ? '🔔 Following' : '🔔 Follow'}
               </button>
+              <button type="button" onClick={() => saveDailyPickFeedback('good_pick')}>
+                👍 Good Pick
+              </button>
+              <button type="button" onClick={() => saveDailyPickFeedback('not_for_me')}>
+                👎 Not for Me
+              </button>
             </div>
+
+            {dailyFeedbackMenuOpen && (
+              <div className="dailyPickFeedbackReasons">
+                <strong>What missed?</strong>
+                {DISCOVER_REJECTION_REASONS.map((reason) => (
+                  <button
+                    key={reason.value}
+                    type="button"
+                    onClick={() => saveDailyPickFeedback('not_for_me', reason.value)}
+                  >
+                    {reason.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="dailyPickPoster">
@@ -1351,6 +1719,7 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
           onOpen={setSelected}
           onAddWatching={addWatching}
           onToggleFollow={toggleFollow}
+          onRecommendationFeedback={saveDiscoverFeedback}
           addingKey={addingKey}
           onBrowse={() => browse('genre', (primaryAnchor.genres || [])[0] || 'Entire Catalog')}
         />
@@ -1366,6 +1735,7 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
         onOpen={setSelected}
         onAddWatching={addWatching}
         onToggleFollow={toggleFollow}
+        onRecommendationFeedback={saveDiscoverFeedback}
         addingKey={addingKey}
         onBrowse={() => browse('all', 'JoeAI Picks')}
       />
@@ -1378,6 +1748,7 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
         onOpen={setSelected}
         onAddWatching={addWatching}
         onToggleFollow={toggleFollow}
+        onRecommendationFeedback={saveDiscoverFeedback}
         addingKey={addingKey}
         onBrowse={() => browse('all', 'Entire Catalog')}
       />
@@ -1390,6 +1761,7 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
         onOpen={setSelected}
         onAddWatching={addWatching}
         onToggleFollow={toggleFollow}
+        onRecommendationFeedback={saveDiscoverFeedback}
         addingKey={addingKey}
         onBrowse={() => browse('hidden', 'Hidden Gems')}
       />
@@ -1402,6 +1774,7 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
         onOpen={setSelected}
         onAddWatching={addWatching}
         onToggleFollow={toggleFollow}
+        onRecommendationFeedback={saveDiscoverFeedback}
         addingKey={addingKey}
         onBrowse={() => browse('genre', 'Psychological')}
       />
@@ -1414,6 +1787,7 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
         onOpen={setSelected}
         onAddWatching={addWatching}
         onToggleFollow={toggleFollow}
+        onRecommendationFeedback={saveDiscoverFeedback}
         addingKey={addingKey}
         onBrowse={() => browse('genre', 'Drama')}
       />
@@ -1426,6 +1800,7 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
         onOpen={setSelected}
         onAddWatching={addWatching}
         onToggleFollow={toggleFollow}
+        onRecommendationFeedback={saveDiscoverFeedback}
         addingKey={addingKey}
         onBrowse={() => browse('all', 'Entire Catalog')}
       />
@@ -1439,6 +1814,7 @@ export function Discover({ anime = [], catalog = [], setSelected, setView, updat
           onOpen={setSelected}
           onAddWatching={addWatching}
           onToggleFollow={toggleFollow}
+          onRecommendationFeedback={saveDiscoverFeedback}
           addingKey={addingKey}
           onBrowse={() => browse('studio', topStudioDisplay)}
         />

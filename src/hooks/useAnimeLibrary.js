@@ -4,9 +4,12 @@ import { isRemoteCover, needsArtworkRepair, sleep } from '../services/metadata';
 import { hasManualMetadataOverride } from '../services/metadataProvider';
 import { fetchKitsuMetadata } from '../services/kitsuProvider';
 import { animeRepository } from '../repositories/animeRepository';
+import { sameAnimeIdentity } from '../services/titleIdentity';
 import { updateCatalogMetadata, fetchMoreCatalogTitles as fetchMoreCatalogPage, fetchLiveDiscoverCatalog } from '../services/catalogService';
 import seedData from '../data/animeSeed.json';
 import { createNewUserDemoDatabase } from '../services/newUserMode';
+import { auditGenomeCoverage } from '../ai/genome/runtime/autoGenomeRuntime';
+import { preservePersonalAnimeData } from '../services/personalAnimeData';
 
 
 function hasGoodMetadata(item = {}) {
@@ -96,8 +99,8 @@ async function withTimeout(promise, timeoutMs, label = 'Metadata lookup') {
 }
 
 async function fetchMetadataWithBackoff(item = {}) {
-  // Library repair is deliberately Kitsu-only. This avoids Jikan 504/rate-limit
-  // stalls while retaining Kitsu categories and production relationships.
+  // Library repair is deliberately Kitsu-only so every repaired title uses the
+  // same categories and production relationships.
   return withTimeout(
     fetchKitsuMetadata(item),
     METADATA_LOOKUP_TIMEOUT_MS,
@@ -156,6 +159,15 @@ export function useAnimeLibrary() {
 
   const anime = data.anime || [];
   const catalog = data.catalog || [];
+  const joeAI = data.joeAI || {
+    feedback: [],
+    preferences: [],
+    conversation: {
+      lastRecommendations: [],
+      lastReferencedTitle: '',
+      lastPrompt: ''
+    }
+  };
 
   async function enableNewUserMode() {
     localStorage.setItem('joeanime-new-user-mode', 'true');
@@ -280,15 +292,20 @@ export function useAnimeLibrary() {
 
     if (newUserMode) {
       const currentCatalog = current.catalog || [];
-      const key = String(updatedAnime.id || updatedAnime.malId || updatedAnime.title);
-      const exists = currentCatalog.some((item) =>
-        String(item.id || item.malId || item.title) === key
+      const existing = currentCatalog.find((item) =>
+        String(item.id) === String(updatedAnime.id) ||
+        sameAnimeIdentity(item, updatedAnime)
       );
 
-      const nextCatalog = exists
+      const nextCatalog = existing
         ? currentCatalog.map((item) =>
-            String(item.id || item.malId || item.title) === key
-              ? { ...item, ...updatedAnime }
+            String(item.id) === String(existing.id)
+              ? {
+                  ...item,
+                  ...updatedAnime,
+                  id: existing.id,
+                  kitsuId: updatedAnime.kitsuId || item.kitsuId || ''
+                }
               : item
           )
         : [...currentCatalog, updatedAnime];
@@ -303,6 +320,140 @@ export function useAnimeLibrary() {
     dataRef.current = saved;
     setData(saved);
     return saved;
+  }
+
+  async function recordJoeAIFeedback(entry) {
+    const current = dataRef.current || data;
+    const createdAt = entry.createdAt || new Date().toISOString();
+    const payload = { ...entry, createdAt };
+
+    if (newUserMode) {
+      const nextState = {
+        ...(current.joeAI || {}),
+        feedback: [payload, ...(current.joeAI?.feedback || [])]
+      };
+      const next = { ...current, joeAI: nextState };
+      dataRef.current = next;
+      setData(next);
+      return nextState;
+    }
+
+    const nextState = await animeRepository.recordJoeAIFeedback(payload);
+    const next = { ...current, joeAI: nextState };
+    dataRef.current = next;
+    setData(next);
+    return nextState;
+  }
+
+  async function setJoeAIPreference(preference) {
+    const current = dataRef.current || data;
+    const payload = {
+      ...preference,
+      updatedAt: preference.updatedAt || new Date().toISOString()
+    };
+
+    if (newUserMode) {
+      const nextState = {
+        ...(current.joeAI || {}),
+        preferences: [
+          payload,
+          ...(current.joeAI?.preferences || []).filter((item) => item.key !== payload.key)
+        ]
+      };
+      const next = { ...current, joeAI: nextState };
+      dataRef.current = next;
+      setData(next);
+      return nextState;
+    }
+
+    const nextState = await animeRepository.setJoeAIPreference(payload);
+    const next = { ...current, joeAI: nextState };
+    dataRef.current = next;
+    setData(next);
+    return nextState;
+  }
+
+  async function deleteJoeAIFeedback(id) {
+    const current = dataRef.current || data;
+    const nextState = newUserMode
+      ? {
+          ...(current.joeAI || {}),
+          feedback: (current.joeAI?.feedback || []).filter((entry) =>
+            String(entry.id) !== String(id)
+          )
+        }
+      : await animeRepository.deleteJoeAIFeedback(id);
+    const next = { ...current, joeAI: nextState };
+    dataRef.current = next;
+    setData(next);
+    return nextState;
+  }
+
+  async function deleteJoeAIPreference(key) {
+    const current = dataRef.current || data;
+    const nextState = newUserMode
+      ? {
+          ...(current.joeAI || {}),
+          preferences: (current.joeAI?.preferences || []).filter((entry) =>
+            entry.key !== key
+          )
+        }
+      : await animeRepository.deleteJoeAIPreference(key);
+    const next = { ...current, joeAI: nextState };
+    dataRef.current = next;
+    setData(next);
+    return nextState;
+  }
+
+  async function resetJoeAILearning() {
+    const current = dataRef.current || data;
+    const nextState = newUserMode
+      ? {
+          ...(current.joeAI || {}),
+          feedback: [],
+          preferences: []
+        }
+      : await animeRepository.resetJoeAILearning();
+    const next = { ...current, joeAI: nextState };
+    dataRef.current = next;
+    setData(next);
+    return nextState;
+  }
+
+  async function setJoeAIConversationContext(context = {}) {
+    const current = dataRef.current || data;
+    const conversation = {
+      lastRecommendations: Array.isArray(context.lastRecommendations)
+        ? context.lastRecommendations.slice(0, 10)
+        : [],
+      lastReferencedTitle: String(context.lastReferencedTitle || ''),
+      lastPrompt: String(context.lastPrompt || '')
+    };
+    const nextState = newUserMode
+      ? { ...(current.joeAI || {}), conversation }
+      : await animeRepository.setJoeAIConversationContext(conversation);
+    const next = { ...current, joeAI: nextState };
+    dataRef.current = next;
+    setData(next);
+    return nextState;
+  }
+
+  async function clearJoeAIConversationContext() {
+    const current = dataRef.current || data;
+    const nextState = newUserMode
+      ? {
+          ...(current.joeAI || {}),
+          conversation: {
+            lastRecommendations: [],
+            lastReferencedTitle: '',
+            lastPrompt: ''
+          }
+        }
+      : await animeRepository.clearJoeAIConversationContext();
+    const next = { ...current, joeAI: nextState };
+    dataRef.current = next;
+    setData(next);
+    return nextState;
   }
 
   async function deleteAnime(id) {
@@ -324,12 +475,14 @@ export function useAnimeLibrary() {
       };
     }
 
+    const current = dataRef.current || data;
     const next = {
-      ...data,
-      anime: anime.filter((item) => String(item.id) !== String(id))
+      ...current,
+      anime: (current.anime || []).filter((item) => String(item.id) !== String(id))
     };
 
     const saved = await animeRepository.saveDatabase(next);
+    dataRef.current = saved;
     setData(saved);
     return saved;
   }
@@ -518,7 +671,7 @@ export function useAnimeLibrary() {
           // A normal database update refreshes metadata without renaming the
           // user's library entry. Official title data may be stored separately,
           // but the display title remains untouched.
-          nextAnime[index] = setItemSyncStatus({
+          nextAnime[index] = setItemSyncStatus(preservePersonalAnimeData(existing, {
             ...existing,
             ...refreshed,
             title: existing.title,
@@ -534,7 +687,7 @@ export function useAnimeLibrary() {
                 refreshed.title
               ])
             ].filter((value) => value && value !== existing.title)
-          }, {
+          }), {
             metadata: true,
             poster: !needsArtworkRepair({ ...existing, ...refreshed }),
             dirty: Boolean(refreshed.metadataNeedsRefresh),
@@ -659,52 +812,127 @@ export function useAnimeLibrary() {
 
     let savedData = catalogResult.saved;
 
+    let genomeSummary = {
+      supported: Boolean(window.JoeAnimeDB?.generateMissingGenomesForLibrary),
+      covered: 0,
+      missing: 0,
+      generated: 0,
+      tiers: {},
+      status: 'not-run'
+    };
+
     if (window.JoeAnimeDB?.generateMissingGenomesForLibrary) {
+      const genomeAudit = auditGenomeCoverage(savedData.anime || []);
+      genomeSummary = {
+        supported: true,
+        covered: genomeAudit.coveredCount,
+        missing: genomeAudit.missingCount,
+        generated: 0,
+        tiers: genomeAudit.tiers,
+        status: genomeAudit.missingCount ? 'generating' : 'complete'
+      };
+      const tierSummary = Object.entries(genomeAudit.tiers)
+        .map(([tier, count]) => `${tier}: ${count}`)
+        .join(', ');
+
       setSyncProgress({
         step: 2,
         stepTotal: 2,
         label: 'Checking Genome Coverage',
-        processed: 0,
-        total: savedData.anime?.length || 0,
-        percent: 95,
-        current: 'Running local Genome audit'
+        processed: genomeAudit.coveredCount,
+        total: genomeAudit.total,
+        percent: genomeAudit.total
+          ? Math.round((genomeAudit.coveredCount / genomeAudit.total) * 100)
+          : 100,
+        current: genomeAudit.missingCount
+          ? `${genomeAudit.missingCount} missing — ${genomeAudit.coveredCount} already covered`
+          : 'Every library title already has Genome coverage'
       });
 
-      setSyncText('Checking local Genome coverage...');
+      setSyncText(
+        genomeAudit.missingCount
+          ? `Genome audit: skipping ${genomeAudit.coveredCount} covered title(s)${tierSummary ? ` (${tierSummary})` : ''}. Generating ${genomeAudit.missingCount} missing Genome(s)...`
+          : `Genome audit complete: all ${genomeAudit.coveredCount} title(s) are already covered${tierSummary ? ` (${tierSummary})` : ''}. Nothing to generate.`
+      );
 
       // Genome generation is a bonus post-update task. It must never trap the
       // entire database updater if the Electron handler stalls or an AI call
       // never resolves.
-      const GENOME_TIMEOUT_MS = 15000;
+      const GENOME_TIMEOUT_MS = 10 * 60 * 1000;
 
       try {
-        const genomeResult = await Promise.race([
-          window.JoeAnimeDB.generateMissingGenomesForLibrary(savedData.anime || [], {
-            limit: 0,
-            delayMs: 1200
-          }),
-          new Promise((resolve) =>
-            setTimeout(() => resolve({
-              ok: false,
-              timedOut: true,
-              error: 'Genome audit timed out'
-            }), GENOME_TIMEOUT_MS)
-          )
-        ]);
-
-        if (!genomeResult?.ok) {
-          if (genomeResult?.timedOut) {
-            console.warn('Genome audit timed out; finishing database update normally.');
-            setSyncText('Database updated. Genome audit timed out and was skipped for now.');
-          } else {
-            console.warn('Genome batch failed:', genomeResult);
-            setSyncText(
-              'Database updated, but Genome generation was skipped: ' +
-              (genomeResult?.error || 'Unknown error')
+        if (!genomeAudit.missingCount) {
+          console.info('Genome audit skipped generation; complete coverage:', genomeAudit.tiers);
+        } else {
+          const stopGenomeProgress = window.JoeAnimeDB.onGenomeGenerationProgress?.((progress = {}) => {
+            const generated = Math.max(
+              0,
+              Math.min(genomeAudit.missingCount, Number(progress.processed || 0))
             );
+            const overallProcessed = Math.min(
+              genomeAudit.total,
+              genomeAudit.coveredCount + generated
+            );
+            const overallPercent = genomeAudit.total
+              ? Math.round((overallProcessed / genomeAudit.total) * 100)
+              : 100;
+            const currentTitle = progress.title || 'Generating missing Genome';
+
+            setSyncProgress({
+              step: 2,
+              stepTotal: 2,
+              label: 'Generating Missing Genomes',
+              processed: overallProcessed,
+              total: genomeAudit.total,
+              percent: overallPercent,
+              current: `${generated}/${genomeAudit.missingCount} generated — ${currentTitle}`
+            });
+
+            setSyncText(
+              `Genome audit skipped ${genomeAudit.coveredCount} covered title(s). ` +
+              `Generating ${generated}/${genomeAudit.missingCount}: ${currentTitle}`
+            );
+          });
+
+          let genomeResult;
+          try {
+            genomeResult = await Promise.race([
+              window.JoeAnimeDB.generateMissingGenomesForLibrary(genomeAudit.missing, {
+                limit: 0,
+                delayMs: 0
+              }),
+              new Promise((resolve) =>
+                setTimeout(() => resolve({
+                  ok: false,
+                  timedOut: true,
+                  error: 'Genome audit timed out'
+                }), GENOME_TIMEOUT_MS)
+              )
+            ]);
+          } finally {
+            stopGenomeProgress?.();
+          }
+
+          if (!genomeResult?.ok) {
+            if (genomeResult?.timedOut) {
+              genomeSummary.status = 'timed-out';
+              console.warn('Genome audit timed out; finishing database update normally.');
+              setSyncText('Database updated. Genome audit timed out and was skipped for now.');
+            } else {
+              genomeSummary.status = 'failed';
+              console.warn('Genome batch failed:', genomeResult);
+              setSyncText(
+                'Database updated, but Genome generation was skipped: ' +
+                (genomeResult?.error || 'Unknown error')
+              );
+            }
+          } else {
+            genomeSummary.generated = genomeAudit.missingCount;
+            genomeSummary.status = 'complete';
           }
         }
       } catch (error) {
+        genomeSummary.status = 'failed';
         console.warn('Genome audit crashed; finishing database update normally.', error);
         setSyncText('Database updated. Genome audit failed and was skipped for now.');
       }
@@ -723,16 +951,19 @@ export function useAnimeLibrary() {
     setData(savedData);
 
     const missing = (savedData.anime || nextAnime).filter((item) => needsArtworkRepair(item)).length;
-
-    setSyncProgress({
-      step: 2,
-      stepTotal: 2,
-      label: 'Update Complete',
-      processed: catalogResult.updated,
-      total: catalogResult.total,
-      percent: 100,
-      current: ''
-    });
+    const summary = {
+      completedAt: new Date().toISOString(),
+      scanned: auditRows.length,
+      skipped: alreadyReady,
+      refreshed: updateQueue.length,
+      missingArtwork: missing,
+      catalog: {
+        updated: Number(catalogResult.updated || 0),
+        total: Number(catalogResult.total || 0),
+        deferred: Boolean(catalogResult.deferred)
+      },
+      genome: genomeSummary
+    };
 
     setSyncText(
       missing
@@ -745,12 +976,38 @@ export function useAnimeLibrary() {
     setSyncing(false);
     setSyncText('');
     setSyncProgress(emptyProgress);
+    return summary;
+  }
+
+  async function restoreBackup(database = {}) {
+    setLoading(true);
+    try {
+      const restored = await animeRepository.restoreBackup(database);
+      dataRef.current = restored;
+      setData(restored);
+      return restored;
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function resetDatabase() {
+    setLoading(true);
+    try {
+      const reset = await animeRepository.reset();
+      dataRef.current = reset;
+      setData(reset);
+      return reset;
+    } finally {
+      setLoading(false);
+    }
   }
 
   return {
     data,
     anime,
     catalog,
+    joeAI,
     filtered,
     stats,
     loading,
@@ -766,9 +1023,18 @@ export function useAnimeLibrary() {
     updateData,
     updateAnime,
     updateCatalogAnime,
+    recordJoeAIFeedback,
+    setJoeAIPreference,
+    deleteJoeAIFeedback,
+    deleteJoeAIPreference,
+    resetJoeAILearning,
+    setJoeAIConversationContext,
+    clearJoeAIConversationContext,
     deleteAnime,
     fetchMoreCatalogTitles,
     refreshLiveDiscover,
-    syncMetadata
+    syncMetadata,
+    restoreBackup,
+    resetDatabase
   };
 }

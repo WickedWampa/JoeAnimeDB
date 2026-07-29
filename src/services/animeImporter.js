@@ -30,10 +30,6 @@ async function retryImportStage(label, operation, { attempts = 2, delayMs = IMPO
   throw lastError || new Error(`${label} failed`);
 }
 
-const BLOCKED_TYPES = new Set(['Music', 'CM', 'PV', 'Unknown']);
-const SIDE_CONTENT_RE = /picture drama|recap|summary|special|ova|ona|omake|chibi|mini|digest|pv|cm|music|trailer/i;
-const SEQUEL_RE = /\b(part\s*2|part\s*3|season\s*2|season\s*3|2nd|3rd|second season|third season|ii|iii|final)\b/i;
-const QUERY_SEQUEL_RE = /\b(part|season|2|3|ii|iii|second|third|final)\b/i;
 const EXTRA_STOP_WORDS = new Set([
   'the', 'of', 'and', 'a', 'an', 'season', 'part', 'tv', 'movie', 'ova',
   'special', 'specials', 'second', 'third', 'final'
@@ -66,25 +62,6 @@ function allCandidateTitleKeys(candidate = {}) {
     .filter(Boolean)
     .map(titleKey)
     .filter(Boolean);
-}
-
-function remoteCover(match) {
-  return (
-    match.images?.jpg?.large_image_url ||
-    match.images?.webp?.large_image_url ||
-    match.images?.jpg?.image_url ||
-    match.images?.webp?.image_url ||
-    ''
-  );
-}
-
-function getAllTitles(match) {
-  return [
-    match.title,
-    match.title_english,
-    match.title_japanese,
-    ...(match.title_synonyms || [])
-  ].filter(Boolean);
 }
 
 function getCandidateTitles(result) {
@@ -156,14 +133,6 @@ function labelWeight(label) {
   }
 }
 
-function extraWordPenalty(match, query) {
-  const queryWords = importantWords(query);
-  const titleWords = importantWords(match.title_english || match.title || '');
-  if (!queryWords.length || !titleWords.length) return 0;
-  const extra = Math.max(0, titleWords.length - queryWords.length);
-  return Math.min(55, extra * 5);
-}
-
 function confidenceFromScore(score, label) {
   const base = Math.max(0, Math.min(99, Math.round(score / 6)));
   const floor = {
@@ -190,10 +159,15 @@ function confidenceFromScore(score, label) {
 }
 
 export function animeIdFromTitle(item) {
-  return `anime-${String(item?.malId || item?.mal_id || item?.id || titleKey(item?.title)).replace(/[^a-z0-9-]+/gi, '-').toLowerCase()}`;
+  const providerId = item?.kitsuId
+    ? `kitsu-${item.kitsuId}`
+    : item?.malId || item?.mal_id || item?.id || titleKey(item?.title);
+
+  return `anime-${String(providerId).replace(/[^a-z0-9-]+/gi, '-').toLowerCase()}`;
 }
 
 export function findDuplicateAnime(library = [], candidate = {}) {
+  const candidateKitsuId = candidate.kitsuId;
   const candidateMalId = candidate.malId || candidate.mal_id;
   const candidateKeys = new Set([
     ...allCandidateTitleKeys(candidate),
@@ -201,7 +175,9 @@ export function findDuplicateAnime(library = [], candidate = {}) {
   ]);
 
   return library.find((item) => {
+    const itemKitsuId = item.kitsuId;
     const itemMalId = item.malId || item.mal_id;
+    if (candidateKitsuId && itemKitsuId && String(candidateKitsuId) === String(itemKitsuId)) return true;
     if (candidateMalId && itemMalId && String(candidateMalId) === String(itemMalId)) return true;
 
     const itemKeys = [
@@ -303,6 +279,7 @@ export function mergeAnimeMetadata(existing = {}, incoming = {}, statusOverride)
     episodes: incoming.episodes || incoming.episodeCount || existing.episodes || existing.episodeCount || 0,
     communityScore: incoming.communityScore || existing.communityScore || '',
     malScore: incoming.malScore || incoming.communityScore || existing.malScore || existing.communityScore || '',
+    kitsuId: incoming.kitsuId || existing.kitsuId || '',
     malId: incoming.malId || existing.malId || '',
     officialTitle: incoming.officialTitle || existing.officialTitle || incoming.title || existing.title,
     japaneseTitle: incoming.japaneseTitle || existing.japaneseTitle || '',
@@ -311,74 +288,6 @@ export function mergeAnimeMetadata(existing = {}, incoming = {}, statusOverride)
     metadataUpdatedAt: incoming.metadataUpdatedAt || new Date().toISOString()
   });
 }
-
-export function normalizeJikanAnime(match, base = {}) {
-  // SPRINT4_AUTO_KNOWLEDGE_NORMALIZE
-  const genres = [
-    ...(match.genres || []),
-    ...(match.themes || []),
-    ...(match.demographics || [])
-  ].map((item) => item.name);
-
-  return enrichAnimeKnowledge({
-    ...base,
-    id: base.id || `anime-${match.mal_id}`,
-    malId: match.mal_id,
-    title: match.title_english || match.title || base.title,
-    officialTitle: match.title_english || match.title || base.title,
-    japaneseTitle: match.title_japanese || '',
-    titleSynonyms: match.title_synonyms || [],
-    cover: remoteCover(match) || base.cover || '',
-    trailerUrl: match.trailer?.url || base.trailerUrl || '',
-    synopsis: match.synopsis || base.synopsis || '',
-    type: match.type || base.type || 'TV',
-    year: match.year || base.year || '',
-    episodeCount: match.episodes || base.episodeCount || 0,
-    episodes: match.episodes || base.episodes || 0,
-    communityScore: match.score || base.communityScore || '',
-    malScore: match.score || base.malScore || '',
-    studio: match.studios?.length ? match.studios.map((studio) => studio.name).join(' / ') : base.studio || '',
-    genres: genres.length ? [...new Set([...(base.genres || []), ...genres])].slice(0, 8) : base.genres || [],
-    metadataUpdatedAt: new Date().toISOString()
-  });
-}
-
-function rankResult(match, query) {
-  const clean = cleanTitle(query);
-  const normalized = normalizeJikanAnime(match);
-  const label = classifyResult(normalized, clean);
-  const allKeys = getAllTitles(match).map(titleKey);
-  const wantedKey = titleKey(clean);
-  const wantedWords = importantWords(clean);
-  const primaryWords = importantWords(match.title_english || match.title || '');
-
-  let score = labelWeight(label); const allTitleText = getAllTitles(match).join(' ');
-
-  if (allKeys.some((key) => key === wantedKey)) score += 120;
-  if (allKeys.some((key) => key.startsWith(wantedKey))) score += 60;
-  if (wantedWords.length && wantedWords.every((word) => primaryWords.includes(word))) score += 45;
-
-  if (match.type === 'TV') score += 85;
-  if (match.type === 'Movie') score += 12;
-  if (match.type === 'OVA' || match.type === 'Special' || match.type === 'ONA') score -= 45;
-  if (BLOCKED_TYPES.has(match.type)) score -= 500;
-  if (SIDE_CONTENT_RE.test(allTitleText) && !SIDE_CONTENT_RE.test(clean)) score -= 160;
-  if (SEQUEL_RE.test(allTitleText) && !QUERY_SEQUEL_RE.test(clean)) score -= 80;
-  score -= extraWordPenalty(match, clean);
-
-  if (match.episodes) score += Math.min(match.episodes, 50) / 8;
-  if (match.score) score += match.score * 1.5; if (match.members) score += Math.min(45, Math.log10(match.members + 1) * 7);
-
-  if (label === 'Exact Match' || label === 'Best Match') {
-    const year = Number(match.year || 9999);
-    score += Math.max(0, 40 - Math.max(0, year - 2000) / 2);
-  }
-
-  if (label === 'Other Franchise') score -= 80;
-
-  return { score, label };
-}
-
 
 function createLocalFallbackAnime(title, status = 'Watching', reason = '') {
   return enrichAnimeKnowledge({
@@ -426,45 +335,6 @@ function localEntryHasUsableMetadata(item = {}) {
   return Boolean(hasGenres && hasIdentity && hasCoreDetails);
 }
 
-
-async function fetchJikanSearchWithRetry(url, { attempts = 2, timeoutMs = 6500 } = {}) {
-  let lastError = null;
-
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-
-    try {
-      const response = await fetch(url, { signal: controller.signal });
-
-      if (response.ok) return response;
-
-      const retryable = response.status === 429 || response.status >= 500;
-      const error = new Error(`Jikan ${response.status}`);
-      error.status = response.status;
-      lastError = error;
-
-      if (!retryable || attempt === attempts) throw error;
-
-      const retryAfterSeconds = Number(response.headers?.get?.('retry-after') || 0);
-      const waitMs = retryAfterSeconds > 0
-        ? Math.min(retryAfterSeconds * 1000, 2500)
-        : 900;
-
-      await new Promise((resolve) => setTimeout(resolve, waitMs));
-    } catch (error) {
-      lastError = error;
-
-      if (attempt === attempts) throw error;
-
-      await new Promise((resolve) => setTimeout(resolve, 900));
-    } finally {
-      clearTimeout(timer);
-    }
-  }
-
-  throw lastError || new Error('Jikan search failed');
-}
 
 async function completeImportedMetadata(candidate = {}, library = []) {
   if (!needsWikidataRepair(candidate)) {

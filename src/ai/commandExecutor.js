@@ -5,6 +5,10 @@ import { maybeKnowledgeFirstRecommendation } from './knowledgeFirstRecommender';
 import { routeJoeAIConversation } from './conversation/conversationEngine';
 import { explainGenreDNA } from './genreDNAExplainer';
 import { explainTastePattern } from './tastePatternExplainer';
+import {
+  inferFeedbackTraits,
+  normalizeJoeAIKey
+} from './intelligence/joeAIIntelligence';
 
 export function makeTextResult(text) {
   return { type: 'text', text };
@@ -90,7 +94,7 @@ function shouldAskRemoteCandidateSelection(query, results = []) {
   const topKeys = candidateKeys(top);
   const topIsExact = topKeys.includes(queryKey) || top.importLabel === 'Exact Match';
 
-  // If Jikan found one obvious exact match, let the import proceed normally.
+  // If the metadata provider found one obvious exact match, let the import proceed normally.
   if (topIsExact && Number(top.importConfidence || 0) >= 96) return false;
 
   // Otherwise, if there are several plausible matches, ask the user instead of guessing.
@@ -287,6 +291,15 @@ export async function executeSingleAddCommand({ anime = [], updateAnime, command
 
   await updateAnime(nextAnime);
 
+  if (result.metadataLookupFailed || nextAnime.metadataNeedsRefresh) {
+    return makeTextResult([
+      `Added ${nextAnime.officialTitle || nextAnime.title} as ${nextAnime.status}.`,
+      '',
+      '🍜 Metadata is unavailable or incomplete right now, so I saved the title locally instead of guessing.',
+      'Your library entry is safe. Run Update Database when connected to complete its poster, studio, genres, and other details.'
+    ].join('\n'));
+  }
+
   return makeTextResult(
     `Added ${nextAnime.officialTitle || nextAnime.title} as ${nextAnime.status}. Metadata fetched.`
   );
@@ -417,6 +430,16 @@ export function answerHelp() {
         ]
       },
       {
+        icon: '🎓',
+        title: 'Teach JoeAI',
+        items: [
+          'I liked One Piece for the crew',
+          "I don't care about studio",
+          'Long anime are not a problem',
+          "Don't recommend recap movies"
+        ]
+      },
+      {
         icon: '📚',
         title: 'Library',
         items: [
@@ -468,7 +491,7 @@ function topList(items, label) {
   return items.map(([name, count], index) => `${index + 1}. ${name} — ${count}`).join('\n');
 }
 
-function answerConversationalQuestion({ text = '', anime = [], catalog = [], brain }) {
+function answerConversationalQuestion({ text = '', anime = [], catalog = [], brain, joeAIState = {} }) {
   const lower = String(text).toLowerCase();
 
   // Dashboard and chat DNA explanations must be handled before any
@@ -555,7 +578,7 @@ function answerConversationalQuestion({ text = '', anime = [], catalog = [], bra
     ].filter(Boolean).join('\n'));
   }
 
-  const conversationAnswer = routeJoeAIConversation({ text, anime, catalog });
+  const conversationAnswer = routeJoeAIConversation({ text, anime, catalog, joeAIState });
   if (conversationAnswer) {
     return conversationAnswer;
   }
@@ -599,7 +622,17 @@ const intelligenceAnswer = answerLibraryQuestion(text, anime, catalog);
   return makeTextResult(brain?.answer?.(text || '') || 'Ask me what I can do.');
 }
 
-export async function executeJoeAICommand({ intent, anime = [], catalog = [], updateAnime, brain, onProgress }) {
+export async function executeJoeAICommand({
+  intent,
+  anime = [],
+  catalog = [],
+  updateAnime,
+  brain,
+  joeAIState = {},
+  recordRecommendationFeedback,
+  setJoeAIPreference,
+  onProgress
+}) {
   switch (intent.kind) {
     case 'help':
       return answerHelp();
@@ -615,6 +648,36 @@ export async function executeJoeAICommand({ intent, anime = [], catalog = [], up
 
     case 'tastePattern':
       return explainTastePattern({ pattern: intent.pattern, anime });
+
+    case 'teaching': {
+      const teaching = intent.teaching || {};
+
+      if (teaching.kind === 'preference' && teaching.preference) {
+        await setJoeAIPreference?.(teaching.preference);
+        return makeTextResult(`🧠 ${teaching.response || 'Preference remembered.'}`);
+      }
+
+      if (teaching.kind === 'titleFeedback' && teaching.title) {
+        const matched = [...anime, ...catalog].find((item) => {
+          const titles = [item.title, item.officialTitle, ...(item.titleSynonyms || [])];
+          return titles.some((title) => normalizeJoeAIKey(title) === normalizeJoeAIKey(teaching.title));
+        });
+        await recordRecommendationFeedback?.({
+          animeKey: matched
+            ? (matched.malId ? `mal:${matched.malId}` : `title:${normalizeJoeAIKey(matched.title)}`)
+            : `title:${normalizeJoeAIKey(teaching.title)}`,
+          title: matched?.officialTitle || matched?.title || teaching.title,
+          action: teaching.action,
+          reason: teaching.reason || '',
+          traits: inferFeedbackTraits(matched || { title: teaching.title }, teaching.reason),
+          sourcePrompt: intent.text || '',
+          algorithmVersion: 'joeai-intelligence-v1'
+        });
+        return makeTextResult(`🧠 ${teaching.response || 'JoeAI learned from that.'}`);
+      }
+
+      return makeTextResult('I heard the correction, but I could not turn it into a saved preference yet.');
+    }
 
     case 'singleAdd':
       return executeSingleAddCommand({
@@ -682,12 +745,16 @@ export async function executeJoeAICommand({ intent, anime = [], catalog = [], up
         text: explanationPrompt,
         anime,
         catalog,
-        brain
+        brain,
+        joeAIState
       });
     }
 
     case 'recommendation': {
-      const picks = brain?.recommendations?.(5) || [];
+      const picks = brain?.recommendations?.(5, {
+        prompt: intent.text || '',
+        joeAIState
+      }) || [];
 
       return picks.length
         ? {
@@ -701,6 +768,6 @@ export async function executeJoeAICommand({ intent, anime = [], catalog = [], up
 
     case 'question':
     default:
-      return answerConversationalQuestion({ text: intent.text || '', anime, catalog, brain });
+      return answerConversationalQuestion({ text: intent.text || '', anime, catalog, brain, joeAIState });
   }
 }

@@ -2,17 +2,17 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Bell, Search, CalendarClock, Radio, Radar, RefreshCw, Sparkles, Flag, CalendarDays, Tv } from 'lucide-react';
 import { Poster } from '../components/Poster';
 import { fetchKitsuFollowingSnapshot } from '../services/kitsuProvider';
+import { classifyAnimeRelease } from '../services/releaseState';
 import '../styles/following.css';
 
 function titleOf(item = {}) {
   return item.officialTitle || item.title || 'Unknown title';
 }
 
-function knownReleaseText(item = {}) {
-  if (item.airedFrom) return item.airedFrom;
-  if (item.year) return String(item.year);
-  if (item.status) return item.status;
-  return 'Release information not available yet';
+function followingIdentityKey(item = {}) {
+  if (item.kitsuId || item.kitsu_id) return `kitsu:${item.kitsuId || item.kitsu_id}`;
+  if (item.malId || item.mal_id) return `mal:${item.malId || item.mal_id}`;
+  return `title:${String(titleOf(item)).toLowerCase().replace(/[^a-z0-9]+/g, '')}`;
 }
 
 const FOLLOWING_AUTO_CHECK_MS = 6 * 60 * 60 * 1000;
@@ -197,9 +197,29 @@ export function FollowingPage({ catalog = [], setSelected, updateCatalogAnime })
 
   const followed = useMemo(() => {
     const clean = query.trim().toLowerCase();
+    const unique = new Map();
 
-    return (catalog || [])
+    (catalog || [])
       .filter((item) => Boolean(item.followed))
+      .forEach((item) => {
+        const key = followingIdentityKey(item);
+        const current = unique.get(key);
+        if (!current) {
+          unique.set(key, item);
+          return;
+        }
+
+        const currentUpdated = new Date(current.listUpdatedAt || 0).getTime() || 0;
+        const itemUpdated = new Date(item.listUpdatedAt || 0).getTime() || 0;
+        unique.set(
+          key,
+          itemUpdated >= currentUpdated
+            ? { ...current, ...item }
+            : { ...item, ...current }
+        );
+      });
+
+    return [...unique.values()]
       .filter((item) => {
         if (!clean) return true;
         return [
@@ -258,6 +278,27 @@ export function FollowingPage({ catalog = [], setSelected, updateCatalogAnime })
         const snapshot = await fetchKitsuFollowingSnapshot(item);
         const detectedEvents = detectFollowingEvents(item, snapshot);
         const checkedAt = snapshot.checkedAt || new Date().toISOString();
+        const delayedEvent = detectedEvents.find((event) => {
+          if (event.type !== 'release_date_changed') return false;
+          const previousDate = new Date(event.previousDate || 0);
+          const nextDate = new Date(event.nextDate || 0);
+          return (
+            !Number.isNaN(previousDate.getTime()) &&
+            !Number.isNaN(nextDate.getTime()) &&
+            nextDate > previousDate &&
+            nextDate > new Date()
+          );
+        });
+        const snapshotStart = new Date(snapshot.startDate || snapshot.airedFrom || 0);
+        const stillDelayed = Boolean(
+          delayedEvent ||
+          (
+            item.releaseDelayed &&
+            normalizedStatus(snapshot.status) === 'upcoming' &&
+            !Number.isNaN(snapshotStart.getTime()) &&
+            snapshotStart > new Date()
+          )
+        );
 
         const events = detectedEvents.map((event) => {
           const notified = notificationsEnabled
@@ -291,6 +332,12 @@ export function FollowingPage({ catalog = [], setSelected, updateCatalogAnime })
           followingSnapshot: snapshot,
           followingLastCheckedAt: checkedAt,
           followingCheckError: '',
+          releaseDelayed: stillDelayed,
+          releaseDelayedAt: delayedEvent
+            ? checkedAt
+            : stillDelayed
+              ? item.releaseDelayedAt || item.followingLastCheckedAt || checkedAt
+              : '',
           followingEvents: [...events, ...previousEvents].slice(0, MAX_FOLLOWING_EVENTS_PER_TITLE),
           listUpdatedAt: checkedAt
         });
@@ -321,7 +368,7 @@ export function FollowingPage({ catalog = [], setSelected, updateCatalogAnime })
       );
     } else if (failed) {
       setCheckMessage(
-        `Watch check complete — no new changes. ${failed} title${failed === 1 ? '' : 's'} could not be checked.`
+        `Kitsu could not check ${failed} title${failed === 1 ? '' : 's'}. Saved follow data is still shown and nothing was removed.`
       );
     } else {
       setCheckMessage('Watch check complete — no new release changes.');
@@ -555,14 +602,19 @@ export function FollowingPage({ catalog = [], setSelected, updateCatalogAnime })
 
       {followed.length ? (
         <div className="followingGrid">
-          {followed.map((item) => (
-            <article key={item.id || item.malId || item.title} className="followingCard">
+          {followed.map((item) => {
+            const release = classifyAnimeRelease(item);
+
+            return (
+            <article key={followingIdentityKey(item)} className="followingCard">
               <button type="button" onClick={() => setSelected?.(item)}>
                 <Poster anime={item} className="followingPoster" />
               </button>
 
               <div>
-                <p className="followingStatus"><CalendarClock /> {knownReleaseText(item)}</p>
+                <p className={`followingStatus release-${release.key}`}>
+                  <CalendarClock /> <strong>{release.label}</strong> · {release.dateText}
+                </p>
                 <h2>{titleOf(item)}</h2>
                 <span>{item.studio || 'Studio not available'}</span>
                 <small>{(item.genres || []).slice(0, 3).join(' • ')}</small>
@@ -580,7 +632,8 @@ export function FollowingPage({ catalog = [], setSelected, updateCatalogAnime })
                 </div>
               </div>
             </article>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <section className="followingEmpty">

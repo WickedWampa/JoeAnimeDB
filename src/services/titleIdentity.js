@@ -74,6 +74,7 @@ export function titleAliases(item = {}) {
 
 export function animeIdentityKeys(item = {}) {
   const keys = new Set();
+  if (item.kitsuId) keys.add(`kitsu:${item.kitsuId}`);
   const malId = item.malId || item.mal_id;
   if (malId) keys.add(`mal:${malId}`);
 
@@ -87,6 +88,10 @@ export function animeIdentityKeys(item = {}) {
 }
 
 export function sameAnimeIdentity(a = {}, b = {}) {
+  if (a.kitsuId && b.kitsuId) {
+    return String(a.kitsuId) === String(b.kitsuId);
+  }
+
   const aMal = a.malId || a.mal_id;
   const bMal = b.malId || b.mal_id;
   if (aMal && bMal) return String(aMal) === String(bMal);

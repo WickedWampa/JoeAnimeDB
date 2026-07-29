@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Poster } from './Poster';
 import { score } from '../utils/animeUtils';
 import { fetchKitsuMetadata } from '../services/kitsuProvider';
 import { enrichMissingMetadata } from '../services/wikidataRepair';
 import { mergeAnimeMetadata } from '../services/animeImporter';
+import { preservePersonalAnimeData } from '../services/personalAnimeData';
 import '../styles/detail-metadata-repair.css';
+import '../styles/library-release-readiness.css';
 
 const WATCH_STATUSES = [
   '',
@@ -34,14 +36,75 @@ function Stars({ value }) {
   );
 }
 
-export function DetailModal({ anime, library = [], onClose, updateAnime, updateCatalogAnime, deleteAnime }) {
+export function DetailModal({
+  anime,
+  library = [],
+  onClose,
+  updateAnime,
+  updateCatalogAnime,
+  deleteAnime,
+  onPrevious,
+  onNext,
+  navigationIndex = -1,
+  navigationCount = 0
+}) {
   const [repairingMetadata, setRepairingMetadata] = useState(false);
   const [metadataMessage, setMetadataMessage] = useState('');
   const [metadataMessageType, setMetadataMessageType] = useState('');
   const [metadataProgressText, setMetadataProgressText] = useState('');
+  const [scoreDraft, setScoreDraft] = useState(Number(anime.joeScore ?? score(anime) ?? 0));
+  const [scoreSaving, setScoreSaving] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteMessage, setDeleteMessage] = useState('');
   const isCatalogTitle = String(anime.id || '').startsWith('catalog-') || Boolean(anime.catalogSource);
-  const currentScore = Number(anime.joeScore ?? score(anime) ?? 0);
+  const currentScore = Number(scoreDraft || 0);
   const currentStatus = anime.status || '';
+  const navigationLocked = repairingMetadata || deleting || scoreSaving;
+  const canGoPrevious = !navigationLocked && typeof onPrevious === 'function' && navigationIndex > 0;
+  const canGoNext = !navigationLocked && typeof onNext === 'function' && navigationIndex >= 0 && navigationIndex < navigationCount - 1;
+  const needsMetadataReview = Boolean(anime.metadataNeedsReview || anime.metadataNeedsRefresh);
+
+  useEffect(() => {
+    setScoreDraft(Number(anime.joeScore ?? score(anime) ?? 0));
+    setMetadataMessage('');
+    setMetadataMessageType('');
+    setMetadataProgressText('');
+    setConfirmingDelete(false);
+    setDeleteMessage('');
+  }, [anime.id, anime.joeScore]);
+
+  useEffect(() => {
+    function handleKeyDown(event) {
+      const target = event.target;
+      const isEditing = target instanceof HTMLElement && (
+        target.isContentEditable ||
+        ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
+      );
+
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        if (confirmingDelete) setConfirmingDelete(false);
+        else if (!navigationLocked) onClose();
+        return;
+      }
+
+      if (isEditing || navigationLocked) return;
+
+      if (event.key === 'ArrowLeft' && canGoPrevious) {
+        event.preventDefault();
+        onPrevious();
+      }
+
+      if (event.key === 'ArrowRight' && canGoNext) {
+        event.preventDefault();
+        onNext();
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [canGoPrevious, canGoNext, confirmingDelete, navigationLocked, onClose, onPrevious, onNext]);
 
   async function updateField(field, value) {
     if (!updateAnime) return;
@@ -54,6 +117,39 @@ export function DetailModal({ anime, library = [], onClose, updateAnime, updateC
   function updateRewatches(delta) {
     const next = Math.max(0, Number(anime.rewatches || 0) + delta);
     updateField('rewatches', next);
+  }
+
+  async function commitScore() {
+    if (!updateAnime || isCatalogTitle || scoreSaving) return;
+
+    const nextScore = Math.max(0, Math.min(10, Math.round(Number(scoreDraft || 0) * 10) / 10));
+    const savedScore = Number(anime.joeScore ?? score(anime) ?? 0);
+    setScoreDraft(nextScore);
+
+    if (nextScore === savedScore) return;
+
+    setScoreSaving(true);
+    try {
+      await updateField('joeScore', nextScore);
+    } finally {
+      setScoreSaving(false);
+    }
+  }
+
+  async function confirmDelete() {
+    if (!deleteAnime || deleting) return;
+
+    setDeleting(true);
+    setDeleteMessage('');
+
+    try {
+      await deleteAnime(anime.id);
+      onClose();
+    } catch (error) {
+      console.warn('Remove from library failed:', anime.title, error);
+      setDeleteMessage('Could not remove this title. Your library was not changed.');
+      setDeleting(false);
+    }
   }
 
   async function toggleFollow() {
@@ -124,14 +220,9 @@ export function DetailModal({ anime, library = [], onClose, updateAnime, updateC
 
       console.log('RAW WIKIDATA RESULT IDENTITY', identity(wikiResult?.item));
 
-      const completed = {
+      const completed = preservePersonalAnimeData(anime, {
         ...refreshed,
         ...(wikiResult?.item || {}),
-        title: anime.title,
-        status: anime.status,
-        favorite: Boolean(anime.favorite),
-        rewatches: Number(anime.rewatches || 0),
-        notes: anime.notes || refreshed.notes || '',
         metadataNeedsRefresh: Boolean(wikiResult?.unresolved),
         syncStatus: {
           ...(anime.syncStatus || {}),
@@ -145,7 +236,7 @@ export function DetailModal({ anime, library = [], onClose, updateAnime, updateC
           metadataSource: wikiResult?.source || refreshed.metadataSource || 'kitsu',
           lastMetadataSync: new Date().toISOString()
         }
-      };
+      });
 
       console.log('IDENTITY AFTER ALL PROVIDER MERGES', {
         original: identity(anime),
@@ -313,9 +404,46 @@ export function DetailModal({ anime, library = [], onClose, updateAnime, updateC
         </aside>
 
         <div className="detailBody">
-          <p className="eyebrow">Rank #{anime.finalRank}</p>
+          <div className="detailNavigation">
+            <button
+              type="button"
+              className="detailNavigationButton"
+              onClick={onPrevious}
+              disabled={!canGoPrevious}
+              aria-label="Previous anime"
+              title="Previous anime (Left arrow)"
+            >
+              ‹
+            </button>
+            <div className="detailNavigationPosition">
+              <p className="eyebrow">Anime Details</p>
+              {navigationIndex >= 0 && navigationCount > 0 && (
+                <span>{navigationIndex + 1} of {navigationCount}</span>
+              )}
+            </div>
+            <button
+              type="button"
+              className="detailNavigationButton"
+              onClick={onNext}
+              disabled={!canGoNext}
+              aria-label="Next anime"
+              title="Next anime (Right arrow)"
+            >
+              ›
+            </button>
+          </div>
           <h1>{anime.title}</h1>
           <p className="muted">{anime.studio} · {anime.type || 'TV'} · {anime.year || ''}</p>
+
+          {needsMetadataReview && (
+            <section className={`detailMetadataReview ${anime.metadataNeedsReview ? 'identityReview' : ''}`} role="status">
+              <strong>⚠ {anime.metadataNeedsReview ? 'Title match needs review' : 'Metadata is incomplete'}</strong>
+              <p>
+                {anime.metadataReviewReason ||
+                  'Some provider details are missing or uncertain. Your score, status, favorites, rewatches, and notes will be preserved if you repair it.'}
+              </p>
+            </section>
+          )}
 
           {!isCatalogTitle && <section className="scoreEditor">
             <div>
@@ -327,11 +455,16 @@ export function DetailModal({ anime, library = [], onClose, updateAnime, updateC
               type="range"
               min="0"
               max="10"
-              step="0.5"
+              step="0.1"
               value={currentScore}
               aria-label="My Score"
-              onChange={(event) => updateField('joeScore', Number(event.target.value))}
+              aria-valuetext={`${currentScore.toFixed(1)} out of 10`}
+              onChange={(event) => setScoreDraft(Number(event.target.value))}
+              onPointerUp={commitScore}
+              onKeyUp={commitScore}
+              onBlur={commitScore}
             />
+            {scoreSaving && <small className="scoreSaving" role="status">Saving…</small>}
           </section>}
 
           <div className="detailStats">
@@ -384,19 +517,32 @@ export function DetailModal({ anime, library = [], onClose, updateAnime, updateC
           {anime.trailerUrl && <a className="trailer" href={anime.trailerUrl} target="_blank" rel="noreferrer">Watch Trailer</a>}
 
           {!isCatalogTitle && <section className="dangerZone">
-            <button
-              className="removeAnimeButton"
-              type="button"
-              onClick={async () => {
-                if (!deleteAnime) return;
-                const ok = window.confirm(`Remove "${anime.title}" from your library?`);
-                if (!ok) return;
-                await deleteAnime(anime.id);
-                onClose();
-              }}
-            >
-              🗑 Remove From Library
-            </button>
+            {confirmingDelete ? (
+              <div className="removeConfirmBox" role="alert">
+                <div>
+                  <strong>Remove “{anime.title}”?</strong>
+                  <p>This permanently removes its score, status, notes, favorite, and rewatch history.</p>
+                  {deleteMessage && <p className="removeError">{deleteMessage}</p>}
+                </div>
+                <div className="removeConfirmActions">
+                  <button type="button" onClick={() => setConfirmingDelete(false)} disabled={deleting}>
+                    Keep Title
+                  </button>
+                  <button className="confirmRemoveButton" type="button" onClick={confirmDelete} disabled={deleting}>
+                    {deleting ? 'Removing…' : 'Remove Permanently'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                className="removeAnimeButton"
+                type="button"
+                onClick={() => setConfirmingDelete(true)}
+                disabled={!deleteAnime}
+              >
+                🗑 Remove From Library
+              </button>
+            )}
           </section>}
         </div>
       </section>

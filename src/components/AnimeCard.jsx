@@ -2,6 +2,7 @@ import React from 'react';
 import { Poster } from './Poster';
 import { hasUserScore, score, scoreLabel } from '../utils/animeUtils';
 import '../styles/library-collector-cards.css';
+import '../styles/library-release-readiness.css';
 
 function rankTierClass(rank, totalCount = 0) {
   const total = Math.max(Number(totalCount || 0), rank || 0, 1);
@@ -21,6 +22,11 @@ export function AnimeCard({ anime, setSelected, updateAnime, displayRank, totalC
   const rankTier = rankTierClass(rank, totalCount);
   const isFavorite = Boolean(anime.favorite);
   const rated = hasUserScore(anime);
+  const reviewLabel = anime.metadataNeedsReview
+    ? 'Needs Review'
+    : anime.metadataNeedsRefresh
+      ? 'Metadata Incomplete'
+      : '';
 
   function openDetails() {
     setSelected(anime);
@@ -58,6 +64,15 @@ export function AnimeCard({ anime, setSelected, updateAnime, displayRank, totalC
       </button>
 
       {ribbon && <div className="rankRibbon">{ribbon}</div>}
+
+      {reviewLabel && (
+        <div
+          className={`metadataReviewBadge cardReviewBadge ${anime.metadataNeedsReview ? 'identityReview' : ''}`}
+          title={anime.metadataReviewReason || 'Some metadata still needs review'}
+        >
+          ⚠ {reviewLabel}
+        </div>
+      )}
 
       <div className={`scoreBadge ${rated ? '' : 'notRated'}`}>
         {rated ? `★ ${score(anime).toFixed(1)}` : scoreLabel(anime)}

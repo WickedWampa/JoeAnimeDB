@@ -1,5 +1,9 @@
 
 .syncOverlay {
+  --sync-primary: var(--cyan, #30e5ff);
+  --sync-secondary: var(--pink, #ff54be);
+  --sync-highlight: var(--gold, #ffc928);
+  --sync-surface: var(--panel, rgba(8, 14, 28, .96));
   position: fixed;
   right: 24px;
   bottom: 24px;
@@ -11,26 +15,98 @@
 }
 
 .syncCard {
+  position: relative;
+  isolation: isolate;
   width: 100%;
-  border: 1px solid rgba(48, 229, 255, 0.35);
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--sync-primary) 46%, transparent);
   border-radius: 24px;
   padding: 22px;
   background:
-    radial-gradient(circle at top left, rgba(48, 229, 255, 0.16), transparent 36%),
-    radial-gradient(circle at bottom right, rgba(255, 84, 190, 0.12), transparent 40%),
-    rgba(8, 14, 28, 0.96);
-  box-shadow: 0 24px 90px rgba(0, 0, 0, 0.55), 0 0 34px rgba(48, 229, 255, 0.18);
+    radial-gradient(circle at top left, color-mix(in srgb, var(--sync-primary) 18%, transparent), transparent 38%),
+    radial-gradient(circle at bottom right, color-mix(in srgb, var(--sync-secondary) 15%, transparent), transparent 42%),
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--sync-surface) 94%, #02050a),
+      color-mix(in srgb, var(--bg, #050910) 96%, #02050a)
+    );
+  box-shadow:
+    0 24px 90px rgba(0, 0, 0, 0.58),
+    0 0 36px color-mix(in srgb, var(--sync-primary) 18%, transparent);
   pointer-events: none;
 }
 
+.syncCard::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0 0 auto;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--sync-primary), var(--sync-secondary), transparent);
+  opacity: .9;
+}
+
+.syncCard::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  right: -58px;
+  top: -72px;
+  width: 190px;
+  height: 190px;
+  border: 1px solid color-mix(in srgb, var(--sync-secondary) 16%, transparent);
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 28px color-mix(in srgb, var(--sync-secondary) 3%, transparent),
+    0 0 0 58px color-mix(in srgb, var(--sync-primary) 2%, transparent);
+}
+
+.syncTitleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 10px;
+}
+
 .syncCard h2 {
-  margin: 0 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
   font-size: 24px;
+  color: var(--text, #edf7ff);
+}
+
+.syncThemeIcon {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 38px;
+  border: 1px solid color-mix(in srgb, var(--sync-primary) 42%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--sync-primary) 11%, transparent);
+  box-shadow: inset 0 0 18px color-mix(in srgb, var(--sync-primary) 7%, transparent);
+  font-size: 20px;
+}
+
+.syncThemeBadge {
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--sync-secondary) 36%, transparent);
+  border-radius: 999px;
+  padding: 6px 9px;
+  background: color-mix(in srgb, var(--sync-secondary) 8%, transparent);
+  color: color-mix(in srgb, var(--text, #edf7ff) 82%, var(--sync-secondary));
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: .08em;
+  text-transform: uppercase;
 }
 
 .syncCard h3 {
   margin: 8px 0 18px;
-  color: var(--accent, #30e5ff);
+  color: var(--sync-primary);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   font-size: 14px;
@@ -40,23 +116,35 @@
 .syncMeta,
 .syncCurrent,
 .syncCard p {
-  color: rgba(229, 246, 255, 0.78);
+  color: color-mix(in srgb, var(--text, #edf7ff) 76%, transparent);
 }
 
 .syncBar {
   height: 16px;
   overflow: hidden;
   border-radius: 999px;
-  border: 1px solid rgba(48, 229, 255, 0.28);
-  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid color-mix(in srgb, var(--sync-primary) 30%, transparent);
+  background: color-mix(in srgb, var(--text, #edf7ff) 8%, transparent);
+  box-shadow: inset 0 1px 5px rgba(0, 0, 0, .34);
 }
 
 .syncBarFill {
+  position: relative;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #30e5ff, #ff54be);
-  box-shadow: 0 0 22px rgba(48, 229, 255, 0.55);
+  overflow: hidden;
+  background: linear-gradient(90deg, var(--sync-primary), var(--sync-secondary));
+  box-shadow: 0 0 22px color-mix(in srgb, var(--sync-primary) 58%, transparent);
   transition: width 240ms ease;
+}
+
+.syncBarFill::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 15%, rgba(255,255,255,.42) 48%, transparent 80%);
+  transform: translateX(-110%);
+  animation: syncThemeSheen 1.8s ease-in-out infinite;
 }
 
 .syncMeta {
@@ -71,6 +159,54 @@
   font-size: 14px;
 }
 
+.theme-sakura .syncOverlay {
+  --sync-primary: #ffd1e8;
+  --sync-secondary: #ff7abf;
+  --sync-highlight: #ffd166;
+  --sync-surface: rgba(34, 12, 27, .97);
+}
+
+.theme-vapor .syncOverlay {
+  --sync-primary: #7df9ff;
+  --sync-secondary: #b984ff;
+  --sync-highlight: #ff71ce;
+  --sync-surface: rgba(22, 10, 48, .97);
+}
+
+.theme-inferno .syncOverlay {
+  --sync-primary: #ffb703;
+  --sync-secondary: #ff4d6d;
+  --sync-highlight: #ffe082;
+  --sync-surface: rgba(35, 9, 5, .97);
+}
+
+.theme-ramen .syncOverlay {
+  --sync-primary: #ffd166;
+  --sync-secondary: #ff8552;
+  --sync-highlight: #ffbe0b;
+  --sync-surface: rgba(31, 20, 9, .97);
+}
+
+.theme-amoled .syncOverlay {
+  --sync-primary: #42f5ff;
+  --sync-secondary: #ff5cc8;
+  --sync-highlight: #ffd84d;
+  --sync-surface: rgba(0, 0, 0, .985);
+}
+
+.theme-amoled .syncCard {
+  background:
+    radial-gradient(circle at top left, rgba(66, 245, 255, .1), transparent 36%),
+    radial-gradient(circle at bottom right, rgba(255, 92, 200, .07), transparent 40%),
+    #000;
+  box-shadow: 0 24px 90px rgba(0, 0, 0, .82), 0 0 30px rgba(66, 245, 255, .12);
+}
+
+@keyframes syncThemeSheen {
+  0%, 38% { transform: translateX(-110%); }
+  72%, 100% { transform: translateX(110%); }
+}
+
 @media (max-width: 720px) {
   .syncOverlay {
     left: 16px;
@@ -78,11 +214,22 @@
     bottom: 16px;
     width: auto;
   }
+
+  .syncTitleRow {
+    align-items: flex-start;
+  }
+
+  .syncThemeBadge {
+    display: none;
+  }
 }
 
 
 /* JoeAnimeDB custom update confirmation modal. Replaces native confirm(), which can steal input/caret focus in Electron. */
 .updateConfirmOverlay {
+  --sync-primary: var(--cyan, #30e5ff);
+  --sync-secondary: var(--pink, #ff54be);
+  --sync-surface: var(--panel, rgba(8, 14, 28, .97));
   position: fixed;
   inset: 0;
   z-index: 10000;
@@ -101,10 +248,10 @@
   border-radius: 28px;
   padding: 28px;
   background:
-    radial-gradient(circle at top left, rgba(48, 229, 255, 0.17), transparent 38%),
-    radial-gradient(circle at bottom right, rgba(255, 84, 190, 0.14), transparent 42%),
-    rgba(8, 14, 28, 0.97);
-  box-shadow: 0 28px 100px rgba(0,0,0,.58), 0 0 44px rgba(48,229,255,.16);
+    radial-gradient(circle at top left, color-mix(in srgb, var(--sync-primary) 18%, transparent), transparent 38%),
+    radial-gradient(circle at bottom right, color-mix(in srgb, var(--sync-secondary) 15%, transparent), transparent 42%),
+    color-mix(in srgb, var(--sync-surface) 95%, #02050a);
+  box-shadow: 0 28px 100px rgba(0,0,0,.58), 0 0 44px color-mix(in srgb, var(--sync-primary) 16%, transparent);
 }
 
 .updateConfirmGlow {
@@ -113,7 +260,7 @@
   width: 260px;
   height: 260px;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--pink, #ff54be) 28%, transparent);
+  background: color-mix(in srgb, var(--sync-secondary) 28%, transparent);
   filter: blur(35px);
   pointer-events: none;
 }
@@ -121,7 +268,7 @@
 .updateConfirmEyebrow {
   position: relative;
   margin: 0 0 8px;
-  color: var(--cyan, #30e5ff);
+  color: var(--sync-primary);
   font-size: 12px;
   font-weight: 1000;
   letter-spacing: .14em;
@@ -180,13 +327,13 @@
 }
 
 .updateConfirmActions button:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--cyan, #30e5ff) 55%, transparent);
-  box-shadow: 0 0 24px rgba(48,229,255,.14);
+  border-color: color-mix(in srgb, var(--sync-primary) 55%, transparent);
+  box-shadow: 0 0 24px color-mix(in srgb, var(--sync-primary) 14%, transparent);
 }
 
 .updateConfirmActions button.primary {
-  border-color: color-mix(in srgb, var(--pink, #ff54be) 50%, var(--cyan, #30e5ff) 50%);
-  background: linear-gradient(135deg, var(--pink, #ff54be), var(--cyan, #30e5ff));
+  border-color: color-mix(in srgb, var(--sync-secondary) 50%, var(--sync-primary) 50%);
+  background: linear-gradient(135deg, var(--sync-secondary), var(--sync-primary));
   color: #fff;
 }
 

@@ -12,6 +12,35 @@ export function scoreLabel(anime) {
   return hasUserScore(anime) ? score(anime).toFixed(1) : 'Not Rated';
 }
 
+export function compareAnimeByUserScore(a = {}, b = {}) {
+  const aRated = hasUserScore(a);
+  const bRated = hasUserScore(b);
+
+  if (aRated !== bRated) return aRated ? -1 : 1;
+
+  const scoreDifference = score(b) - score(a);
+  if (scoreDifference !== 0) return scoreDifference;
+
+  const legacyRankDifference =
+    Number(a.finalRank || Number.MAX_SAFE_INTEGER) -
+    Number(b.finalRank || Number.MAX_SAFE_INTEGER);
+  if (legacyRankDifference !== 0) return legacyRankDifference;
+
+  return String(a.officialTitle || a.title || '')
+    .localeCompare(String(b.officialTitle || b.title || ''));
+}
+
+export function sortAnimeByUserScore(items = []) {
+  return [...items].sort(compareAnimeByUserScore);
+}
+
+export function buildLiveRankMap(items = []) {
+  return new Map(
+    sortAnimeByUserScore(items)
+      .map((item, index) => [String(item.id), index + 1])
+  );
+}
+
 export function countBy(items) {
   const map = {};
   items.forEach((item) => {

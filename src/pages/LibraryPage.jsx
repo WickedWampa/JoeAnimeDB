@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { AnimeCard } from '../components/AnimeCard';
 import { Poster } from '../components/Poster';
-import { score } from '../utils/animeUtils';
+import { buildLiveRankMap, score, sortAnimeByUserScore } from '../utils/animeUtils';
 import {
   animeIdFromTitle,
   enrichAnimeCandidate,
@@ -9,6 +9,7 @@ import {
   importAnimeByTitle,
   searchAnimeCandidates
 } from '../services/animeImporter';
+import '../styles/library-release-readiness.css';
 
 function parseBulkTitles(value = '') {
   return [...new Set(
@@ -19,7 +20,7 @@ function parseBulkTitles(value = '') {
   )];
 }
 
-function AddAnimeModal({ allAnime = [], updateAnime, setSelected, onClose }) {
+function AddAnimeModal({ allAnime = [], updateAnime, deleteAnime, setSelected, onClose }) {
   const [tab, setTab] = useState('single');
   const [title, setTitle] = useState('');
   const [status, setStatus] = useState('Watching');
@@ -158,17 +159,30 @@ function AddAnimeModal({ allAnime = [], updateAnime, setSelected, onClose }) {
   }
 
   async function undoLastBulkImport() {
-    if (!lastBulkAddedIds.length) return;
+    if (!lastBulkAddedIds.length || !deleteAnime) return;
     if (!confirm(`Remove ${lastBulkAddedIds.length} anime added by the last bulk import?`)) return;
 
-    for (const id of lastBulkAddedIds) {
-      const item = allAnime.find((animeItem) => String(animeItem.id) === String(id));
-      if (item) {
-        await updateAnime({ ...item, _deleteMe: true });
-      }
-    }
+    setWorking(true);
+    setMessage(`Removing ${lastBulkAddedIds.length} titles from the last import...`);
 
-    setMessage('Undo requested. If titles remain, use Remove From Library from details.');
+    try {
+      for (const id of lastBulkAddedIds) {
+        await deleteAnime(id);
+      }
+
+      const removedIds = new Set(lastBulkAddedIds.map(String));
+      setBulkSummary((current) => current ? {
+        ...current,
+        added: current.added.filter((item) => !removedIds.has(String(item.id)))
+      } : current);
+      setLastBulkAddedIds([]);
+      setMessage('Last bulk import removed. Your earlier library entries were left untouched.');
+    } catch (error) {
+      console.warn('Bulk import undo failed:', error);
+      setMessage('Could not completely undo the last import. Try again or remove the remaining titles from their detail cards.');
+    } finally {
+      setWorking(false);
+    }
   }
 
   async function bulkImport() {
@@ -593,6 +607,11 @@ function AddAnimeModal({ allAnime = [], updateAnime, setSelected, onClose }) {
 
                 <div className="bulkSummaryActions">
                   <button type="button" onClick={onClose}>Go To Library</button>
+                  {lastBulkAddedIds.length > 0 && (
+                    <button type="button" onClick={undoLastBulkImport} disabled={working}>
+                      Undo Last Import
+                    </button>
+                  )}
                 </div>
 
                 {bulkSummary.added.length > 0 && (
@@ -666,38 +685,28 @@ function AddAnimeModal({ allAnime = [], updateAnime, setSelected, onClose }) {
   );
 }
 
-export function LibraryPage({ anime, allAnime, mode, setSelected, title, updateAnime, emptyMessage }) {
+export function LibraryPage({
+  anime,
+  allAnime,
+  mode,
+  setSelected,
+  title,
+  updateAnime,
+  deleteAnime,
+  query = '',
+  onClearSearch,
+  emptyMessage
+}) {
   const [addingAnime, setAddingAnime] = useState(false);
   const libraryForDupes = useMemo(() => allAnime || anime || [], [allAnime, anime]);
 
   // finalRank is legacy persisted data, so it can become stale whenever a score changes.
   // Build the visible ranking from the current Joe scores on every render instead.
-  const liveRankMap = useMemo(() => {
-    const ranked = [...libraryForDupes].sort((a, b) => {
-      const aRated = a.joeScore !== undefined && a.joeScore !== null && a.joeScore !== '';
-      const bRated = b.joeScore !== undefined && b.joeScore !== null && b.joeScore !== '';
-
-      if (aRated !== bRated) return aRated ? -1 : 1;
-
-      const scoreDifference = score(b) - score(a);
-      if (scoreDifference !== 0) return scoreDifference;
-
-      const legacyRankDifference = Number(a.finalRank || 999999) - Number(b.finalRank || 999999);
-      if (legacyRankDifference !== 0) return legacyRankDifference;
-
-      return String(a.title || '').localeCompare(String(b.title || ''));
-    });
-
-    return new Map(ranked.map((item, index) => [String(item.id), index + 1]));
-  }, [libraryForDupes]);
+  const liveRankMap = useMemo(() => buildLiveRankMap(libraryForDupes), [libraryForDupes]);
 
   const rankedAnime = useMemo(
-    () => [...anime].sort((a, b) => {
-      const aRank = liveRankMap.get(String(a.id)) || Number.MAX_SAFE_INTEGER;
-      const bRank = liveRankMap.get(String(b.id)) || Number.MAX_SAFE_INTEGER;
-      return aRank - bRank;
-    }),
-    [anime, liveRankMap]
+    () => sortAnimeByUserScore(anime),
+    [anime]
   );
 
   async function handleFavoriteClick(event, item) {
@@ -709,6 +718,8 @@ export function LibraryPage({ anime, allAnime, mode, setSelected, title, updateA
   }
 
   const canAddAnime = title === 'Library' || title === 'Rankings';
+  const libraryIsEmpty = libraryForDupes.length === 0;
+  const hasNoResults = !libraryIsEmpty && rankedAnime.length === 0;
 
   return (
     <>
@@ -771,11 +782,24 @@ export function LibraryPage({ anime, allAnime, mode, setSelected, title, updateA
         )}
       </section>
 
-      {rankedAnime.length === 0 && emptyMessage ? (
-        <section className="emptyState">
-          <h2>Nothing here yet</h2>
-          <p>{emptyMessage}</p>
-          {canAddAnime && <button type="button" onClick={() => setAddingAnime(true)}>+ Add Anime</button>}
+      {rankedAnime.length === 0 ? (
+        <section className={`libraryStateCard ${hasNoResults ? 'noResults' : 'emptyLibrary'}`} role="status">
+          <span className="libraryStateIcon" aria-hidden="true">{hasNoResults ? '⌕' : '▤'}</span>
+          <p className="eyebrow">{hasNoResults ? 'No Matches' : 'Your Archive Awaits'}</p>
+          <h2>{hasNoResults ? 'No titles match this search' : 'Build your anime library'}</h2>
+          <p>
+            {hasNoResults
+              ? `Nothing in your library matches “${query.trim()}”. Try a title, studio, genre, status, year, or priority.`
+              : (emptyMessage || 'Add a title, paste a watch list, or import a saved list from Settings to get started.')}
+          </p>
+          <div className="libraryStateActions">
+            {hasNoResults && onClearSearch && (
+              <button type="button" onClick={onClearSearch}>Clear Search</button>
+            )}
+            {canAddAnime && (
+              <button type="button" onClick={() => setAddingAnime(true)}>+ Add Anime</button>
+            )}
+          </div>
         </section>
       ) : mode === 'list' ? (
         <section className="tablePanel">
@@ -806,7 +830,20 @@ export function LibraryPage({ anime, allAnime, mode, setSelected, title, updateA
                     </button>
                   </td>
                   <td>{liveRankMap.get(String(item.id)) || '—'}</td>
-                  <td className="titleCell"><Poster anime={item} className="thumb" />{item.title}</td>
+                  <td className="titleCell">
+                    <Poster anime={item} className="thumb" />
+                    <span className="libraryTitleStack">
+                      <strong>{item.title}</strong>
+                      {(item.metadataNeedsReview || item.metadataNeedsRefresh) && (
+                        <span
+                          className={`metadataReviewBadge ${item.metadataNeedsReview ? 'identityReview' : ''}`}
+                          title={item.metadataReviewReason || 'Some metadata still needs review'}
+                        >
+                          ⚠ {item.metadataNeedsReview ? 'Needs Review' : 'Metadata Incomplete'}
+                        </span>
+                      )}
+                    </span>
+                  </td>
                   <td>★ {score(item).toFixed(1)}</td>
                   <td>{item.studio}</td>
                   <td>{(item.genres || []).slice(0, 3).join(', ')}</td>
@@ -836,6 +873,7 @@ export function LibraryPage({ anime, allAnime, mode, setSelected, title, updateA
         <AddAnimeModal
           allAnime={libraryForDupes}
           updateAnime={updateAnime}
+          deleteAnime={deleteAnime}
           setSelected={setSelected}
           onClose={() => setAddingAnime(false)}
         />

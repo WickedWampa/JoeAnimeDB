@@ -94,6 +94,40 @@
   margin-top: 17px;
 }
 
+.discoverDataState {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  border: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+  border-radius: 999px;
+  padding: 7px 11px;
+  background: rgba(3, 8, 15, .72);
+  color: color-mix(in srgb, var(--text) 78%, var(--muted));
+  font-size: 11px;
+  font-weight: 850;
+  backdrop-filter: blur(10px);
+}
+
+.discoverDataState > span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+  box-shadow: 0 0 10px currentColor;
+}
+
+.discoverDataState.state-live > span { background: #4ce59a; }
+.discoverDataState.state-loading > span { background: var(--discover-accent); animation: discoverPulse 1s ease-in-out infinite; }
+.discoverDataState.state-cached > span,
+.discoverDataState.state-partial > span { background: #ffc857; }
+.discoverDataState.state-offline > span,
+.discoverDataState.state-error > span { background: #ff7b8b; }
+
+@keyframes discoverPulse {
+  50% { opacity: .35; transform: scale(.78); }
+}
+
 .discoverHeroActions button,
 .discoverShelfHeader button,
 .discoverCollectionHeader button,
@@ -926,6 +960,26 @@
 .dailyPickMatch strong { color: var(--cyan); font-size: 25px; }
 .dailyPickMatch span { color: var(--muted); }
 
+.dailyPickConfidenceReceipt {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.dailyPickConfidenceReceipt span {
+  padding: 6px 9px;
+  border: 1px solid color-mix(in srgb, var(--cyan) 24%, transparent);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, .22);
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.dailyPickConfidenceReceipt strong {
+  color: var(--cyan);
+}
+
 .dailyPickReasons {
   display: flex;
   flex-wrap: wrap;
@@ -941,6 +995,286 @@
   color: color-mix(in srgb, var(--text) 82%, var(--cyan));
   font-size: 11px;
   font-weight: 850;
+}
+
+/* =========================================================
+   Discover Intelligence V2
+   ========================================================= */
+
+.discoverRail {
+  grid-auto-columns: minmax(218px, 242px);
+}
+
+.discoverTasteBadge {
+  position: absolute;
+  z-index: 2;
+  top: 9px;
+  left: 9px;
+  padding: 6px 9px;
+  border: 1px solid color-mix(in srgb, var(--pink) 55%, transparent);
+  border-radius: 999px;
+  color: #fff;
+  background: rgba(19, 7, 24, .9);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--pink) 22%, transparent);
+  font-size: 10px;
+  font-weight: 1000;
+  text-transform: uppercase;
+  backdrop-filter: blur(10px);
+}
+
+.discoverSmartCard .discoverCardCopy {
+  min-height: 292px;
+  align-content: start;
+}
+
+.discoverCardIntelligence {
+  display: grid;
+  gap: 7px;
+  margin-top: 2px;
+  padding: 9px;
+  border: 1px solid color-mix(in srgb, var(--discover-accent) 24%, transparent);
+  border-radius: 11px;
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--discover-accent) 7%, rgba(0, 0, 0, .2)),
+      rgba(0, 0, 0, .18)
+    );
+}
+
+.discoverCardConfidence {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 850;
+}
+
+.discoverCardConfidence strong {
+  display: inline;
+  overflow: visible;
+  color: var(--discover-accent);
+  font-size: inherit;
+  white-space: normal;
+}
+
+.discoverCardIntelligence > p {
+  display: -webkit-box;
+  min-height: 31px;
+  margin: 0;
+  overflow: hidden;
+  color: color-mix(in srgb, var(--text) 84%, var(--muted));
+  font-size: 10px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.discoverWhyButton {
+  width: fit-content;
+  border: 0;
+  padding: 0;
+  color: var(--discover-accent);
+  background: transparent;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 950;
+  cursor: pointer;
+}
+
+.discoverWhyPanel {
+  display: grid;
+  gap: 5px;
+  padding-top: 7px;
+  border-top: 1px solid rgba(255, 255, 255, .07);
+}
+
+.discoverWhyPanel span {
+  color: color-mix(in srgb, var(--text) 82%, var(--discover-accent));
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.discoverWhyPanel span.warning {
+  color: #ffb37d;
+}
+
+.discoverWhyPanel small {
+  min-height: 0;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.discoverFeedbackControls {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+}
+
+.discoverFeedbackControls > button {
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, .09);
+  border-radius: 9px;
+  padding: 7px 5px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, .035);
+  font: inherit;
+  font-size: 9px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.discoverFeedbackControls > button:hover,
+.discoverFeedbackControls > button.active {
+  border-color: color-mix(in srgb, var(--discover-accent) 58%, transparent);
+  color: var(--discover-accent);
+  background: color-mix(in srgb, var(--discover-accent) 9%, transparent);
+}
+
+.discoverFeedbackControls > button.negative {
+  border-color: rgba(255, 86, 119, .5);
+  color: #ff9caf;
+  background: rgba(255, 52, 96, .08);
+}
+
+.discoverFeedbackReasonMenu {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+  padding: 8px;
+  border: 1px solid rgba(255, 91, 126, .28);
+  border-radius: 10px;
+  background: rgba(15, 5, 13, .88);
+}
+
+.discoverFeedbackReasonMenu strong {
+  grid-column: 1 / -1;
+  overflow: visible;
+  color: #ff9caf;
+  font-size: 10px;
+  white-space: normal;
+}
+
+.discoverFeedbackReasonMenu button {
+  border: 1px solid rgba(255, 255, 255, .08);
+  border-radius: 8px;
+  padding: 6px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, .035);
+  font: inherit;
+  font-size: 9px;
+  cursor: pointer;
+}
+
+.discoverFeedbackReasonMenu button:hover {
+  border-color: rgba(255, 91, 126, .55);
+  color: #ffb3c2;
+}
+
+.discoverFeedbackSaved {
+  grid-column: 1 / -1;
+  min-height: 0 !important;
+  color: var(--discover-accent) !important;
+  font-size: 9px !important;
+  text-transform: capitalize;
+}
+
+.discoverSurpriseControl {
+  display: contents;
+}
+
+.discoverHeroActions button.active {
+  border-color: var(--discover-accent);
+  color: var(--discover-accent);
+}
+
+.discoverSurpriseMenu {
+  order: 20;
+  flex: 1 0 100%;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--discover-accent) 28%, transparent);
+  border-radius: 15px;
+  background: rgba(2, 8, 16, .64);
+}
+
+.discoverHeroActions .discoverSurpriseMenu button {
+  display: grid;
+  gap: 3px;
+  align-content: center;
+  justify-items: start;
+  min-height: 58px;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.discoverSurpriseMenu strong {
+  color: var(--text);
+  font-size: 11px;
+}
+
+.discoverSurpriseMenu small {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 650;
+}
+
+.dailyPickFeedbackReasons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid rgba(255, 86, 119, .28);
+  border-radius: 13px;
+  background: rgba(15, 5, 13, .54);
+}
+
+.dailyPickFeedbackReasons strong {
+  margin-right: 3px;
+  color: #ff9caf;
+  font-size: 11px;
+}
+
+.dailyPickFeedbackReasons button {
+  border: 1px solid rgba(255, 255, 255, .1);
+  border-radius: 999px;
+  padding: 7px 10px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, .04);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.dailyPickFeedbackReasons button:hover {
+  border-color: rgba(255, 86, 119, .55);
+  color: #ffb3c2;
+}
+
+@media (max-width: 900px) {
+  .discoverSurpriseMenu {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 680px) {
+  .discoverRail {
+    grid-auto-columns: minmax(205px, 224px);
+  }
+
+  .discoverSurpriseMenu {
+    grid-template-columns: 1fr;
+  }
 }
 
 .dailyPickActions {
@@ -1331,6 +1665,11 @@
   line-height: 1;
   backdrop-filter: blur(8px);
 }
+
+.discoverReleaseBadge.release-airing { border-color: rgba(76,229,154,.62); color: #9dffd0; }
+.discoverReleaseBadge.release-upcoming { border-color: color-mix(in srgb, var(--discover-accent) 68%, transparent); }
+.discoverReleaseBadge.release-delayed { border-color: rgba(255,123,139,.7); color: #ffb0ba; }
+.discoverReleaseBadge.release-tba { border-color: rgba(255,200,87,.68); color: #ffe09b; }
 
 .discoverCardActions {
   flex-wrap: wrap;

@@ -18,15 +18,153 @@ export function resetData() {
   location.reload();
 }
 
-export function exportBackup(data) {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `JoeAnimeDB-4-backup-${new Date().toISOString().slice(0, 10)}.json`;
-  a.click();
-  URL.revokeObjectURL(a.href);
+function backupPreferences() {
+  const read = (key) => {
+    try {
+      return localStorage.getItem(key) || '';
+    } catch {
+      return '';
+    }
+  };
+
+  return {
+    theme: read('joeanime-theme') || 'neon',
+    displayName: read('joeanime-display-name'),
+    discoverNextPage: read('joeanime-discover-next-page'),
+    onboardingVersion: read('joeanime-onboarding-version'),
+    onboardingState: read('joeanime-onboarding-state-v1'),
+    followingNotifications: read('joeanime-following-notifications-enabled'),
+    joeAIMemoryProfile: read('joeai.memory.profile.v1'),
+    joeAIMemoryJournal: read('joeai.memory.journal.v1'),
+    joeAIMemoryEvents: read('joeai.memory.events.v1')
+  };
 }
 
+export function buildBackupPayload(data = {}) {
+  return {
+    format: 'JoeAnimeDB Full Backup',
+    schemaVersion: 2,
+    exportedAt: new Date().toISOString(),
+    appVersion: window.JoeAnimeDB?.version || data?.version || '5.0',
+    database: data,
+    preferences: backupPreferences()
+  };
+}
+
+export function exportBackup(data) {
+  const payload = buildBackupPayload(data);
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `JoeAnimeDB-5-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+
+  return payload;
+}
+
+export function parseBackupText(text = '') {
+  let parsed;
+
+  try {
+    parsed = JSON.parse(String(text || ''));
+  } catch {
+    throw new Error('That file is not valid JSON.');
+  }
+
+  const database = parsed?.database || parsed?.data || parsed;
+  if (!database || !Array.isArray(database.anime)) {
+    throw new Error('That file is not a JoeAnimeDB full backup.');
+  }
+
+  return {
+    database,
+    preferences: parsed?.preferences || {},
+    exportedAt: parsed?.exportedAt || '',
+    schemaVersion: Number(parsed?.schemaVersion || 1)
+  };
+}
+
+export function applyBackupPreferences(preferences = {}) {
+  const mappings = [
+    ['theme', 'joeanime-theme'],
+    ['displayName', 'joeanime-display-name'],
+    ['discoverNextPage', 'joeanime-discover-next-page'],
+    ['onboardingVersion', 'joeanime-onboarding-version'],
+    ['onboardingState', 'joeanime-onboarding-state-v1'],
+    ['followingNotifications', 'joeanime-following-notifications-enabled'],
+    ['joeAIMemoryProfile', 'joeai.memory.profile.v1'],
+    ['joeAIMemoryJournal', 'joeai.memory.journal.v1'],
+    ['joeAIMemoryEvents', 'joeai.memory.events.v1']
+  ];
+
+  mappings.forEach(([preferenceKey, storageKey]) => {
+    if (!Object.prototype.hasOwnProperty.call(preferences, preferenceKey)) return;
+    const value = preferences[preferenceKey];
+    try {
+      if (value === undefined || value === null || value === '') {
+        localStorage.removeItem(storageKey);
+      } else {
+        localStorage.setItem(storageKey, String(value));
+      }
+    } catch {}
+  });
+}
+
+export function exportDiagnostics({
+  data = {},
+  stats = {},
+  providerHealth = null,
+  storageInfo = null,
+  lastUpdate = null,
+  metadata = {}
+} = {}) {
+  const anime = Array.isArray(data.anime) ? data.anime : [];
+  const catalog = Array.isArray(data.catalog) ? data.catalog : [];
+  const payload = {
+    format: 'JoeAnimeDB Diagnostics',
+    generatedAt: new Date().toISOString(),
+    app: {
+      version: window.JoeAnimeDB?.version || data.version || '5.0',
+      desktop: Boolean(window.JoeAnimeDB?.desktop),
+      databaseEngine: data.engine || stats.databaseEngine || 'Local',
+      userAgent: navigator.userAgent
+    },
+    storage: storageInfo,
+    counts: {
+      library: anime.length,
+      catalog: catalog.length,
+      favorites: anime.filter((item) => item.favorite).length,
+      following: catalog.filter((item) => item.followed).length,
+      metadataRepairsRemaining: Number(metadata.repairsRemaining || 0),
+      missingStudios: Number(metadata.missingStudios || 0),
+      missingGenres: Number(metadata.missingGenres || 0)
+    },
+    providers: providerHealth,
+    lastUpdate
+  };
+
+  downloadJson(
+    `JoeAnimeDB-diagnostics-${new Date().toISOString().slice(0, 10)}.json`,
+    payload
+  );
+
+  return payload;
+}
+
+function downloadJson(filename, value) {
+  const blob = new Blob([JSON.stringify(value, null, 2)], {
+    type: 'application/json;charset=utf-8'
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
 
 export function exportLibraryList(data = {}) {
   const exportedAt = new Date();

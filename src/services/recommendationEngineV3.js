@@ -1,4 +1,12 @@
 import { getAnimeStudios, getAnimeTasteSignals } from '../utils/metadataAdapters';
+import {
+  applyLearnedSignals,
+  buildConfidenceReceipt
+} from '../ai/intelligence/joeAIIntelligence';
+import {
+  buildLibraryGenomeProfile,
+  scoreGenomeFit
+} from '../ai/intelligence/genomeRecommendationSignals';
 
 const clean = (value = '') => String(value).trim();
 const lower = (value = '') => clean(value).toLowerCase();
@@ -122,17 +130,23 @@ function reasonLabel(value = '') {
   return clean(value).replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-export function scoreCandidate(item, profile) {
+export function scoreCandidate(item, profile, intelligence = {}) {
+  const learning = applyLearnedSignals(item, intelligence.joeAIState);
+  if (learning.excluded) return { item, excluded: true, score: Number.NEGATIVE_INFINITY };
   let score = communityScore(item) * 2.4;
   const reasons = [];
-  const warnings = [];
+  const warnings = [...learning.warnings];
+  let evidenceCount = 0;
 
   const matchedGenres = tagsOf(item)
     .map((tag) => [tag, profile.genres.get(lower(tag)) || 0])
     .filter(([, value]) => value !== 0)
     .sort((a, b) => b[1] - a[1]);
 
-  matchedGenres.forEach(([, value]) => { score += value * 1.7; });
+  matchedGenres.forEach(([, value]) => {
+    score += value * 1.7;
+    if (value > 1.5) evidenceCount += 1;
+  });
   const positiveGenres = matchedGenres.filter(([, value]) => value > 1.5).slice(0, 2);
   const negativeGenres = matchedGenres.filter(([, value]) => value < -1.5).slice(0, 2);
 
@@ -147,24 +161,42 @@ export function scoreCandidate(item, profile) {
     .map((studio) => [studio, profile.studios.get(lower(studio)) || 0])
     .sort((a, b) => b[1] - a[1]);
 
-  matchedStudios.forEach(([, value]) => { score += value * 1.25; });
-  if (matchedStudios[0]?.[1] > 2) reasons.push(`From ${matchedStudios[0][0]}, one of your strongest studio signals`);
+  matchedStudios.forEach(([, value]) => { score += value * 1.25 * learning.studioWeight; });
+  if (matchedStudios[0]?.[1] > 2 && learning.studioWeight > 0) {
+    reasons.push(`From ${matchedStudios[0][0]}, one of your strongest studio signals`);
+    evidenceCount += 1;
+  }
 
   const matchedTraits = traitsOf(item)
     .map((trait) => [trait, profile.traits.get(trait) || 0])
     .sort((a, b) => b[1] - a[1]);
 
-  matchedTraits.forEach(([, value]) => { score += value * 2.25; });
+  matchedTraits.forEach(([, value]) => {
+    score += value * 2.25;
+    if (value > 1.5) evidenceCount += 1;
+  });
   matchedTraits.filter(([, value]) => value > 1.5).slice(0, 2).forEach(([trait]) => reasons.push(trait));
 
   const episodeCount = Number(item.episodeCount || item.episodes || 0);
-  if (episodeCount >= 24 && profile.topTraits.some(([trait]) => trait === 'Long Journey')) score += 5;
+  if (episodeCount >= 24 && profile.topTraits.some(([trait]) => trait === 'Long Journey')) {
+    score += 5 * learning.lengthWeight;
+  }
 
   const metadataFields = [item.cover || item.imageUrl, item.synopsis, tagsOf(item).length, studiosOf(item).length, item.year];
   const metadataCompleteness = metadataFields.filter(Boolean).length / metadataFields.length;
   score -= (1 - metadataCompleteness) * 12;
+  const genome = scoreGenomeFit(item, intelligence.genomeProfile || { weights: new Map() });
+  score += genome.score + learning.adjustment;
+  evidenceCount += genome.evidenceCount;
+  reasons.push(...genome.reasons, ...learning.reasons);
 
   const confidence = Math.max(50, Math.min(98, Math.round(57 + score / 9)));
+  const confidenceReceipt = buildConfidenceReceipt(item, {
+    tasteMatch: confidence,
+    evidenceCount,
+    genomeTier: genome.tier,
+    state: intelligence.joeAIState
+  });
 
   return {
     item,
@@ -172,7 +204,9 @@ export function scoreCandidate(item, profile) {
     confidence,
     reasons: [...new Set(reasons)].slice(0, 3),
     warnings: [...new Set(warnings)].slice(0, 2),
-    traits: matchedTraits.map(([trait]) => trait)
+    traits: [...new Set([...matchedTraits.map(([trait]) => trait), ...genome.traits])],
+    confidenceReceipt,
+    feedbackAction: learning.directFeedback?.action || ''
   };
 }
 
@@ -192,33 +226,64 @@ function franchise(item = {}) {
     .join('|');
 }
 
-export function buildDiscoverPlan({ library = [], candidates = [], daySeed = 0 } = {}) {
-  const profile = buildTasteProfile(library);
-  const ranked = candidates.map((item) => scoreCandidate(item, profile)).sort((a, b) => b.score - a.score);
-  const used = new Set();
-  const usedFranchises = new Set();
+function enrichDiscoverItem(entry = {}) {
+  return {
+    ...(entry.item || {}),
+    joeAIRecommendation: {
+      score: Math.round(Number(entry.score || 0) * 10) / 10,
+      tasteMatch: Number(entry.confidence || 0),
+      reasons: entry.reasons || [],
+      warnings: entry.warnings || [],
+      traits: entry.traits || [],
+      confidenceReceipt: entry.confidenceReceipt || null,
+      feedbackAction: entry.feedbackAction || ''
+    }
+  };
+}
 
-  const take = (predicate, limit = 24, options = {}) => {
+export function buildDiscoverPlan({ library = [], candidates = [], daySeed = 0, joeAIState = {} } = {}) {
+  const profile = buildTasteProfile(library);
+  const genomeProfile = buildLibraryGenomeProfile(library);
+  const ranked = candidates
+    .map((item) => scoreCandidate(item, profile, { joeAIState, genomeProfile }))
+    .filter((entry) => !entry.excluded)
+    .sort((a, b) => b.score - a.score);
+  const appearanceCounts = new Map();
+
+  const take = (predicate, limit = 12, options = {}) => {
     const result = [];
+    const shelfIds = new Set();
+    const shelfFranchises = new Set();
+    const maxAppearances = Number(options.maxAppearances || 2);
+
     for (const entry of ranked) {
       if (!predicate(entry)) continue;
       const key = identity(entry.item);
       const family = franchise(entry.item);
-      if (used.has(key)) continue;
-      if (!options.allowFranchiseRepeat && usedFranchises.has(family)) continue;
-      used.add(key);
-      usedFranchises.add(family);
-      result.push(entry.item);
+      if (shelfIds.has(key)) continue;
+      if ((appearanceCounts.get(key) || 0) >= maxAppearances) continue;
+      if (!options.allowFranchiseRepeat && shelfFranchises.has(family)) continue;
+
+      shelfIds.add(key);
+      shelfFranchises.add(family);
+      appearanceCounts.set(key, (appearanceCounts.get(key) || 0) + 1);
+      result.push(enrichDiscoverItem(entry));
       if (result.length >= limit) break;
     }
     return result;
   };
 
-  const topPool = ranked.slice(0, Math.min(12, ranked.length));
+  const dailyEligible = ranked.filter((entry) => {
+    const receipt = entry.confidenceReceipt || {};
+    return Number(receipt.dataConfidence || 0) >= 50
+      && Number(receipt.predictionConfidence || 0) >= 50;
+  });
+  const topPoolSource = dailyEligible.length ? dailyEligible : ranked;
+  const topPool = topPoolSource.slice(0, Math.min(12, topPoolSource.length));
   const daily = topPool.length ? topPool[Math.abs(daySeed) % topPool.length] : null;
   if (daily) {
-    used.add(identity(daily.item));
-    usedFranchises.add(franchise(daily.item));
+    const dailyKey = identity(daily.item);
+    appearanceCounts.set(dailyKey, 1);
   }
 
   const genreSet = (entry) => new Set(tagsOf(entry.item).map(lower));
@@ -247,6 +312,15 @@ export function buildDiscoverPlan({ library = [], candidates = [], daySeed = 0 }
     : null;
 
   const anchorTags = new Set(tagsOf(anchor || {}).map(lower));
+  const hiddenSurprises = ranked.filter(isHidden).slice(0, 24).map(enrichDiscoverItem);
+  const adventurousSurprises = ranked
+    .slice(Math.min(10, ranked.length), Math.min(60, ranked.length))
+    .filter((entry) => Number(entry.confidenceReceipt?.dataConfidence || 0) >= 50)
+    .slice(0, 24)
+    .map(enrichDiscoverItem);
+  const chaosSurprises = ranked
+    .filter((entry) => Number(entry.confidenceReceipt?.dataConfidence || 0) >= 35)
+    .map(enrichDiscoverItem);
 
   return {
     profile,
@@ -266,6 +340,16 @@ export function buildDiscoverPlan({ library = [], candidates = [], daySeed = 0 }
     }),
     movieNight: take(isMovie),
     anchor,
-    topStudio
+    topStudio,
+    surprisePools: {
+      safe: ranked.slice(0, 12).map(enrichDiscoverItem),
+      hidden: hiddenSurprises,
+      wild: adventurousSurprises.length
+        ? adventurousSurprises
+        : ranked.slice(0, 24).map(enrichDiscoverItem),
+      chaos: chaosSurprises.length
+        ? chaosSurprises
+        : ranked.map(enrichDiscoverItem)
+    }
   };
 }

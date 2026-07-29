@@ -1,0 +1,336 @@
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  BadgeInfo,
+  BookOpenText,
+  Bot,
+  CheckCircle2,
+  CircleHelp,
+  Clipboard,
+  Database,
+  ExternalLink,
+  FileJson,
+  FolderArchive,
+  FolderOpen,
+  GraduationCap,
+  HeartHandshake,
+  ScrollText,
+  ServerCog,
+  Wrench
+} from 'lucide-react';
+import { checkMetadataProviders } from '../services/providerHealth';
+import { exportDiagnostics } from '../services/storage';
+import '../styles/about-help.css';
+
+const RELEASE_NOTES_URL = 'https://github.com/WickedWampa/JoeAnimeDB/releases';
+const KITSU_URL = 'https://kitsu.io/';
+const WIKIDATA_URL = 'https://www.wikidata.org/';
+const FALLBACK_VERSION = '5.0.0-beta.1';
+
+function displayVersion(value = '') {
+  const clean = String(value || '').trim().replace(/^v/i, '');
+  return clean ? `v${clean}` : `v${FALLBACK_VERSION}`;
+}
+
+export function AboutHelpPage({
+  data,
+  stats,
+  onReplayTutorial
+}) {
+  const [systemInfo, setSystemInfo] = useState(null);
+  const [providerHealth, setProviderHealth] = useState(null);
+  const [checkingProviders, setCheckingProviders] = useState(false);
+  const [status, setStatus] = useState('');
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadSystemInfo() {
+      const [storageResult, appResult] = await Promise.allSettled([
+        window.JoeAnimeDB?.storage?.getInfo?.(),
+        window.JoeAnimeDB?.app?.getInfo?.()
+      ]);
+
+      if (!active) return;
+
+      setSystemInfo({
+        ...(storageResult.status === 'fulfilled' ? storageResult.value || {} : {}),
+        ...(appResult.status === 'fulfilled' ? appResult.value || {} : {})
+      });
+    }
+
+    void loadSystemInfo();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const version = displayVersion(
+    systemInfo?.version ||
+    window.JoeAnimeDB?.version ||
+    data?.version ||
+    FALLBACK_VERSION
+  );
+
+  const buildLabel = useMemo(() => {
+    if (systemInfo?.packaged === false) return 'Development build';
+    if (systemInfo?.architecture) return `Desktop · ${systemInfo.architecture}`;
+    return 'Desktop Beta';
+  }, [systemInfo]);
+
+  async function openExternal(url) {
+    try {
+      if (window.JoeAnimeDB?.app?.openExternal) {
+        const result = await window.JoeAnimeDB.app.openExternal(url);
+        if (!result?.ok) throw new Error(result?.error || 'The link could not be opened.');
+      } else {
+        window.open(url, '_blank', 'noopener,noreferrer');
+      }
+    } catch (error) {
+      setStatus(`Could not open link: ${error?.message || String(error)}`);
+    }
+  }
+
+  async function openFolder(kind) {
+    const openers = {
+      data: window.JoeAnimeDB?.storage?.openDataFolder,
+      backups: window.JoeAnimeDB?.storage?.openBackupsFolder,
+      logs: window.JoeAnimeDB?.storage?.openLogsFolder
+    };
+    const labels = {
+      data: 'Data',
+      backups: 'Backup',
+      logs: 'Logs'
+    };
+    const opener = openers[kind];
+
+    if (!opener) {
+      setStatus(`${labels[kind]} folder access is available in the desktop build.`);
+      return;
+    }
+
+    try {
+      const result = await opener();
+      setStatus(
+        result?.ok
+          ? `${labels[kind]} folder opened.`
+          : result?.error || `${labels[kind]} folder could not be opened.`
+      );
+    } catch (error) {
+      setStatus(`Could not open ${labels[kind].toLowerCase()} folder: ${error?.message || String(error)}`);
+    }
+  }
+
+  async function testProviders() {
+    if (checkingProviders) return;
+    setCheckingProviders(true);
+    setStatus('Checking Kitsu and Wikidata...');
+
+    try {
+      const result = await checkMetadataProviders();
+      setProviderHealth(result);
+      setStatus(
+        result.online === result.total
+          ? 'Kitsu and Wikidata are online.'
+          : `${result.online}/${result.total} metadata providers are online. Cached data remains available.`
+      );
+    } catch (error) {
+      setStatus(`Provider check failed: ${error?.message || String(error)}`);
+    } finally {
+      setCheckingProviders(false);
+    }
+  }
+
+  function downloadSystemDiagnostics() {
+    exportDiagnostics({
+      data,
+      stats,
+      providerHealth,
+      storageInfo: systemInfo,
+      metadata: {
+        source: 'About / Help'
+      }
+    });
+    setStatus('Diagnostics exported. Personal notes and ratings were not included.');
+  }
+
+  async function copySystemDetails() {
+    const details = [
+      `JoeAnimeDB ${version}`,
+      `Build: ${buildLabel}`,
+      `Database: ${stats?.databaseEngine || data?.engine || 'Local'}`,
+      `Library: ${data?.anime?.length || 0} titles`,
+      `Catalog: ${data?.catalog?.length || 0} titles`,
+      `Data: ${systemInfo?.database || systemInfo?.data || 'Desktop storage'}`
+    ].join('\n');
+
+    try {
+      await navigator.clipboard.writeText(details);
+      setStatus('System details copied to the clipboard.');
+    } catch {
+      setStatus('Could not copy system details. Export Diagnostics instead.');
+    }
+  }
+
+  function replayTutorial() {
+    onReplayTutorial?.();
+    setStatus('The first-time tutorial was reopened.');
+  }
+
+  const providerRows = providerHealth?.providers || [];
+
+  return (
+    <section className="aboutHelpPage">
+      <header className="aboutHelpHero">
+        <div>
+          <p>About / Help</p>
+          <h1>JoeAnimeDB</h1>
+          <span>Your anime library, recommendation lab, and local taste history.</span>
+          <div className="aboutVersion">
+            <BadgeInfo />
+            <strong>{version}</strong>
+            <small>{buildLabel}</small>
+          </div>
+        </div>
+        <CircleHelp aria-hidden="true" />
+      </header>
+
+      <div className="aboutHelpGrid">
+        <section className="aboutPanel howJoeAI">
+          <header>
+            <Bot />
+            <div>
+              <p>Local Anime Intelligence</p>
+              <h2>How JoeAI works</h2>
+            </div>
+          </header>
+          <p>
+            JoeAI builds a taste model from your scores, favorites, rewatches, watch history,
+            Anime DNA and Genome cards. It compares those signals with unseen Kitsu catalog
+            titles, then explains why each recommendation fits.
+          </p>
+          <div className="aboutSteps">
+            <span><strong>1</strong> Your library supplies taste signals.</span>
+            <span><strong>2</strong> Genome evidence adds themes, tone and viewer fantasy.</span>
+            <span><strong>3</strong> Your feedback improves future rankings.</span>
+          </div>
+          <footer>
+            <HeartHandshake />
+            JoeAI learning and recommendation feedback are stored with your local database.
+          </footer>
+        </section>
+
+        <section className="aboutPanel providers">
+          <header>
+            <ServerCog />
+            <div>
+              <p>Metadata Credits</p>
+              <h2>Powered by open providers</h2>
+            </div>
+          </header>
+          <button type="button" onClick={() => openExternal(KITSU_URL)}>
+            <span>🍥</span>
+            <div>
+              <strong>Kitsu</strong>
+              <small>Primary anime titles, artwork, synopsis, scores and release data</small>
+            </div>
+            <ExternalLink />
+          </button>
+          <button type="button" onClick={() => openExternal(WIKIDATA_URL)}>
+            <span>🌐</span>
+            <div>
+              <strong>Wikidata</strong>
+              <small>Targeted repair for missing studios, genres and structured facts</small>
+            </div>
+            <ExternalLink />
+          </button>
+          <div className="providerCheck">
+            <button type="button" onClick={testProviders} disabled={checkingProviders}>
+              <CheckCircle2 />
+              {checkingProviders ? 'Checking Providers…' : 'Check Provider Status'}
+            </button>
+            {providerRows.map((provider) => (
+              <span key={provider.id} className={provider.online ? 'online' : 'offline'}>
+                {provider.label}: {provider.online ? 'Online' : 'Unavailable'}
+              </span>
+            ))}
+          </div>
+        </section>
+
+        <section className="aboutPanel backup">
+          <header>
+            <FolderArchive />
+            <div>
+              <p>Backup Location</p>
+              <h2>Your data stays findable</h2>
+            </div>
+          </header>
+          <dl>
+            <div>
+              <dt>Database</dt>
+              <dd>{systemInfo?.database || 'JoeAnime.db in the desktop data folder'}</dd>
+            </div>
+            <div>
+              <dt>Safety backups</dt>
+              <dd>{systemInfo?.backups || 'Backups folder inside JoeAnimeDB application data'}</dd>
+            </div>
+          </dl>
+          <div className="aboutActionGrid">
+            <button type="button" onClick={() => openFolder('backups')}>
+              <FolderArchive /> Open Backup Folder
+            </button>
+            <button type="button" onClick={() => openFolder('data')}>
+              <FolderOpen /> Open Data Folder
+            </button>
+          </div>
+          <small>
+            Full JSON backups are created from Settings → Library. Restore creates a SQLite
+            safety copy before replacing the current database.
+          </small>
+        </section>
+
+        <section className="aboutPanel troubleshooting">
+          <header>
+            <Wrench />
+            <div>
+              <p>Troubleshooting</p>
+              <h2>Useful recovery tools</h2>
+            </div>
+          </header>
+          <div className="aboutActionList">
+            <button type="button" onClick={() => openFolder('logs')}>
+              <BookOpenText />
+              <span><strong>Open Diagnostic Logs</strong><small>Useful when the updater or desktop process fails</small></span>
+            </button>
+            <button type="button" onClick={downloadSystemDiagnostics}>
+              <FileJson />
+              <span><strong>Export Diagnostics</strong><small>Provider, version and database health without personal notes</small></span>
+            </button>
+            <button type="button" onClick={copySystemDetails}>
+              <Clipboard />
+              <span><strong>Copy System Details</strong><small>Paste build information into a bug report</small></span>
+            </button>
+            <button type="button" onClick={replayTutorial}>
+              <GraduationCap />
+              <span><strong>Replay Tutorial</strong><small>Review importing, Library and JoeAI controls</small></span>
+            </button>
+          </div>
+        </section>
+      </div>
+
+      <section className="aboutReleaseNotes">
+        <div>
+          <ScrollText />
+          <span>
+            <strong>What changed in this release?</strong>
+            <small>Read feature notes, fixes and known release details on GitHub.</small>
+          </span>
+        </div>
+        <button type="button" onClick={() => openExternal(RELEASE_NOTES_URL)}>
+          View Release Notes <ExternalLink />
+        </button>
+      </section>
+
+      {status && <p className="aboutHelpStatus" role="status">{status}</p>}
+    </section>
+  );
+}

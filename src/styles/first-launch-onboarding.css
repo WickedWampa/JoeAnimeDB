@@ -1,0 +1,711 @@
+.firstLaunchOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(1, 6, 14, .84);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.firstLaunchCard {
+  width: min(720px, 100%);
+  max-height: min(900px, calc(100vh - 32px));
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  box-sizing: border-box;
+  padding: 30px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--cyan, #32e7ff) 52%, transparent);
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at 92% 0%, color-mix(in srgb, var(--cyan, #32e7ff) 18%, transparent), transparent 38%),
+    radial-gradient(circle at 0% 100%, color-mix(in srgb, var(--pink, #ff5cc8) 12%, transparent), transparent 40%),
+    linear-gradient(145deg, color-mix(in srgb, var(--bg, #050910) 92%, #102339), color-mix(in srgb, var(--bg, #050910) 94%, #240d30));
+  box-shadow:
+    0 30px 100px rgba(0, 0, 0, .68),
+    0 0 48px color-mix(in srgb, var(--cyan, #32e7ff) 15%, transparent);
+  color: var(--text, #edf7ff);
+}
+
+.firstLaunchCard.firstLaunchStep2,
+.firstLaunchCard.firstLaunchStep3,
+.firstLaunchCard.firstLaunchStep4 {
+  width: min(880px, 100%);
+}
+
+.firstLaunchProgress {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.firstLaunchProgress span {
+  flex: 1;
+  height: 4px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, .12);
+}
+
+.firstLaunchProgress span.active {
+  background: linear-gradient(90deg, var(--cyan, #32e7ff), var(--pink, #d65cff));
+  box-shadow: 0 0 12px color-mix(in srgb, var(--cyan, #32e7ff) 45%, transparent);
+}
+
+.firstLaunchHeading {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.firstLaunchIcon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 54px;
+  width: 54px;
+  height: 54px;
+  border: 1px solid color-mix(in srgb, var(--cyan, #32e7ff) 32%, transparent);
+  border-radius: 17px;
+  background: color-mix(in srgb, var(--cyan, #32e7ff) 10%, transparent);
+  font-size: 1.8rem;
+}
+
+.firstLaunchEyebrow {
+  margin: 2px 0 7px;
+  color: var(--cyan, #32e7ff);
+  font-size: .75rem;
+  font-weight: 950;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+
+.firstLaunchCard h2 {
+  margin: 0;
+  font-size: clamp(1.8rem, 5vw, 2.8rem);
+  line-height: 1.02;
+}
+
+.firstLaunchContent {
+  min-height: 0;
+  margin-top: 6px;
+  padding: 0 4px 4px;
+  overflow: auto;
+  scrollbar-color: color-mix(in srgb, var(--cyan, #32e7ff) 36%, transparent) transparent;
+}
+
+.firstLaunchBody {
+  margin: 14px 0 20px;
+  color: color-mix(in srgb, var(--text, #edf7ff) 76%, transparent);
+  line-height: 1.58;
+}
+
+.firstLaunchCard label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 850;
+}
+
+.firstLaunchCard input:not([type="range"]) {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 14px 15px;
+  border: 1px solid color-mix(in srgb, var(--cyan, #32e7ff) 34%, transparent);
+  border-radius: 14px;
+  outline: none;
+  background: rgba(2, 9, 17, .84);
+  color: var(--text, white);
+  font: inherit;
+  font-size: 1rem;
+}
+
+.firstLaunchCard input:not([type="range"]):focus {
+  border-color: var(--cyan, #32e7ff);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--cyan, #32e7ff) 18%, transparent);
+}
+
+.firstLaunchFeature {
+  display: grid;
+  gap: 6px;
+  margin: 20px 0 4px;
+  padding: 15px 17px;
+  border: 1px solid rgba(255, 255, 255, .1);
+  border-radius: 15px;
+  background: rgba(255, 255, 255, .045);
+}
+
+.firstLaunchFeature b {
+  color: var(--cyan, #32e7ff);
+}
+
+.firstLaunchFeature span {
+  color: color-mix(in srgb, var(--text, #edf7ff) 74%, transparent);
+  line-height: 1.45;
+}
+
+.firstLaunchThemes {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.firstLaunchThemes button {
+  min-height: 132px;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 7px;
+  border: 1px solid rgba(255, 255, 255, .11);
+  border-radius: 17px;
+  background: rgba(255, 255, 255, .04);
+  color: var(--text, #edf7ff);
+  cursor: pointer;
+}
+
+.firstLaunchThemes button:hover,
+.firstLaunchThemes button.active {
+  border-color: color-mix(in srgb, var(--cyan, #32e7ff) 62%, transparent);
+  background: color-mix(in srgb, var(--cyan, #32e7ff) 9%, transparent);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .24);
+}
+
+.firstLaunchThemes button > span {
+  width: 56px;
+  height: 34px;
+  border: 2px solid rgba(255, 255, 255, .3);
+  border-radius: 99px;
+  background: linear-gradient(135deg, var(--theme-a), var(--theme-b));
+  box-shadow: 0 0 22px color-mix(in srgb, var(--theme-a) 42%, transparent);
+}
+
+.firstLaunchThemes small,
+.firstLaunchAnimeChoice small {
+  color: var(--muted, #9fb1c7);
+}
+
+.firstLaunchSearch {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+}
+
+.firstLaunchSearch button,
+.firstLaunchActions button,
+.firstLaunchReadyGrid button,
+.onboardingPageTip button {
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 13px;
+  background: rgba(7, 15, 25, .86);
+  color: var(--text, #edf7ff);
+  padding: 11px 15px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.firstLaunchSearch button:hover,
+.firstLaunchActions button:hover,
+.onboardingPageTip button:hover {
+  border-color: color-mix(in srgb, var(--cyan, #32e7ff) 58%, transparent);
+  color: var(--cyan, #32e7ff);
+}
+
+.firstLaunchCard button:disabled {
+  opacity: .46;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.firstLaunchSelectionMeta {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 9px 2px;
+  color: var(--cyan, #32e7ff);
+  font-weight: 850;
+}
+
+.firstLaunchSelectionMeta small {
+  color: var(--muted, #9fb1c7);
+  font-weight: 650;
+  text-align: right;
+}
+
+.firstLaunchAnimeResults {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.firstLaunchAnimeChoice {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, .1);
+  border-radius: 15px;
+  background: rgba(255, 255, 255, .04);
+  color: var(--text, #edf7ff);
+  text-align: left;
+  cursor: pointer;
+}
+
+.firstLaunchAnimeChoice:hover,
+.firstLaunchAnimeChoice.selected {
+  border-color: color-mix(in srgb, var(--cyan, #32e7ff) 56%, transparent);
+  background: color-mix(in srgb, var(--cyan, #32e7ff) 8%, transparent);
+}
+
+.firstLaunchAnimeChoice > span {
+  min-width: 0;
+}
+
+.firstLaunchAnimeChoice strong,
+.firstLaunchAnimeChoice small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.firstLaunchAnimeChoice > b {
+  color: var(--cyan, #32e7ff);
+  font-size: .78rem;
+}
+
+.firstLaunchPoster {
+  position: relative;
+  width: 52px;
+  height: 70px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(55, 234, 255, .18), rgba(255, 92, 200, .16));
+  font-weight: 950;
+}
+
+.firstLaunchPoster img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.firstLaunchRatings {
+  display: grid;
+  gap: 10px;
+}
+
+.firstLaunchRatingCard {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 14px;
+  padding: 11px;
+  border: 1px solid rgba(255, 255, 255, .1);
+  border-radius: 17px;
+  background: rgba(255, 255, 255, .04);
+}
+
+.firstLaunchRatingCard .firstLaunchPoster {
+  width: 64px;
+  height: 88px;
+}
+
+.firstLaunchRatingBody {
+  min-width: 0;
+}
+
+.firstLaunchRatingTitle {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.firstLaunchRatingTitle strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.firstLaunchRatingTitle b {
+  color: var(--gold, #ffc928);
+  font-size: 1.35rem;
+}
+
+.firstLaunchRatingBody input[type="range"] {
+  width: 100%;
+  margin: 10px 0;
+  accent-color: var(--gold, #ffc928);
+}
+
+.firstLaunchRatingControls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.firstLaunchRatingControls > button {
+  border: 1px solid rgba(255, 92, 200, .24);
+  border-radius: 99px;
+  background: rgba(255, 92, 200, .06);
+  color: var(--text, #edf7ff);
+  padding: 8px 12px;
+  cursor: pointer;
+  font-weight: 850;
+}
+
+.firstLaunchRatingControls > button.active {
+  border-color: rgba(255, 92, 200, .56);
+  color: #ff8bd5;
+  background: rgba(255, 92, 200, .14);
+}
+
+.firstLaunchRatingControls label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  color: var(--muted, #9fb1c7);
+  font-size: .8rem;
+}
+
+.firstLaunchRatingControls label span {
+  display: grid;
+  grid-template-columns: 30px 30px 30px;
+  align-items: center;
+  text-align: center;
+}
+
+.firstLaunchRatingControls label button {
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(255, 255, 255, .12);
+  background: rgba(0, 0, 0, .24);
+  color: var(--text, #edf7ff);
+  border-radius: 9px;
+  cursor: pointer;
+}
+
+.firstLaunchWorking,
+.firstLaunchEmpty {
+  min-height: 190px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px dashed rgba(255, 255, 255, .14);
+  border-radius: 18px;
+  color: var(--muted, #9fb1c7);
+  text-align: center;
+}
+
+.firstLaunchWorking span {
+  width: 34px;
+  height: 34px;
+  border: 3px solid rgba(255, 255, 255, .12);
+  border-top-color: var(--cyan, #32e7ff);
+  border-radius: 50%;
+  animation: firstLaunchSpin .8s linear infinite;
+}
+
+.firstLaunchEmpty > span {
+  color: var(--gold, #ffc928);
+  font-size: 2.2rem;
+}
+
+.firstLaunchEmpty p {
+  max-width: 420px;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.firstLaunchMessage {
+  color: #ffb7c8;
+}
+
+.firstLaunchBuildGuide {
+  margin-bottom: 14px;
+  padding: 15px;
+  border: 1px solid color-mix(in srgb, var(--cyan, #32e7ff) 28%, transparent);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--cyan, #32e7ff) 5%, transparent);
+}
+
+.firstLaunchBuildHeading {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin-bottom: 12px;
+}
+
+.firstLaunchBuildHeading > span {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 40px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--cyan, #32e7ff) 13%, transparent);
+  color: var(--cyan, #32e7ff);
+  font-size: 1.4rem;
+  font-weight: 950;
+}
+
+.firstLaunchBuildHeading strong,
+.firstLaunchBuildHeading small {
+  display: block;
+}
+
+.firstLaunchBuildHeading strong {
+  font-size: 1.05rem;
+}
+
+.firstLaunchBuildHeading small {
+  margin-top: 3px;
+  color: var(--muted, #9fb1c7);
+}
+
+.firstLaunchBuildSteps {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.firstLaunchBuildSteps article {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-content: start;
+  gap: 9px;
+  padding: 11px;
+  border: 1px solid rgba(255, 255, 255, .09);
+  border-radius: 14px;
+  background: rgba(0, 0, 0, .18);
+}
+
+.firstLaunchBuildSteps article > b {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--cyan, #32e7ff) 25%, transparent),
+    color-mix(in srgb, var(--pink, #ff5cc8) 20%, transparent)
+  );
+  color: #fff;
+  font-size: .82rem;
+}
+
+.firstLaunchBuildSteps article strong {
+  display: block;
+  font-size: .9rem;
+}
+
+.firstLaunchBuildSteps article p {
+  margin: 8px 0 0;
+  color: var(--muted, #9fb1c7);
+  font-size: .77rem;
+  line-height: 1.45;
+}
+
+.firstLaunchPath {
+  display: block;
+  margin-top: 6px;
+  color: var(--cyan, #32e7ff);
+  font-size: .68rem;
+  font-weight: 900;
+  line-height: 1.4;
+}
+
+.firstLaunchPath i {
+  padding: 0 2px;
+  color: var(--pink, #ff5cc8);
+  font-style: normal;
+}
+
+.firstLaunchReadyGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 11px;
+}
+
+.firstLaunchReadyGrid button {
+  min-height: 142px;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 7px;
+  background: rgba(255, 255, 255, .04);
+}
+
+.firstLaunchReadyGrid button:hover {
+  border-color: color-mix(in srgb, var(--cyan, #32e7ff) 58%, transparent);
+  background: color-mix(in srgb, var(--cyan, #32e7ff) 9%, transparent);
+  transform: translateY(-2px);
+}
+
+.firstLaunchReadyGrid button > span {
+  color: var(--cyan, #32e7ff);
+  font-size: 1.8rem;
+}
+
+.firstLaunchReadyGrid small {
+  color: var(--muted, #9fb1c7);
+  line-height: 1.35;
+}
+
+.firstLaunchActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(255, 255, 255, .08);
+}
+
+.firstLaunchActions > div {
+  display: flex;
+  gap: 9px;
+}
+
+.firstLaunchActions button.primary {
+  border-color: color-mix(in srgb, var(--cyan, #32e7ff) 56%, transparent);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--cyan, #32e7ff) 26%, #07101a),
+    color-mix(in srgb, var(--pink, #ff5cc8) 20%, #07101a)
+  );
+  color: #fff;
+}
+
+.firstLaunchActions button.quiet {
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted, #9fb1c7);
+}
+
+.onboardingPageTip {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 800;
+  width: min(430px, calc(100vw - 48px));
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 13px;
+  padding: 18px 50px 18px 18px;
+  border: 1px solid color-mix(in srgb, var(--cyan, #32e7ff) 44%, transparent);
+  border-radius: 19px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--cyan, #32e7ff) 9%, transparent), color-mix(in srgb, var(--pink, #ff5cc8) 7%, transparent)),
+    color-mix(in srgb, var(--bg, #050910) 94%, #111c2a);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, .52), 0 0 30px color-mix(in srgb, var(--cyan, #32e7ff) 10%, transparent);
+  animation: onboardingTipIn .24s ease both;
+}
+
+.onboardingPageTipIcon {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--cyan, #32e7ff) 12%, transparent);
+  color: var(--cyan, #32e7ff);
+  font-size: 1.5rem;
+}
+
+.onboardingPageTip p {
+  margin: 1px 0 5px;
+  color: var(--cyan, #32e7ff);
+  font-size: .68rem;
+  font-weight: 950;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.onboardingPageTip strong,
+.onboardingPageTip > div > span {
+  display: block;
+}
+
+.onboardingPageTip strong {
+  margin-bottom: 6px;
+  font-size: 1.05rem;
+}
+
+.onboardingPageTip > div > span {
+  color: var(--muted, #9fb1c7);
+  font-size: .88rem;
+  line-height: 1.48;
+}
+
+.onboardingPageTip > div > button {
+  margin-top: 12px;
+  padding: 7px 12px;
+  color: var(--cyan, #32e7ff);
+}
+
+.onboardingPageTip button.onboardingPageTipClose {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted, #9fb1c7);
+  font-size: 1.3rem;
+}
+
+@keyframes firstLaunchSpin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes onboardingTipIn {
+  from { opacity: 0; transform: translateY(12px) scale(.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (max-width: 720px) {
+  .firstLaunchOverlay { padding: 10px; }
+  .firstLaunchCard {
+    max-height: calc(100vh - 20px);
+    padding: 22px 18px;
+    border-radius: 22px;
+  }
+  .firstLaunchThemes,
+  .firstLaunchReadyGrid,
+  .firstLaunchAnimeResults { grid-template-columns: 1fr; }
+  .firstLaunchBuildSteps { grid-template-columns: 1fr; }
+  .firstLaunchThemes button { min-height: 92px; }
+  .firstLaunchReadyGrid button { min-height: 104px; }
+  .firstLaunchActions {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+  .firstLaunchActions > div {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .firstLaunchActions button.primary:last-child {
+    grid-column: 1 / -1;
+  }
+  .firstLaunchActions > button { width: 100%; }
+  .firstLaunchRatingControls { align-items: flex-start; flex-direction: column; }
+  .onboardingPageTip { right: 12px; bottom: 12px; width: calc(100vw - 24px); }
+}

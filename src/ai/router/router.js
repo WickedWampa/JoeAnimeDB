@@ -1,5 +1,5 @@
 import { executeJoeAICommand } from '../commandExecutor';
-import { routeJoeAIRecommendation } from '../joeAIRecommendationRouter';
+import { routeJoeAIRecommendation, routeJoeAITitleQuestion } from '../joeAIRecommendationRouter';
 import { routeJoeAIConversation } from '../conversation/conversationEngine';
 
 function makeText(text) {
@@ -103,11 +103,15 @@ function shouldUseCardRecommendationRouter(question = '') {
 }
 
 async function routeQuestion({ question, anime, catalog, updateAnime, brain }) {
-  // 1. Conversation/memory/reasoning has priority for normal questions.
+  // 1. Exact title questions always receive a direct answer.
+  const titleAnswer = routeJoeAITitleQuestion(question, anime, catalog);
+  if (titleAnswer) return titleAnswer;
+
+  // 2. Conversation/memory/reasoning handles non-title questions.
   const conversation = routeJoeAIConversation({ text: question, anime, catalog });
   if (conversation) return conversation;
 
-  // 2. Existing command executor gets library intelligence and simple stats Q&A.
+  // 3. Existing command executor gets library intelligence and simple stats Q&A.
   const routedQuestion = await executeJoeAICommand({
     intent: { kind: 'question', text: question },
     anime,
@@ -116,10 +120,10 @@ async function routeQuestion({ question, anime, catalog, updateAnime, brain }) {
     brain
   });
 
-  // 3. If command executor had a real answer, keep it.
+  // 4. If command executor had a real answer, keep it.
   if (routedQuestion && !isGenericFallback(routedQuestion)) return routedQuestion;
 
-  // 4. Direct title lookups live here, AFTER reasoning/memory.
+  // 5. Remaining Genome/recommendation wording gets the legacy fallback.
   const knowledge = routeJoeAIRecommendation(question, anime, catalog);
   if (knowledge) return knowledge;
 

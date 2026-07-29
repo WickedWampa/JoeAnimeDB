@@ -6,17 +6,6 @@ import {
   stripEditionNoise
 } from '../utils/titleAliases';
 const KITSU_API_BASE = 'https://kitsu.io/api/edge';
-const REQUEST_TIMEOUT_MS = 12000;
-
-function withTimeout(promise, timeoutMs = REQUEST_TIMEOUT_MS) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-
-  return {
-    signal: controller.signal,
-    run: promise(controller.signal).finally(() => clearTimeout(timeout))
-  };
-}
 
 function cleanArray(values = []) {
   return [...new Set(values.filter(Boolean).map((value) => String(value).trim()).filter(Boolean))];
@@ -218,28 +207,6 @@ function bestKitsuMatch(results = [], wantedItem = {}) {
       b.similarity - a.similarity
     );
 
-  console.groupCollapsed(
-    `[Kitsu Match] ${wantedItem.title || wantedItem.officialTitle || 'Unknown title'}`
-  );
-  console.table(
-    ranked.slice(0, 5).map((entry) => ({
-      title: entry.candidate.officialTitle || entry.candidate.title || '',
-      year: entry.candidate.year || '',
-      episodes:
-        entry.candidate.episodeCount ||
-        entry.candidate.episodes ||
-        '',
-      score: entry.score,
-      similarity: Number(entry.similarity.toFixed(3)),
-      season: extractSeasonNumber(
-        entry.candidate.officialTitle ||
-        entry.candidate.title ||
-        ''
-      )
-    }))
-  );
-  console.groupEnd();
-
   const best = ranked[0];
 
   // Accept exact/strong franchise matches even when punctuation, subtitle, or
@@ -297,45 +264,26 @@ async function fetchKitsuStudios(kitsuId) {
       6000
     );
 
-    console.groupCollapsed(`[Kitsu Studios] ${kitsuId}`);
-    console.log('FULL PAYLOAD', payload);
-    console.log('DATA', payload.data);
-    console.log('INCLUDED', payload.included);
-
     const included = includedResourceIndex(payload.included || []);
 
     const studios = cleanArray(
       (payload.data || []).flatMap((production) => {
-        console.log('Production Row', production);
-
         const role = String(production?.attributes?.role || '').toLowerCase();
-        console.log('Role:', role);
-
-        // For debugging, only treat explicit studio/animation rows as studios.
         if (role && !/studio|animation/.test(role)) return [];
 
         const link = production?.relationships?.producer?.data;
-        console.log('Producer Link:', link);
-
         const producer = link
           ? included.get(`${link.type}:${link.id}`)
           : null;
 
-        console.log('Resolved Producer:', producer);
-
         const name = producerName(producer);
-        console.log('Producer Name:', name);
-
         return name ? [name] : [];
       })
     );
 
-    console.log('FINAL STUDIOS:', studios);
-    console.groupEnd();
-
     return studios;
   } catch (error) {
-    console.error('[Kitsu Studios] lookup failed:', kitsuId, error);
+    console.warn('[Kitsu Studios] lookup failed:', kitsuId, error);
     return [];
   }
 }
@@ -375,9 +323,19 @@ export function normalizeKitsuAnime(resource = {}, base = {}) {
     episodes: Number(attributes.episodeCount || 0) || base.episodes || base.episodeCount || 0,
     communityScore: scoreFromRating(attributes.averageRating) || base.communityScore || '',
     malScore: scoreFromRating(attributes.averageRating) || base.malScore || '',
+    members: Number(attributes.userCount || 0) || base.members || 0,
+    popularity: Number(attributes.popularityRank || 0) || base.popularity || '',
+    rank: Number(attributes.ratingRank || 0) || base.rank || '',
+    trailerUrl: attributes.youtubeVideoId
+      ? `https://www.youtube.com/watch?v=${attributes.youtubeVideoId}`
+      : base.trailerUrl || '',
     ageRating: attributes.ageRating || base.ageRating || '',
     status: base.status || attributes.status || 'Watching',
     metadataSource: 'kitsu',
+    metadataReady: Boolean(
+      (posterFromAttributes(attributes) || base.cover) &&
+      (attributes.synopsis || attributes.description || base.synopsis || base.description)
+    ),
     metadataNeedsRefresh: !(Array.isArray(base.genres) && base.genres.length),
     metadataUpdatedAt: new Date().toISOString(),
     syncStatus: {
@@ -469,20 +427,6 @@ export async function searchKitsuAnime(title, { limit = 8 } = {}) {
   }
 
   const results = [...byId.values()];
-
-  console.log('[Kitsu Search Variants]', {
-    originalTitle: title,
-    queries,
-    resultCount: results.length,
-    results: results.slice(0, 8).map((row) => ({
-      kitsuId: row.kitsuId,
-      title: row.title,
-      officialTitle: row.officialTitle,
-      canonicalTitle: row.canonicalTitle,
-      year: row.year,
-      episodes: row.episodeCount || row.episodes || 0
-    }))
-  });
 
   return results;
 }
@@ -626,22 +570,6 @@ export async function fetchKitsuCatalogPage({ page = 1, limit = 25 } = {}) {
   };
 }
 
-async function fetchFirstWorkingKitsuCollection(paths = []) {
-  let lastError = null;
-
-  for (const path of paths) {
-    try {
-      const rows = await fetchKitsuAnimeCollection(path);
-      if (rows.length) return rows;
-    } catch (error) {
-      lastError = error;
-    }
-  }
-
-  if (lastError) throw lastError;
-  return [];
-}
-
 function appendKitsuPagination(path, { limit = 20, offset = 0 } = {}) {
   const separator = path.includes('?') ? '&' : '?';
   return `${path}${separator}page[limit]=${limit}&page[offset]=${offset}`;
@@ -707,7 +635,7 @@ export async function fetchKitsuLiveDiscoverFeeds({
   const today = new Date();
   const todayKey = today.toISOString().slice(0, 10);
 
-  const [currentResources, upcomingResources] = await Promise.all([
+  const [currentResult, upcomingResult] = await Promise.allSettled([
     fetchPaginatedKitsuCollection({
       target: Math.max(safeCurrentLimit * 2, 40),
       paths: [
@@ -725,6 +653,27 @@ export async function fetchKitsuLiveDiscoverFeeds({
       ]
     })
   ]);
+
+  if (currentResult.status === 'rejected' && upcomingResult.status === 'rejected') {
+    throw new Error(
+      `Kitsu live feeds failed: ${currentResult.reason?.message || currentResult.reason}; ${upcomingResult.reason?.message || upcomingResult.reason}`
+    );
+  }
+
+  const currentResources = currentResult.status === 'fulfilled'
+    ? currentResult.value
+    : [];
+  const upcomingResources = upcomingResult.status === 'fulfilled'
+    ? upcomingResult.value
+    : [];
+  const warnings = [];
+
+  if (currentResult.status === 'rejected') {
+    warnings.push(`Kitsu current feed failed: ${currentResult.reason?.message || currentResult.reason}`);
+  }
+  if (upcomingResult.status === 'rejected') {
+    warnings.push(`Kitsu upcoming feed failed: ${upcomingResult.reason?.message || upcomingResult.reason}`);
+  }
 
   const current = currentResources
     .filter((resource) => {
@@ -761,6 +710,8 @@ export async function fetchKitsuLiveDiscoverFeeds({
     current,
     upcoming,
     source: 'kitsu',
+    partial: warnings.length > 0,
+    warnings,
     fetched: {
       current: currentResources.length,
       upcoming: upcomingResources.length

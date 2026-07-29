@@ -1,25 +1,21 @@
 import React, { useMemo } from 'react';
 import { AnimeCard } from '../components/AnimeCard';
 import { Poster } from '../components/Poster';
-import { hasUserScore, score, scoreLabel } from '../utils/animeUtils';
+import { hasUserScore, score, scoreLabel, sortAnimeByUserScore } from '../utils/animeUtils';
 import '../styles/favorites.css';
+import '../styles/library-release-readiness.css';
 
-function favoriteScore(item) {
-  return hasUserScore(item) ? score(item) : -1;
-}
-
-export function FavoritesPage({ anime = [], allAnime = [], mode = 'poster', setSelected, updateAnime }) {
+export function FavoritesPage({
+  anime = [],
+  allAnime = [],
+  mode = 'poster',
+  setSelected,
+  updateAnime,
+  query = '',
+  onClearSearch
+}) {
   const rankedFavorites = useMemo(
-    () => [...anime].sort((a, b) => {
-      const scoreDifference = favoriteScore(b) - favoriteScore(a);
-      if (scoreDifference !== 0) return scoreDifference;
-
-      const rankA = Number(a.finalRank || Number.MAX_SAFE_INTEGER);
-      const rankB = Number(b.finalRank || Number.MAX_SAFE_INTEGER);
-      if (rankA !== rankB) return rankA - rankB;
-
-      return String(a.title || '').localeCompare(String(b.title || ''));
-    }),
+    () => sortAnimeByUserScore(anime),
     [anime]
   );
 
@@ -29,6 +25,8 @@ export function FavoritesPage({ anime = [], allAnime = [], mode = 'poster', setS
   const averageFavoriteScore = ratedFavorites.length
     ? (ratedFavorites.reduce((sum, item) => sum + score(item), 0) / ratedFavorites.length).toFixed(2)
     : '—';
+  const totalFavoriteCount = allAnime.filter((item) => item.favorite).length;
+  const hasNoResults = Boolean(query.trim()) && totalFavoriteCount > 0 && rankedFavorites.length === 0;
 
   async function removeFavorite(event, item) {
     event.stopPropagation();
@@ -61,10 +59,20 @@ export function FavoritesPage({ anime = [], allAnime = [], mode = 'poster', setS
       </header>
 
       {rankedFavorites.length === 0 ? (
-        <section className="favoritesEmpty">
-          <span>♡</span>
-          <h2>Your Hall of Fame is waiting.</h2>
-          <p>Click the heart on an anime in your Library to give it a permanent place here.</p>
+        <section className={`libraryStateCard ${hasNoResults ? 'noResults' : 'emptyLibrary'}`} role="status">
+          <span className="libraryStateIcon" aria-hidden="true">{hasNoResults ? '⌕' : '♡'}</span>
+          <p className="eyebrow">{hasNoResults ? 'No Matches' : 'Your Hall of Fame'}</p>
+          <h2>{hasNoResults ? 'No favorites match this search' : 'Your Hall of Fame is waiting'}</h2>
+          <p>
+            {hasNoResults
+              ? `None of your favorites match “${query.trim()}”.`
+              : 'Click the heart on an anime in your Library to give it a permanent place here.'}
+          </p>
+          {hasNoResults && onClearSearch && (
+            <div className="libraryStateActions">
+              <button type="button" onClick={onClearSearch}>Clear Search</button>
+            </div>
+          )}
         </section>
       ) : mode === 'list' ? (
         <section className="favoritesTablePanel">
@@ -79,7 +87,17 @@ export function FavoritesPage({ anime = [], allAnime = [], mode = 'poster', setS
                 <tr key={item.id || item.title} onClick={() => setSelected(item)}>
                   <td><button type="button" className="favoritesHeartButton" title="Remove from Hall of Fame" onClick={(event) => removeFavorite(event, item)}>♥</button></td>
                   <td><span className="favoritesListRank">#{index + 1}</span></td>
-                  <td className="titleCell"><Poster anime={item} className="thumb" />{item.title}</td>
+                  <td className="titleCell">
+                    <Poster anime={item} className="thumb" />
+                    <span className="libraryTitleStack">
+                      <strong>{item.title}</strong>
+                      {(item.metadataNeedsReview || item.metadataNeedsRefresh) && (
+                        <span className={`metadataReviewBadge ${item.metadataNeedsReview ? 'identityReview' : ''}`}>
+                          ⚠ {item.metadataNeedsReview ? 'Needs Review' : 'Metadata Incomplete'}
+                        </span>
+                      )}
+                    </span>
+                  </td>
                   <td>{hasUserScore(item) ? `★ ${score(item).toFixed(1)}` : scoreLabel(item)}</td>
                   <td>{item.studio || 'Unknown Studio'}</td>
                   <td>{(item.genres || []).slice(0, 3).join(', ') || '—'}</td>

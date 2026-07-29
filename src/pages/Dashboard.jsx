@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import '../styles/joeai-home-v3.css';
 import '../styles/joeai-home-v3-guide.css';
 import { Poster } from '../components/Poster';
@@ -152,32 +152,9 @@ export function Dashboard({
   setView,
   onQuickAsk,
   onOpenFilter,
-  displayName = 'Anime Fan',
-  isNewUser = false,
-  onSaveDisplayName
+  displayName = 'Anime Fan'
 }) {
   const [showJoeAIGuide, setShowJoeAIGuide] = useState(false);
-  const [showNameWelcome, setShowNameWelcome] = useState(false);
-  const [nameDraft, setNameDraft] = useState('');
-  const [savingName, setSavingName] = useState(false);
-
-  useEffect(() => {
-    if (isNewUser) setShowNameWelcome(true);
-  }, [isNewUser]);
-
-  async function saveWelcomeName(event) {
-    event?.preventDefault?.();
-    const cleanName = String(nameDraft || '').trim();
-    if (!cleanName || savingName) return;
-
-    setSavingName(true);
-    try {
-      await onSaveDisplayName?.(cleanName);
-      setShowNameWelcome(false);
-    } finally {
-      setSavingName(false);
-    }
-  }
 
   function sendQuickAsk(prompt) {
     const cleanPrompt = String(prompt || '').trim();
@@ -454,31 +431,6 @@ export function Dashboard({
         </Panel>
       </section>
 
-      {showNameWelcome && (
-        <div className="homeV3WelcomeOverlay" role="dialog" aria-modal="true" aria-labelledby="welcome-name-title">
-          <form className="homeV3WelcomeCard" onSubmit={saveWelcomeName}>
-            <span className="homeV3WelcomeIcon">🧠</span>
-            <p className="homeV3WelcomeEyebrow">Welcome to JoeAnimeDB</p>
-            <h2 id="welcome-name-title">What should JoeAI call you?</h2>
-            <p>Your name personalizes the Home screen and JoeAI. You can change it later in Settings.</p>
-            <label htmlFor="joeanime-display-name">Display name</label>
-            <input
-              id="joeanime-display-name"
-              value={nameDraft}
-              onChange={(event) => setNameDraft(event.target.value)}
-              placeholder="Enter your name"
-              maxLength={32}
-              autoFocus
-            />
-            <div className="homeV3WelcomeActions">
-              <button type="button" onClick={() => setShowNameWelcome(false)}>Skip for now</button>
-              <button type="submit" className="primary" disabled={!nameDraft.trim() || savingName}>
-                {savingName ? 'Saving…' : 'Continue'}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
     </section>
   );
 }

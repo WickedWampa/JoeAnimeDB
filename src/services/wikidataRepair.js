@@ -1,4 +1,4 @@
-import { fetchJikanStudioFallback } from './manualJikanRepair';
+import { fetchKitsuMetadata } from './kitsuProvider';
 import {
   buildTitleSearchQueries,
   franchiseBaseTitle,
@@ -538,13 +538,26 @@ export async function fetchWikidataRepair(item = {}, library = []) {
 }
 
 
-async function tryJikanStudioFallback(item = {}) {
+async function tryKitsuStudioFallback(item = {}) {
   if (String(item.studio || '').trim()) return null;
   try {
-    const result = await fetchJikanStudioFallback(item);
-    return result?.patch?.studio ? result : null;
+    const enriched = await fetchKitsuMetadata(item);
+    const studios = studioNames(enriched);
+    if (!studios.length) return null;
+
+    return {
+      patch: {
+        kitsuId: enriched.kitsuId || item.kitsuId || '',
+        studio: studios.join(' / '),
+        productionStudios: studios,
+        metadataRepairSource: 'kitsu-studio-fallback',
+        kitsuStudioFallbackUpdatedAt: new Date().toISOString()
+      },
+      matchedTitle: enriched.officialTitle || enriched.title || item.officialTitle || item.title,
+      confidence: 95
+    };
   } catch (error) {
-    console.warn('[Jikan Studio Fallback] unavailable:', item.title || item.officialTitle || 'Unknown title', error?.message || error);
+    console.warn('[Kitsu Studio Fallback] unavailable:', item.title || item.officialTitle || 'Unknown title', error?.message || error);
     return null;
   }
 }
@@ -571,12 +584,12 @@ export async function enrichMissingMetadata(item = {}, library = []) {
     if (patch.episodeCount || patch.episodes) fields.push('episodes');
 
     if (!fields.length) {
-      const jikanResult = await tryJikanStudioFallback(item);
-      const jikanPatch = jikanResult?.patch || {};
-      if (jikanPatch.studio) {
+      const kitsuResult = await tryKitsuStudioFallback(item);
+      const kitsuPatch = kitsuResult?.patch || {};
+      if (kitsuPatch.studio) {
         return {
           anime: {
-            ...item, ...jikanPatch,
+            ...item, ...kitsuPatch,
             cover: item.cover, poster: item.poster, image: item.image,
             posterImage: item.posterImage, coverImage: item.coverImage,
             joeScore: item.joeScore, score: item.score, favorite: item.favorite,
@@ -585,8 +598,8 @@ export async function enrichMissingMetadata(item = {}, library = []) {
             metadataRepairAttemptedAt: new Date().toISOString()
           },
           improved: true, fields: ['studio'], unresolved: false,
-          source: 'jikan-studio-fallback', matchedTitle: jikanResult.matchedTitle,
-          confidence: jikanResult.confidence
+          source: 'kitsu-studio-fallback', matchedTitle: kitsuResult.matchedTitle,
+          confidence: kitsuResult.confidence
         };
       }
       return {
@@ -633,12 +646,12 @@ export async function enrichMissingMetadata(item = {}, library = []) {
       confidence: result.confidence
     };
   } catch (error) {
-    const jikanResult = await tryJikanStudioFallback(item);
-    const jikanPatch = jikanResult?.patch || {};
-    if (jikanPatch.studio) {
+    const kitsuResult = await tryKitsuStudioFallback(item);
+    const kitsuPatch = kitsuResult?.patch || {};
+    if (kitsuPatch.studio) {
       return {
         anime: {
-          ...item, ...jikanPatch,
+          ...item, ...kitsuPatch,
           cover: item.cover, poster: item.poster, image: item.image,
           posterImage: item.posterImage, coverImage: item.coverImage,
           joeScore: item.joeScore, score: item.score, favorite: item.favorite,
@@ -647,8 +660,8 @@ export async function enrichMissingMetadata(item = {}, library = []) {
           metadataRepairAttemptedAt: new Date().toISOString()
         },
         improved: true, fields: ['studio'], unresolved: false,
-        source: 'jikan-studio-fallback', matchedTitle: jikanResult.matchedTitle,
-        confidence: jikanResult.confidence
+        source: 'kitsu-studio-fallback', matchedTitle: kitsuResult.matchedTitle,
+        confidence: kitsuResult.confidence
       };
     }
     return {

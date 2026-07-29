@@ -1,0 +1,245 @@
+.aboutHelpPage {
+  --about-accent: var(--accent, #27e6ff);
+  --about-hot: var(--pink, #ff45c8);
+  display: grid;
+  gap: 20px;
+  padding: 24px;
+  color: var(--text);
+}
+
+.aboutHelpHero {
+  position: relative;
+  isolation: isolate;
+  min-height: 330px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  border: 1px solid color-mix(in srgb, var(--about-accent) 42%, var(--line));
+  border-radius: 28px;
+  padding: clamp(30px, 5vw, 62px);
+  background:
+    radial-gradient(circle at 78% 24%, color-mix(in srgb, var(--about-hot) 20%, transparent), transparent 34%),
+    radial-gradient(circle at 22% 82%, color-mix(in srgb, var(--about-accent) 18%, transparent), transparent 38%),
+    linear-gradient(135deg, color-mix(in srgb, var(--panel) 94%, #03060c), #050812);
+  box-shadow: 0 24px 60px rgba(0,0,0,.3);
+}
+
+.aboutHelpHero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  opacity: .22;
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--about-accent) 18%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--about-accent) 18%, transparent) 1px, transparent 1px);
+  background-size: 34px 34px;
+  mask-image: linear-gradient(90deg, #000, transparent 80%);
+}
+
+.aboutHelpHero > div { max-width: 760px; }
+.aboutHelpHero > div > p,
+.aboutPanel header p {
+  margin: 0 0 9px;
+  color: var(--about-accent);
+  font-size: .72rem;
+  font-weight: 950;
+  letter-spacing: .17em;
+  text-transform: uppercase;
+}
+.aboutHelpHero h1 {
+  margin: 0;
+  width: fit-content;
+  color: transparent;
+  background: linear-gradient(100deg, var(--about-accent), #aa72ff 58%, var(--about-hot));
+  -webkit-background-clip: text;
+  background-clip: text;
+  font-size: clamp(3.4rem, 8vw, 7rem);
+  font-weight: 1000;
+  letter-spacing: -.065em;
+  line-height: .9;
+}
+.aboutHelpHero > div > span {
+  display: block;
+  margin-top: 22px;
+  color: color-mix(in srgb, var(--text) 82%, var(--muted));
+  font-size: clamp(1rem, 1.5vw, 1.3rem);
+}
+.aboutHelpHero > svg {
+  width: clamp(100px, 16vw, 190px);
+  height: auto;
+  color: color-mix(in srgb, var(--about-accent) 72%, #fff);
+  opacity: .28;
+  filter: drop-shadow(0 0 30px color-mix(in srgb, var(--about-accent) 55%, transparent));
+}
+.aboutVersion {
+  width: fit-content;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 20px;
+  border: 1px solid color-mix(in srgb, var(--about-accent) 45%, transparent);
+  border-radius: 999px;
+  padding: 9px 13px;
+  background: rgba(2,7,14,.68);
+}
+.aboutVersion svg { width: 17px; color: var(--about-accent); }
+.aboutVersion strong { color: #fff; }
+.aboutVersion small { color: var(--muted); }
+
+.aboutHelpGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+.aboutPanel {
+  min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--line) 74%, var(--about-accent));
+  border-radius: 22px;
+  padding: 22px;
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  box-shadow: 0 14px 34px rgba(0,0,0,.2);
+}
+.aboutPanel > header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 17px;
+}
+.aboutPanel > header > svg {
+  width: 38px;
+  height: 38px;
+  border: 1px solid color-mix(in srgb, var(--about-accent) 42%, transparent);
+  border-radius: 12px;
+  padding: 8px;
+  color: var(--about-accent);
+  background: color-mix(in srgb, var(--about-accent) 10%, transparent);
+}
+.aboutPanel h2 { margin: 0; font-size: 1.35rem; }
+.aboutPanel header p { margin-bottom: 4px; font-size: .62rem; }
+.howJoeAI > p { color: var(--muted); line-height: 1.68; }
+.aboutSteps { display: grid; gap: 8px; margin-top: 17px; }
+.aboutSteps span { display: flex; align-items: center; gap: 9px; color: color-mix(in srgb, var(--text) 84%, var(--muted)); }
+.aboutSteps strong {
+  flex: 0 0 25px;
+  display: grid;
+  place-items: center;
+  height: 25px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--about-accent) 18%, transparent);
+  color: var(--about-accent);
+}
+.howJoeAI footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 18px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+  color: var(--muted);
+  font-size: .78rem;
+}
+.howJoeAI footer svg { width: 18px; color: var(--about-hot); }
+
+.providers > button,
+.aboutActionList > button {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  margin-top: 9px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  padding: 12px;
+  background: rgba(255,255,255,.025);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.providers > button:hover,
+.aboutActionList > button:hover,
+.aboutActionGrid button:hover,
+.aboutReleaseNotes button:hover {
+  border-color: color-mix(in srgb, var(--about-accent) 62%, transparent);
+  background: color-mix(in srgb, var(--about-accent) 8%, transparent);
+}
+.providers > button > span { font-size: 1.35rem; }
+.providers > button strong,
+.providers > button small,
+.aboutActionList strong,
+.aboutActionList small { display: block; }
+.providers > button small,
+.aboutActionList small { margin-top: 3px; color: var(--muted); }
+.providers > button > svg { width: 16px; color: var(--about-accent); }
+.providerCheck { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 14px; }
+.providerCheck button,
+.aboutActionGrid button,
+.aboutReleaseNotes button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid color-mix(in srgb, var(--about-accent) 38%, var(--line));
+  border-radius: 11px;
+  padding: 9px 12px;
+  background: color-mix(in srgb, var(--panel) 80%, transparent);
+  color: var(--text);
+  font-weight: 850;
+  cursor: pointer;
+}
+.providerCheck button:disabled { opacity: .55; cursor: default; }
+.providerCheck span { border-radius: 999px; padding: 5px 8px; font-size: .68rem; }
+.providerCheck span.online { background: rgba(76,229,154,.12); color: #76f1b4; }
+.providerCheck span.offline { background: rgba(255,123,139,.12); color: #ff9eaa; }
+
+.backup dl { display: grid; gap: 10px; margin: 0 0 15px; }
+.backup dl > div { border-radius: 12px; padding: 11px; background: rgba(255,255,255,.025); }
+.backup dt { color: var(--about-accent); font-size: .68rem; font-weight: 900; text-transform: uppercase; }
+.backup dd { margin: 5px 0 0; color: var(--muted); overflow-wrap: anywhere; }
+.aboutActionGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+.aboutActionGrid svg { width: 17px; }
+.backup > small { display: block; margin-top: 14px; color: var(--muted); line-height: 1.5; }
+
+.aboutActionList { display: grid; gap: 8px; }
+.aboutActionList > button { margin: 0; grid-template-columns: auto minmax(0, 1fr); }
+.aboutActionList > button > svg { color: var(--about-accent); }
+
+.aboutReleaseNotes {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  border: 1px solid color-mix(in srgb, var(--about-hot) 36%, var(--line));
+  border-radius: 18px;
+  padding: 17px 20px;
+  background: linear-gradient(100deg, color-mix(in srgb, var(--about-hot) 8%, var(--panel)), var(--panel));
+}
+.aboutReleaseNotes > div { display: flex; align-items: center; gap: 12px; }
+.aboutReleaseNotes > div > svg { color: var(--about-hot); }
+.aboutReleaseNotes strong,
+.aboutReleaseNotes small { display: block; }
+.aboutReleaseNotes small { margin-top: 3px; color: var(--muted); }
+.aboutReleaseNotes button svg { width: 15px; }
+.aboutHelpStatus {
+  margin: 0;
+  border: 1px solid color-mix(in srgb, var(--about-accent) 34%, var(--line));
+  border-radius: 13px;
+  padding: 11px 14px;
+  background: color-mix(in srgb, var(--about-accent) 7%, var(--panel));
+  color: color-mix(in srgb, var(--text) 84%, var(--muted));
+}
+
+@media (max-width: 900px) {
+  .aboutHelpGrid { grid-template-columns: 1fr; }
+  .aboutHelpHero > svg { display: none; }
+}
+
+@media (max-width: 620px) {
+  .aboutHelpPage { padding: 15px; }
+  .aboutHelpHero { min-height: 290px; padding: 28px; }
+  .aboutActionGrid { grid-template-columns: 1fr; }
+  .aboutReleaseNotes { align-items: stretch; flex-direction: column; }
+}

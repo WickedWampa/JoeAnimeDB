@@ -1,6 +1,15 @@
 import { generateAnimeDNA } from './animeDNA';
 import { getScore, normalizeText } from './statistics';
 import { getAnimeStudios, getAnimeTasteSignals } from '../utils/metadataAdapters';
+import {
+  applyLearnedSignals,
+  buildConfidenceReceipt,
+  hasSavedTitleDistinction
+} from '../ai/intelligence/joeAIIntelligence';
+import {
+  buildLibraryGenomeProfile,
+  scoreGenomeFit
+} from '../ai/intelligence/genomeRecommendationSignals';
 
 const SERIES_STOP_WORDS = new Set([
   'the', 'a', 'an', 'season', 'part', 'final', 'arc', 'episode', 'episodes',
@@ -58,9 +67,10 @@ function hasSameMalId(candidate, libraryItem) {
   return Boolean(candidateId && libraryId && String(candidateId) === String(libraryId));
 }
 
-function isLikelyWatched(candidate, libraryItem) {
+function isLikelyWatched(candidate, libraryItem, joeAIState = {}) {
   if (!candidate?.title || !libraryItem?.title) return false;
   if (hasSameMalId(candidate, libraryItem)) return true;
+  if (hasSavedTitleDistinction(candidate.title, libraryItem.title, joeAIState)) return false;
 
   const candidateKey = titleKey(candidate.title);
   const libraryKey = titleKey(libraryItem.title);
@@ -225,7 +235,80 @@ function matchLabel(match) {
   return 'Catalog Match';
 }
 
-export function getUnseenCatalog(library = [], catalog = []) {
+function requestConstraints(prompt = '', library = [], catalog = []) {
+  const text = String(prompt || '').toLowerCase();
+  const episodeLimit = text.match(/\b(?:under|less than|fewer than)\s+(\d+)\s*(?:episodes?|eps?)\b/);
+  const comparisonTitle = String(prompt || '').match(/\b(?:shorter|longer)\s+than\s+(.+?)[?.!]*$/i)?.[1]?.trim();
+  const comparisonItem = comparisonTitle
+    ? [...library, ...catalog].find((item) => titleKey(item.title) === titleKey(comparisonTitle))
+    : null;
+
+  return {
+    maxEpisodes: episodeLimit ? Number(episodeLimit[1]) : 0,
+    referenceEpisodes: getEpisodes(comparisonItem),
+    wantsShorter: /\b(shorter|short binge|quick watch)\b/.test(text),
+    wantsLonger: /\b(longer|long journey|long-form)\b/.test(text),
+    wantsDarker: /\b(darker|dark fantasy|more intense|bleak)\b/.test(text),
+    wantsLighter: /\b(lighter|less bleak|less dark|feel good|wholesome)\b/.test(text),
+    wantsFunny: /\b(funnier|funny|comedy|make me laugh|hilarious)\b/.test(text),
+    excludeHorror: /\b(?:not|without|no)\s+horror\b/.test(text)
+  };
+}
+
+function requestAdjustment(candidate = {}, constraints = {}) {
+  const text = normalizeText([
+    candidate.synopsis,
+    candidate.description,
+    ...(candidate.genres || []),
+    ...(candidate.themes || []),
+    ...(candidate.genomeTraits || [])
+  ].filter(Boolean).join(' ')).toLowerCase();
+  const episodes = getEpisodes(candidate);
+  let adjustment = 0;
+  let excluded = false;
+  const reasons = [];
+
+  if (constraints.maxEpisodes && episodes && episodes > constraints.maxEpisodes) excluded = true;
+  if (constraints.referenceEpisodes && episodes) {
+    if (constraints.wantsShorter && episodes < constraints.referenceEpisodes) {
+      adjustment += 10;
+      reasons.push(`shorter than the ${constraints.referenceEpisodes}-episode reference`);
+    }
+    if (constraints.wantsLonger && episodes > constraints.referenceEpisodes) {
+      adjustment += 10;
+      reasons.push('longer than your reference title');
+    }
+  }
+
+  if (constraints.wantsShorter && episodes > 0 && episodes <= 24) {
+    adjustment += 7;
+    reasons.push('fits the shorter watch you asked for');
+  }
+  if (constraints.wantsLonger && episodes >= 36) {
+    adjustment += 7;
+    reasons.push('offers the longer journey you asked for');
+  }
+
+  const isDark = /\b(dark|horror|gore|violent|survival|tragedy|psychological)\b/.test(text);
+  const isFunny = /\b(comedy|funny|humor|parody|lighthearted)\b/.test(text);
+  if (constraints.wantsDarker && isDark) {
+    adjustment += 9;
+    reasons.push('matches the darker tone in your request');
+  }
+  if (constraints.wantsLighter && !isDark) {
+    adjustment += 7;
+    reasons.push('avoids the bleak tone you moved away from');
+  }
+  if (constraints.wantsFunny && isFunny) {
+    adjustment += 10;
+    reasons.push('matches the comedic energy you asked for');
+  }
+  if (constraints.excludeHorror && /\bhorror\b/.test(text)) excluded = true;
+
+  return { adjustment, excluded, reasons };
+}
+
+export function getUnseenCatalog(library = [], catalog = [], options = {}) {
   const anime = asList(library);
   const seenCatalogKeys = new Set();
 
@@ -233,7 +316,9 @@ export function getUnseenCatalog(library = [], catalog = []) {
     const key = titleKey(item.title);
     if (!key || seenCatalogKeys.has(key)) return false;
 
-    const alreadyWatched = anime.some((libraryItem) => isLikelyWatched(item, libraryItem));
+    const alreadyWatched = anime.some((libraryItem) =>
+      isLikelyWatched(item, libraryItem, options.joeAIState)
+    );
     if (alreadyWatched) return false;
 
     seenCatalogKeys.add(key);
@@ -244,8 +329,11 @@ export function getUnseenCatalog(library = [], catalog = []) {
 export function recommendAnime(library = [], catalog = [], options = {}) {
   const limit = options.limit || 5;
   const anime = asList(library);
-  const candidates = getUnseenCatalog(anime, catalog);
+  const joeAIState = options.joeAIState || {};
+  const candidates = getUnseenCatalog(anime, catalog, { joeAIState });
   const dna = generateAnimeDNA(anime);
+  const constraints = requestConstraints(options.prompt || '', anime, asList(catalog));
+  const genomeProfile = buildLibraryGenomeProfile(anime);
 
   const genreScores = scoreMap(dna.topGenres);
   const studioScores = scoreMap(dna.topStudios);
@@ -258,10 +346,14 @@ export function recommendAnime(library = [], catalog = [], options = {}) {
 
   return candidates
     .map((candidate) => {
+      const learning = applyLearnedSignals(candidate, joeAIState);
+      if (learning.excluded) return null;
       const metadataReady = hasMetadata(candidate);
       let rawScore = metadataReady ? 0 : 20;
       const reasons = [];
+      const warnings = [...learning.warnings];
       const debug = [];
+      let evidenceCount = 0;
 
       if (!metadataReady) {
         reasons.push('metadata is still pending, so this is an early catalog pick');
@@ -273,6 +365,7 @@ export function recommendAnime(library = [], catalog = [], options = {}) {
         if (genreStrength > 0) {
           const points = genreStrength * 16;
           rawScore += points;
+          evidenceCount += 1;
           reasons.push(`${genre} is already part of your Anime DNA`);
           debug.push(`+${points.toFixed(1)} ${genre} genre signal`);
         }
@@ -288,10 +381,13 @@ export function recommendAnime(library = [], catalog = [], options = {}) {
 
       if (matchedStudioRows.length) {
         const strongestStudio = matchedStudioRows[0];
-        const points = strongestStudio.value * 14;
+        const points = strongestStudio.value * 14 * learning.studioWeight;
         rawScore += points;
-        reasons.push(`${strongestStudio.studio} connects to your studio history`);
-        debug.push(`+${points.toFixed(1)} ${strongestStudio.studio} studio signal`);
+        if (learning.studioWeight > 0) {
+          evidenceCount += 1;
+          reasons.push(`${strongestStudio.studio} connects to your studio history`);
+          debug.push(`+${points.toFixed(1)} ${strongestStudio.studio} studio signal`);
+        }
       }
 
       const communityScore = getCommunityScore(candidate);
@@ -305,7 +401,7 @@ export function recommendAnime(library = [], catalog = [], options = {}) {
       if (preferredEpisodes > 0 && candidateEpisodes > 0) {
         const distance = Math.abs(preferredEpisodes - candidateEpisodes);
         const lengthFit = Math.max(0, 1 - distance / Math.max(preferredEpisodes, candidateEpisodes));
-        const points = lengthFit * 7;
+        const points = lengthFit * 7 * learning.lengthWeight;
         rawScore += points;
         debug.push(`+${points.toFixed(1)} episode fit`);
 
@@ -326,6 +422,7 @@ export function recommendAnime(library = [], catalog = [], options = {}) {
         const anchorScore = getScore(closest.anchor).toFixed(1);
         const points = Math.min(14, closest.closeness / 2.5);
         rawScore += points;
+        evidenceCount += 1;
         debug.push(`+${points.toFixed(1)} closest anchor ${closest.anchor.title}`);
 
         if (closest.sharedGenres.length >= 2) {
@@ -346,7 +443,26 @@ export function recommendAnime(library = [], catalog = [], options = {}) {
       if (candidate.synopsis) rawScore += 1.5;
       if (candidate.year) rawScore += 1;
 
+      const genome = scoreGenomeFit(candidate, genomeProfile);
+      rawScore += genome.score;
+      evidenceCount += genome.evidenceCount;
+      reasons.push(...genome.reasons);
+
+      const requested = requestAdjustment(
+        { ...candidate, genomeTraits: genome.traits },
+        constraints
+      );
+      if (requested.excluded) return null;
+      rawScore += requested.adjustment + learning.adjustment;
+      reasons.push(...requested.reasons, ...learning.reasons);
+
       const match = matchBand(rawScore, metadataReady);
+      const confidenceReceipt = buildConfidenceReceipt(candidate, {
+        tasteMatch: match,
+        evidenceCount,
+        genomeTier: genome.tier,
+        state: joeAIState
+      });
 
       return {
         ...candidate,
@@ -355,10 +471,18 @@ export function recommendAnime(library = [], catalog = [], options = {}) {
         match,
         matchLabel: matchLabel(match),
         reasons: [...new Set(reasons)].slice(0, 3),
-        debug
+        warnings: [...new Set(warnings)].slice(0, 3),
+        genomeTraits: genome.traits,
+        genomeTier: genome.tier,
+        confidenceReceipt,
+        debug: [
+          ...debug,
+          ...(genome.score ? [`+${genome.score.toFixed(1)} Genome fit`] : []),
+          ...(learning.adjustment ? [`${learning.adjustment > 0 ? '+' : ''}${learning.adjustment.toFixed(1)} learned feedback`] : [])
+        ]
       };
     })
-    .filter((candidate) => candidate.match > 1)
+    .filter((candidate) => candidate && candidate.match > 1)
     .sort((a, b) => {
       if (b.metadataReady !== a.metadataReady) return Number(b.metadataReady) - Number(a.metadataReady);
       if (b.match !== a.match) return b.match - a.match;

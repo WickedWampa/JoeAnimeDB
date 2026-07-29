@@ -12,12 +12,29 @@ import {
   exportLibraryList,
   exportRankedLibraryList,
   exportLibraryCsv,
-  resetData
+  parseBackupText,
+  applyBackupPreferences,
+  exportDiagnostics
 } from '../services/storage';
-import { createAnimeBrain } from '../engine/animeBrain'; import { fetchMetadata } from '../services/metadata'; import { maybeKnowledgeFirstRecommendation } from '../ai/knowledgeFirstRecommender'; import { parseJoeAIIntent } from '../ai/intentParser'; import { executeJoeAICommand } from '../ai/commandExecutor'; import { routeJoeAIRecommendation } from '../ai/joeAIRecommendationRouter';
+import { checkMetadataProviders } from '../services/providerHealth';
+import { createAnimeBrain } from '../engine/animeBrain'; import { fetchMetadata } from '../services/metadata'; import { maybeKnowledgeFirstRecommendation } from '../ai/knowledgeFirstRecommender'; import { parseJoeAIIntent } from '../ai/intentParser'; import { executeJoeAICommand } from '../ai/commandExecutor'; import { routeJoeAIRecommendation, routeJoeAITitleQuestion } from '../ai/joeAIRecommendationRouter';
 import { buildTonightsWatch } from '../ai/tonightsWatch'; import { importAnimeByTitle, mergeAnimeMetadata, searchAnimeCandidates } from '../services/animeImporter';
 import { fetchWikidataRepair, needsWikidataRepair } from '../services/wikidataRepair';
 import { getAnimeStudios, getAnimeTasteSignals } from '../utils/metadataAdapters';
+import { coordinateJoeAIRecommendation } from '../ai/recommendationCoordinator';
+import { friendlyJoeAIError } from '../ai/joeAIErrorResponse';
+import {
+  inferFeedbackTraits,
+  recommendationKey,
+  resolveJoeAIFollowUp,
+  updateJoeAIConversationContext
+} from '../ai/intelligence/joeAIIntelligence';
+
+function localDaySeed(date = new Date()) {
+  return Number(
+    `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}`
+  );
+}
 
 export function Universe({ anime, setQuery, setView }) {
   const total = anime.length;
@@ -163,8 +180,21 @@ export function Universe({ anime, setQuery, setView }) {
   );
 }
 
-export function Assistant({ anime, catalog = [], updateAnime, initialPrompt = '', onPromptConsumed }) {
-  const brain = useMemo(() => createAnimeBrain(anime, catalog), [anime, catalog]);
+export function Assistant({
+  anime,
+  catalog = [],
+  updateAnime,
+  joeAIState = {},
+  onRecommendationFeedback,
+  onJoeAIPreference,
+  onJoeAIConversation,
+  initialPrompt = '',
+  onPromptConsumed
+}) {
+  const brain = useMemo(
+    () => createAnimeBrain(anime, catalog, { joeAIState }),
+    [anime, catalog, joeAIState]
+  );
   const [log, setLog] = useState([
     {
       who: 'bot',
@@ -176,8 +206,30 @@ export function Assistant({ anime, catalog = [], updateAnime, initialPrompt = ''
   const [addingId, setAddingId] = useState('');
   const [pendingAction, setPendingAction] = useState(null);
   const [expandedRecommendationIds, setExpandedRecommendationIds] = useState({});
+  const [dailyPickSeed, setDailyPickSeed] = useState(() => localDaySeed());
+  const [conversationContext, setConversationContext] = useState(() => ({
+    lastRecommendations: Array.isArray(joeAIState?.conversation?.lastRecommendations)
+      ? joeAIState.conversation.lastRecommendations.slice(0, 10)
+      : [],
+    lastReferencedTitle: joeAIState?.conversation?.lastReferencedTitle || '',
+    lastPrompt: joeAIState?.conversation?.lastPrompt || ''
+  }));
+  const [feedbackMenuId, setFeedbackMenuId] = useState('');
+  const [feedbackStatus, setFeedbackStatus] = useState({});
   const lastAutoPromptRef = useRef('');
   const conversationRef = useRef(null);
+
+  useEffect(() => {
+    const refreshDailyPick = () => {
+      setDailyPickSeed((currentSeed) => {
+        const nextSeed = localDaySeed();
+        return nextSeed === currentSeed ? currentSeed : nextSeed;
+      });
+    };
+
+    const intervalId = window.setInterval(refreshDailyPick, 60_000);
+    return () => window.clearInterval(intervalId);
+  }, []);
 
   useEffect(() => {
     const conversation = conversationRef.current;
@@ -376,6 +428,16 @@ export function Assistant({ anime, catalog = [], updateAnime, initialPrompt = ''
           ]
         },
         {
+          icon: '🎓',
+          title: 'Teach JoeAI',
+          items: [
+            'I liked One Piece for the crew',
+            "I don't care about studio",
+            'Long anime are not a problem',
+            "Don't recommend recap movies"
+          ]
+        },
+        {
           icon: '📚',
           title: 'Library',
           items: [
@@ -450,21 +512,7 @@ export function Assistant({ anime, catalog = [], updateAnime, initialPrompt = ''
     return lower.includes('recommend') || lower.includes('next') || lower.includes('watch') || lower.includes('new anime');
   }
 
-  function shouldUseRecommendationRouter(value = '') {
-    const lower = String(value).toLowerCase();
-
-    // Title-similarity and mood/theme requests belong to the card router.
-    // Generic requests like "what should I watch next" should NOT go through
-    // the Genome title lookup path, because that is what caused the Space Dandy fallback.
-    return (
-      /\b(something|show|shows|anime)\s+like\b/.test(lower) ||
-      /\bsimilar\s+to\b/.test(lower) ||
-      /\brecommend\s+.+\s+like\b/.test(lower) ||
-      /\b(darker|dark|funny|comedy|emotional|cozy|comfort|strategy|strategic|sports|hidden gem|underrated|movie|short binge)\b/.test(lower)
-    );
-  }
-
-  function appendBotResult(result) {
+  function appendBotResult(result, prompt = '') {
     if (!result) return;
 
     if (typeof result === 'string') {
@@ -473,6 +521,17 @@ export function Assistant({ anime, catalog = [], updateAnime, initialPrompt = ''
     }
 
     setLog((current) => [...current, { who: 'bot', ...result }]);
+    setConversationContext((current) => {
+      const next = updateJoeAIConversationContext(result, prompt, current);
+
+      if (onJoeAIConversation) {
+        Promise.resolve(onJoeAIConversation(next)).catch((error) => {
+          console.warn('Could not persist JoeAI conversation context:', error);
+        });
+      }
+
+      return next;
+    });
   }
 
   function toggleRecommendationWhy(id) {
@@ -480,6 +539,115 @@ export function Assistant({ anime, catalog = [], updateAnime, initialPrompt = ''
       ...current,
       [id]: !current[id]
     }));
+  }
+
+  async function saveRecommendationFeedback(item = {}, action, reason = '') {
+    if (!item?.title || !onRecommendationFeedback) return null;
+    const key = recommendationKey(item);
+    const entry = {
+      animeKey: key,
+      title: item.officialTitle || item.title,
+      action,
+      reason,
+      traits: inferFeedbackTraits(item, reason),
+      sourcePrompt: conversationContext.lastPrompt || 'JoeAI recommendation card',
+      predictedMatch: item.confidenceReceipt?.tasteMatch ?? item.match ?? null,
+      algorithmVersion: 'joeai-intelligence-v1'
+    };
+
+    try {
+      const saved = await onRecommendationFeedback(entry);
+      setFeedbackStatus((current) => ({ ...current, [key]: action }));
+      setFeedbackMenuId('');
+      return saved;
+    } catch (error) {
+      console.warn('JoeAI feedback save failed:', error);
+      setLog((current) => [...current, {
+        who: 'bot',
+        type: 'text',
+        text: 'I heard that feedback, but I could not save it yet.'
+      }]);
+      return null;
+    }
+  }
+
+  async function saveFeedbackByTitle(feedback = {}) {
+    const title = String(feedback.title || '').trim();
+    if (!title) return null;
+    const key = title.toLowerCase().replace(/[^a-z0-9]+/g, '');
+    const item = [...conversationContext.lastRecommendations, ...catalog, ...anime]
+      .find((candidate) =>
+        String(candidate.officialTitle || candidate.title || '')
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '') === key
+      ) || { title };
+    return saveRecommendationFeedback(item, feedback.action || 'not_for_me', feedback.reason || '');
+  }
+
+  function renderRecommendationFeedback(item = {}, id = '') {
+    if (item.owned || !onRecommendationFeedback) return null;
+    const key = recommendationKey(item);
+    const savedStatus = (joeAIState.feedback || []).find((entry) =>
+      entry.animeKey === key
+      || String(entry.title || '').toLowerCase() === String(item.title || '').toLowerCase()
+    )?.action;
+    const status = feedbackStatus[key] || savedStatus;
+    const menuOpen = feedbackMenuId === id;
+
+    return (
+      <div className="joeaiFeedback">
+        <div className="joeaiFeedbackActions">
+          <button
+            type="button"
+            className={status === 'good_pick' ? 'active' : ''}
+            onClick={() => saveRecommendationFeedback(item, 'good_pick')}
+          >
+            👍 Good Pick
+          </button>
+          <button
+            type="button"
+            className={status === 'not_for_me' ? 'active' : ''}
+            onClick={() => setFeedbackMenuId(menuOpen ? '' : id)}
+          >
+            👎 Not for Me
+          </button>
+          <button
+            type="button"
+            className={status === 'already_seen' ? 'active' : ''}
+            onClick={() => saveRecommendationFeedback(item, 'already_seen', 'Already watched outside JoeAnimeDB')}
+          >
+            👁 Already Seen
+          </button>
+          <button
+            type="button"
+            className={status === 'maybe_later' ? 'active' : ''}
+            onClick={() => saveRecommendationFeedback(item, 'maybe_later')}
+          >
+            ⏳ Later
+          </button>
+        </div>
+
+        {menuOpen && (
+          <div className="joeaiFeedbackReasons">
+            {[
+              ['Too dark', 'too_dark'],
+              ['Too long', 'too_long'],
+              ['Too romantic', 'too_romantic'],
+              ['Wrong mood', 'wrong_mood'],
+              ['Bad match', 'bad_match']
+            ].map(([label, reason]) => (
+              <button
+                type="button"
+                key={reason}
+                onClick={() => saveRecommendationFeedback(item, 'not_for_me', reason)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
   }
 
 
@@ -498,20 +666,17 @@ export function Assistant({ anime, catalog = [], updateAnime, initialPrompt = ''
         anime,
         catalog,
         updateAnime,
-        brain
+        brain,
+        joeAIState
       });
 
       setLog((current) => [...current, { who: 'bot', ...result }]);
+      if (input.selectedAnime && !input.selectedAnime.owned) {
+        await saveRecommendationFeedback(input.selectedAnime, 'accepted', 'Added to library');
+      }
     } catch (error) {
       console.warn('JoeAI add-to-library failed:', input.title, error);
-      setLog((current) => [
-        ...current,
-        {
-          who: 'bot',
-          type: 'text',
-          text: 'I could not add ' + input.title + ' yet. Check the console and we will fix the save path.'
-        }
-      ]);
+      appendBotResult(friendlyJoeAIError(error, `add ${input.title}`));
     } finally {
       setAddingId('');
     }
@@ -527,19 +692,24 @@ export function Assistant({ anime, catalog = [], updateAnime, initialPrompt = ''
       }
     ]);
 
-    const result = await executeJoeAICommand({
-      intent: {
-        kind: 'bulkAdd',
-        titles: command.titles,
-        status: command.status || 'Watching'
-      },
-      anime,
-      catalog,
-      updateAnime,
-      brain
-    });
+    try {
+      const result = await executeJoeAICommand({
+        intent: {
+          kind: 'bulkAdd',
+          titles: command.titles,
+          status: command.status || 'Watching'
+        },
+        anime,
+        catalog,
+        updateAnime,
+        brain
+      });
 
-    setLog((current) => [...current, { who: 'bot', ...result }]);
+      appendBotResult(result, `bulk add ${command.titles.length} titles`);
+    } catch (error) {
+      console.warn('JoeAI bulk import failed:', error);
+      appendBotResult(friendlyJoeAIError(error, `bulk import ${command.titles.length} titles`));
+    }
   }
 
   async function ask(promptOverride = '') {
@@ -549,7 +719,14 @@ export function Assistant({ anime, catalog = [], updateAnime, initialPrompt = ''
     setLog((current) => [...current, { who: 'user', type: 'text', text: q }]);
     setText('');
 
-    const intent = parseJoeAIIntent(q);
+    try {
+    const resolved = resolveJoeAIFollowUp(q, conversationContext);
+    const routedText = resolved.text || q;
+    let activeJoeAIState = joeAIState;
+    if (resolved.implicitFeedback) {
+      activeJoeAIState = await saveFeedbackByTitle(resolved.implicitFeedback) || joeAIState;
+    }
+    const intent = parseJoeAIIntent(routedText);
 
 
     if (intent.kind === 'generateGenome') {
@@ -558,9 +735,25 @@ export function Assistant({ anime, catalog = [], updateAnime, initialPrompt = ''
         anime,
         catalog,
         updateAnime,
-        brain
+        brain,
+        joeAIState: activeJoeAIState
       });
-      setLog((current) => [...current, { who: 'bot', ...result }]);
+      appendBotResult(result, routedText);
+      return;
+    }
+
+    if (intent.kind === 'teaching') {
+      const result = await executeJoeAICommand({
+        intent,
+        anime,
+        catalog,
+        updateAnime,
+        brain,
+        joeAIState: activeJoeAIState,
+        recordRecommendationFeedback: onRecommendationFeedback,
+        setJoeAIPreference: onJoeAIPreference
+      });
+      appendBotResult(result, routedText);
       return;
     }
 
@@ -613,58 +806,73 @@ export function Assistant({ anime, catalog = [], updateAnime, initialPrompt = ''
       return;
     }
 
-    if (intent.kind === 'recommendation') {
-      // Specific recommendation prompts go to the rich card router.
-      // Generic prompts like "what should I watch next" stay on the normal
-      // recommendation engine so they do not get swallowed by Genome title lookup.
-      if (shouldUseRecommendationRouter(q)) {
-        const smartAnswer = routeJoeAIRecommendation(q, anime, catalog);
-
-        if (smartAnswer) {
-          appendBotResult(smartAnswer);
-          return;
-        }
-      }
-
+    if (intent.kind === 'recommendationExplanation') {
       const result = await executeJoeAICommand({
         intent,
         anime,
         catalog,
         updateAnime,
-        brain
+        brain,
+        joeAIState: activeJoeAIState
       });
 
-      appendBotResult(result);
+      appendBotResult(result, routedText);
       return;
     }
 
-    // For normal questions, let the conversation/reasoning/memory engine answer first.
-    // Only use the Genome title lookup as a fallback for direct title lookups like "Slime".
+    if (intent.kind === 'recommendation') {
+      const result = coordinateJoeAIRecommendation({
+        text: routedText,
+        anime,
+        catalog,
+        brain,
+        joeAIState: activeJoeAIState
+      });
+
+      appendBotResult(result, routedText);
+      return;
+    }
+
+    // Exact known-title questions are answered before broad conversation logic.
+    // This keeps Dragon Ball separate from DBZ/Super and respects alternate titles.
+    const directTitleAnswer = routeJoeAITitleQuestion(routedText, anime, catalog);
+    if (directTitleAnswer) {
+      appendBotResult(directTitleAnswer, routedText);
+      return;
+    }
+
+    // Non-title questions continue through conversation/reasoning/memory.
     const routedQuestion = await executeJoeAICommand({
-      intent: { kind: 'question', text: q },
+      intent: { kind: 'question', text: routedText },
       anime,
       catalog,
       updateAnime,
-      brain
+      brain,
+      joeAIState: activeJoeAIState
     });
 
     if (routedQuestion?.type !== 'text' || !String(routedQuestion?.text || '').startsWith('Try asking about your Anime DNA')) {
-      appendBotResult(routedQuestion);
+      appendBotResult(routedQuestion, routedText);
       return;
     }
 
-    const smartAnswer = routeJoeAIRecommendation(q, anime, catalog);
+    const smartAnswer = routeJoeAIRecommendation(routedText, anime, catalog);
     if (smartAnswer) {
-      appendBotResult(smartAnswer);
+      appendBotResult(smartAnswer, routedText);
       return;
     }
 
-    appendBotResult(routedQuestion);
+    appendBotResult(routedQuestion, routedText);
+    } catch (error) {
+      console.warn('JoeAI request failed:', q, error);
+      appendBotResult(friendlyJoeAIError(error, q), q);
+    }
   }
 
   function renderRecommendationCard(item, index) {
     const id = 'anime-' + animeId(item);
     const isAdding = addingId === id;
+    const receipt = item.confidenceReceipt || {};
 
     return (
       <article className="joeaiRecCard" key={item.title + '-' + index}>
@@ -694,14 +902,27 @@ export function Assistant({ anime, catalog = [], updateAnime, initialPrompt = ''
             </div>
           )}
 
+          <div className="joeaiConfidenceReceipt">
+            <span><small>Taste Match</small><strong>{receipt.tasteMatch ?? item.match ?? 0}%</strong></span>
+            <span><small>Data Confidence</small><strong>{receipt.dataConfidence ?? '—'}{receipt.dataConfidence != null ? '%' : ''}</strong></span>
+            <span><small>Prediction Confidence</small><strong>{receipt.predictionConfidence ?? '—'}{receipt.predictionConfidence != null ? '%' : ''}</strong></span>
+          </div>
+
+          {item.warnings?.length > 0 && (
+            <div className="joeaiWarningList">
+              {item.warnings.map((warning) => <span key={warning}>△ {warning}</span>)}
+            </div>
+          )}
+
           <div className="joeaiRecActions">
-            <button type="button" onClick={() => addAnimeToLibrary({ title: item.title, status: 'Watching' })} disabled={isAdding || !updateAnime}>
+            <button type="button" onClick={() => addAnimeToLibrary({ title: item.title, status: 'Watching', selectedAnime: item })} disabled={isAdding || !updateAnime}>
               {isAdding ? 'Adding...' : '+ Add to Library'}
             </button>
-            <button type="button" onClick={() => addAnimeToLibrary({ title: item.title, status: 'Completed' })} disabled={isAdding || !updateAnime}>
+            <button type="button" onClick={() => addAnimeToLibrary({ title: item.title, status: 'Completed', selectedAnime: item })} disabled={isAdding || !updateAnime}>
               Mark Completed
             </button>
           </div>
+          {renderRecommendationFeedback(item, id)}
         </div>
       </article>
     );
@@ -1133,6 +1354,11 @@ export function Assistant({ anime, catalog = [], updateAnime, initialPrompt = ''
     const tags = recommendationTags(item);
     const dna = dnaPercent(item);
     const confidence = Math.max(0, Math.min(100, Number(item.match || 0)));
+    const receipt = item.confidenceReceipt || {
+      tasteMatch: confidence,
+      dataConfidence: Math.max(40, confidence - 10),
+      predictionConfidence: confidence
+    };
     const facts = relationshipFacts(item);
     const bullets = reasoningBullets(item, sourceTitle);
 
@@ -1190,7 +1416,9 @@ export function Assistant({ anime, catalog = [], updateAnime, initialPrompt = ''
             </div>
 
             <div className="joeaiMeterGrid">
-              {renderMeter('JoeAI Confidence', confidence, 'confidence')}
+              {renderMeter('Taste Match', receipt.tasteMatch, 'confidence')}
+              {renderMeter('Data Confidence', receipt.dataConfidence, 'data')}
+              {renderMeter('Prediction Confidence', receipt.predictionConfidence, 'prediction')}
               {renderMeter('Shared Anime DNA', dna, 'dna')}
             </div>
 
@@ -1223,7 +1451,19 @@ export function Assistant({ anime, catalog = [], updateAnime, initialPrompt = ''
                 <pre>{item.deepDive}</pre>
               </details>
             )}
+
+            {receipt.receipts?.length > 0 && (
+              <div className="joeaiConfidenceReceipts">
+                {receipt.receipts.map((entry) => <span key={entry}>• {entry}</span>)}
+              </div>
+            )}
           </div>
+
+          {item.warnings?.length > 0 && (
+            <div className="joeaiWarningList">
+              {item.warnings.map((warning) => <span key={warning}>△ {warning}</span>)}
+            </div>
+          )}
 
           <div className="joeaiRecActions joeaiPremiumActions">
             <button type="button" onClick={() => toggleRecommendationWhy(id)}>
@@ -1238,6 +1478,7 @@ export function Assistant({ anime, catalog = [], updateAnime, initialPrompt = ''
               {isAdding ? 'Saving...' : item.owned ? '📚 Update Library Entry' : '+ Add to Library'}
             </button>
           </div>
+          {renderRecommendationFeedback(item, id)}
         </div>
       </article>
     );
@@ -1273,39 +1514,23 @@ export function Assistant({ anime, catalog = [], updateAnime, initialPrompt = ''
   }, [anime]);
 
   const joeAIPick = useMemo(() => {
-    const libraryIds = new Set(
-      anime.flatMap((item) => [
-        item.malId ? `mal:${item.malId}` : '',
-        item.title ? `title:${String(item.title).toLowerCase()}` : ''
-      ]).filter(Boolean)
-    );
+    const dailyPool = brain.recommendations(12, {
+      prompt: 'JoeAI Pick of the Day',
+      joeAIState
+    });
+    const item = dailyPool.length
+      ? dailyPool[Math.abs(dailyPickSeed) % dailyPool.length]
+      : null;
 
-    const topGenres = new Set(
-      joeAIStats.genreRows.slice(0, 4).map(([name]) => String(name).toLowerCase())
-    );
-
-    const candidates = (catalog || [])
-      .filter((item) => {
-        const malKey = item.malId ? `mal:${item.malId}` : '';
-        const titleKey = item.title ? `title:${String(item.title).toLowerCase()}` : '';
-        return !(malKey && libraryIds.has(malKey)) && !(titleKey && libraryIds.has(titleKey));
-      })
-      .map((item) => {
-        const overlap = (item.genres || []).filter((genre) =>
-          topGenres.has(String(genre).toLowerCase())
-        ).length;
-
-        const community = Number(item.communityScore || item.malScore || item.score || 0);
-        return {
+    return dailyPool.length
+      ? {
           item,
-          value: overlap * 20 + community * 4,
-          confidence: Math.max(62, Math.min(98, Math.round(66 + overlap * 7 + community)))
-        };
-      })
-      .sort((a, b) => b.value - a.value);
-
-    return candidates[0] || null;
-  }, [anime, catalog, joeAIStats.genreRows]);
+          confidence: item.match,
+          reasons: item.reasons || [],
+          confidenceReceipt: item.confidenceReceipt
+        }
+      : null;
+  }, [brain, dailyPickSeed, joeAIState]);
 
   const joeAIThought = useMemo(() => {
     const topGenre = joeAIStats.genreRows[0]?.[0] || 'Adventure';
@@ -1477,6 +1702,10 @@ export function Assistant({ anime, catalog = [], updateAnime, initialPrompt = ''
                     Another Pick
                   </button>
                 </div>
+                {renderRecommendationFeedback(
+                  joeAIPick.item,
+                  `daily-${recommendationKey(joeAIPick.item)}`
+                )}
               </div>
             </div>
           ) : (
@@ -2039,6 +2268,21 @@ export function SettingsPage({
   updateAnime,
   syncMetadata,
   stats,
+  theme = 'neon',
+  onThemeChange,
+  joeAIState = {},
+  onDeleteJoeAIFeedback,
+  onDeleteJoeAIPreference,
+  onResetJoeAILearning,
+  onClearJoeAIConversation,
+  displayName = '',
+  onSaveDisplayName,
+  onRestoreBackup,
+  onResetDatabase,
+  onReplayTutorial,
+  syncing = false,
+  syncText = '',
+  syncProgress = null,
   onOpenIntegrity,
   onOpenMetadataHealth
 }) {
@@ -2048,6 +2292,20 @@ export function SettingsPage({
   const [metadataRepairSummary, setMetadataRepairSummary] = React.useState(null);
   const [libraryImportStatus, setLibraryImportStatus] = React.useState('');
   const [libraryImportProgress, setLibraryImportProgress] = React.useState(null);
+  const [joeAIMemoryStatus, setJoeAIMemoryStatus] = React.useState('');
+  const [systemStatus, setSystemStatus] = React.useState('');
+  const [systemInfo, setSystemInfo] = React.useState(null);
+  const [providerHealth, setProviderHealth] = React.useState(null);
+  const [checkingProviders, setCheckingProviders] = React.useState(false);
+  const [displayNameDraft, setDisplayNameDraft] = React.useState(displayName);
+  const [lastUpdateSummary, setLastUpdateSummary] = React.useState(() => {
+    try {
+      const saved = localStorage.getItem('joeanime-last-update-summary-v1');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
   const [libraryImportSummary, setLibraryImportSummary] = React.useState(() => {
     try {
       const saved = localStorage.getItem('joeanime-library-import-review-v1');
@@ -2057,6 +2315,44 @@ export function SettingsPage({
     }
   });
   const libraryImportInputRef = React.useRef(null);
+  const backupRestoreInputRef = React.useRef(null);
+
+  React.useEffect(() => {
+    setDisplayNameDraft(displayName);
+  }, [displayName]);
+
+  React.useEffect(() => {
+    let active = true;
+
+    async function loadReleaseStatus() {
+      if (window.JoeAnimeDB?.storage?.getInfo) {
+        try {
+          const info = await window.JoeAnimeDB.storage.getInfo();
+          if (active) setSystemInfo(info);
+        } catch (error) {
+          console.warn('Could not load JoeAnimeDB storage information.', error);
+        }
+      }
+
+      if (window.JoeAnimeDB?.app?.getInfo) {
+        try {
+          const info = await window.JoeAnimeDB.app.getInfo();
+          if (active) {
+            setSystemInfo((current) => ({ ...(current || {}), ...info }));
+          }
+        } catch (error) {
+          console.warn('Could not load JoeAnimeDB application information.', error);
+        }
+      }
+    }
+
+    loadReleaseStatus();
+    refreshProviderHealth();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   function saveLibraryImportSummary(summary) {
     setLibraryImportSummary(summary);
@@ -2592,6 +2888,149 @@ export function SettingsPage({
     }
   }
 
+  async function refreshProviderHealth() {
+    if (checkingProviders) return;
+    setCheckingProviders(true);
+
+    try {
+      setProviderHealth(await checkMetadataProviders());
+    } catch (error) {
+      setProviderHealth({
+        checkedAt: new Date().toISOString(),
+        online: 0,
+        total: 2,
+        providers: [],
+        error: error?.message || String(error)
+      });
+    } finally {
+      setCheckingProviders(false);
+    }
+  }
+
+  async function saveDisplayNamePreference() {
+    const nextName = String(displayNameDraft || '').trim().slice(0, 32);
+    if (!nextName || !onSaveDisplayName) return;
+
+    try {
+      await onSaveDisplayName(nextName);
+      setSystemStatus(`Display name changed to ${nextName}.`);
+    } catch (error) {
+      setSystemStatus(`Could not save display name: ${error?.message || String(error)}`);
+    }
+  }
+
+  async function handleBackupRestoreFile(event) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file || !onRestoreBackup) return;
+
+    try {
+      setSystemStatus(`Reading ${file.name}...`);
+      const backup = parseBackupText(await file.text());
+      const animeCount = backup.database.anime.length;
+      const catalogCount = Array.isArray(backup.database.catalog)
+        ? backup.database.catalog.length
+        : 0;
+      const confirmed = window.confirm(
+        `Restore this JoeAnimeDB backup?\n\n` +
+        `${animeCount} library title${animeCount === 1 ? '' : 's'}\n` +
+        `${catalogCount} catalog title${catalogCount === 1 ? '' : 's'}\n\n` +
+        'The current database will be replaced. A safety copy of the SQLite database will be created first.'
+      );
+
+      if (!confirmed) {
+        setSystemStatus('Backup restore cancelled.');
+        return;
+      }
+
+      await onRestoreBackup(backup.database);
+      applyBackupPreferences(backup.preferences);
+
+      if (backup.preferences.theme) {
+        onThemeChange?.(backup.preferences.theme);
+      }
+      if (backup.preferences.displayName) {
+        await onSaveDisplayName?.(backup.preferences.displayName);
+        setDisplayNameDraft(backup.preferences.displayName);
+      }
+
+      setSystemStatus(
+        `Backup restored — ${animeCount} library titles and ${catalogCount} catalog titles loaded.`
+      );
+    } catch (error) {
+      setSystemStatus(`Restore failed: ${error?.message || String(error)}`);
+    }
+  }
+
+  async function openSystemFolder(kind) {
+    const opener = kind === 'logs'
+      ? window.JoeAnimeDB?.storage?.openLogsFolder
+      : window.JoeAnimeDB?.storage?.openDataFolder;
+
+    if (!opener) {
+      setSystemStatus('Folder access is available in the desktop build.');
+      return;
+    }
+
+    try {
+      const result = await opener();
+      setSystemStatus(
+        result?.ok
+          ? `${kind === 'logs' ? 'Logs' : 'Data'} folder opened.`
+          : result?.error || 'The folder could not be opened.'
+      );
+    } catch (error) {
+      setSystemStatus(`Could not open folder: ${error?.message || String(error)}`);
+    }
+  }
+
+  async function downloadDiagnostics() {
+    let latestStorageInfo = systemInfo;
+    if (!latestStorageInfo && window.JoeAnimeDB?.storage?.getInfo) {
+      try {
+        latestStorageInfo = await window.JoeAnimeDB.storage.getInfo();
+        setSystemInfo(latestStorageInfo);
+      } catch {}
+    }
+
+    exportDiagnostics({
+      data,
+      stats,
+      providerHealth,
+      storageInfo: latestStorageInfo,
+      lastUpdate: lastUpdateSummary,
+      metadata: {
+        repairsRemaining: metadataRepairCount,
+        missingStudios: missingStudioCount,
+        missingGenres: missingGenreCount
+      }
+    });
+    setSystemStatus('Diagnostics exported. Personal notes and ratings were not included.');
+  }
+
+  async function resetLocalDatabase() {
+    if (!onResetDatabase) return;
+    const confirmed = window.confirm(
+      'Reset all local JoeAnimeDB data?\n\nThis removes the library, JoeAI learning, following state, and local profile. Export a full backup first if you may want it later.'
+    );
+    if (!confirmed) return;
+
+    try {
+      setSystemStatus('Resetting local JoeAnimeDB data...');
+      await onResetDatabase();
+      setDisplayNameDraft('');
+      setLastUpdateSummary(null);
+      setSystemStatus('Local JoeAnimeDB data was reset successfully.');
+    } catch (error) {
+      setSystemStatus(`Reset failed: ${error?.message || String(error)}`);
+    }
+  }
+
+  function replayTutorial() {
+    setSystemStatus('First-time setup reopened. Your current library will not be changed unless you choose new taste anchors.');
+    onReplayTutorial?.();
+  }
+
   async function completeMissingMetadata() {
     if (!updateAnime || metadataRepairProgress) return;
 
@@ -2727,10 +3166,135 @@ export function SettingsPage({
     setGenomeUpdateStatus('Updating metadata, recommendation catalog, and Genome coverage...');
 
     try {
-      await syncMetadata?.();
-      setGenomeUpdateStatus('Database update finished.');
+      const summary = await syncMetadata?.();
+      if (summary) {
+        setLastUpdateSummary(summary);
+        try {
+          localStorage.setItem(
+            'joeanime-last-update-summary-v1',
+            JSON.stringify(summary)
+          );
+        } catch {}
+
+        const genome = summary.genome || {};
+        const genomeText = genome.supported
+          ? `${genome.covered} covered, ${genome.generated} generated`
+          : 'desktop Genome runner unavailable';
+        setGenomeUpdateStatus(
+          `Update complete — ${summary.skipped} skipped, ${summary.refreshed} refreshed; Genomes: ${genomeText}.`
+        );
+      } else {
+        setGenomeUpdateStatus('Database update finished.');
+      }
     } catch (error) {
       setGenomeUpdateStatus('Update failed: ' + (error?.message || String(error)));
+    }
+  }
+
+  const joeAIFeedback = Array.isArray(joeAIState?.feedback)
+    ? joeAIState.feedback
+    : [];
+  const joeAIPreferences = Array.isArray(joeAIState?.preferences)
+    ? joeAIState.preferences
+    : [];
+  const joeAIConversation = joeAIState?.conversation || {};
+
+  function joeAILessonTime(entry = {}) {
+    const timestamp = Date.parse(entry.createdAt || entry.updatedAt || '');
+    return Number.isFinite(timestamp) ? timestamp : 0;
+  }
+
+  function joeAILessonDate(entry = {}) {
+    const timestamp = joeAILessonTime(entry);
+    if (!timestamp) return 'Saved';
+    return new Date(timestamp).toLocaleString([], {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit'
+    });
+  }
+
+  function joeAIPreferenceLabel(key = '') {
+    if (key === 'studio_weight') return 'Studio influence';
+    if (key === 'length_weight') return 'Episode-length influence';
+    if (key === 'prefer_dub') return 'Prefer dubbed anime';
+    if (key === 'exclude_recap_movies') return 'Exclude recap movies';
+    if (key === 'avoid_horror') return 'Avoid horror';
+    if (key.startsWith('title_distinction:')) return 'Keep titles distinct';
+    return String(key).replace(/[_:]+/g, ' ');
+  }
+
+  function joeAIPreferenceValue(entry = {}) {
+    if (entry.key === 'studio_weight' && Number(entry.value) === 0) return 'Ignored';
+    if (entry.key === 'length_weight' && Number(entry.value) === 0) return 'Ignored';
+    if (entry.value === true) return 'Enabled';
+    if (Array.isArray(entry.value)) return entry.value.join(' ≠ ');
+    return String(entry.value);
+  }
+
+  const latestJoeAILesson = [
+    ...joeAIFeedback.map((entry) => ({ type: 'feedback', entry })),
+    ...joeAIPreferences.map((entry) => ({ type: 'preference', entry }))
+  ].sort((left, right) =>
+    joeAILessonTime(right.entry) - joeAILessonTime(left.entry)
+  )[0] || null;
+
+  async function forgetJoeAIFeedback(entry) {
+    if (!entry?.id || !onDeleteJoeAIFeedback) return;
+    try {
+      await onDeleteJoeAIFeedback(entry.id);
+      setJoeAIMemoryStatus(`Forgot feedback about ${entry.title}.`);
+    } catch (error) {
+      setJoeAIMemoryStatus(`Could not forget that feedback: ${error?.message || String(error)}`);
+    }
+  }
+
+  async function forgetJoeAIPreference(entry) {
+    if (!entry?.key || !onDeleteJoeAIPreference) return;
+    try {
+      await onDeleteJoeAIPreference(entry.key);
+      setJoeAIMemoryStatus(`Forgot “${joeAIPreferenceLabel(entry.key)}”.`);
+    } catch (error) {
+      setJoeAIMemoryStatus(`Could not forget that preference: ${error?.message || String(error)}`);
+    }
+  }
+
+  async function undoLatestJoeAILesson() {
+    if (!latestJoeAILesson) {
+      setJoeAIMemoryStatus('JoeAI does not have a saved lesson to undo yet.');
+      return;
+    }
+
+    if (latestJoeAILesson.type === 'feedback') {
+      await forgetJoeAIFeedback(latestJoeAILesson.entry);
+    } else {
+      await forgetJoeAIPreference(latestJoeAILesson.entry);
+    }
+  }
+
+  async function clearJoeAIConversation() {
+    if (!onClearJoeAIConversation) return;
+    try {
+      await onClearJoeAIConversation();
+      setJoeAIMemoryStatus('Recent JoeAI conversation context cleared. Learned taste was kept.');
+    } catch (error) {
+      setJoeAIMemoryStatus(`Could not clear conversation context: ${error?.message || String(error)}`);
+    }
+  }
+
+  async function resetJoeAILearning() {
+    if (!onResetJoeAILearning) return;
+    const confirmed = window.confirm(
+      'Reset every saved JoeAI preference and recommendation feedback event?\n\nYour anime library, ratings, favorites, and Genome cards will not be changed.'
+    );
+    if (!confirmed) return;
+
+    try {
+      await onResetJoeAILearning();
+      setJoeAIMemoryStatus('JoeAI recommendation learning reset. Your library and Anime DNA were kept.');
+    } catch (error) {
+      setJoeAIMemoryStatus(`Could not reset JoeAI learning: ${error?.message || String(error)}`);
     }
   }
 
@@ -2747,6 +3311,19 @@ export function SettingsPage({
   const metadataHealthPercent = animeCount
     ? Math.round((metadataHealthyCount / animeCount) * 100)
     : 100;
+  const themeOptions = [
+    { id: 'neon', label: 'Neon', description: 'Cyber blue and pink' },
+    { id: 'sakura', label: 'Sakura', description: 'Warm cherry blossom' },
+    { id: 'vapor', label: 'Vapor', description: 'Purple retro glow' },
+    { id: 'inferno', label: 'Inferno', description: 'Fire and ember' },
+    { id: 'ramen', label: 'Ramen', description: 'Cozy amber warmth' },
+    { id: 'amoled', label: 'AMOLED', description: 'True-black contrast' }
+  ];
+  const appVersion = systemInfo?.version || window.JoeAnimeDB?.version || data?.version || '5.0';
+  const lastUpdateTime = lastUpdateSummary?.completedAt
+    ? new Date(lastUpdateSummary.completedAt).toLocaleString()
+    : 'Not run yet';
+  const providerRows = providerHealth?.providers || [];
 
   return (
     <section className="panel settingsPage">
@@ -2755,6 +3332,227 @@ export function SettingsPage({
         <h2>Workshop</h2>
         <p>Export, repair, and maintain your anime library from one place.</p>
       </div>
+
+      <section className="settingsReleaseCard">
+        <header>
+          <div>
+            <p className="settingsWorkshopEyebrow">Release Readiness</p>
+            <h2>System Status</h2>
+            <p>Live provider checks, application version, database engine, and the latest updater result.</p>
+          </div>
+          <button type="button" onClick={refreshProviderHealth} disabled={checkingProviders}>
+            {checkingProviders ? 'Checking…' : 'Check Providers'}
+          </button>
+        </header>
+
+        <div className="settingsReleaseGrid">
+          <article>
+            <span className="settingsReleaseIcon">🍥</span>
+            <div>
+              <small>Version</small>
+              <strong>JoeAnimeDB {appVersion}</strong>
+              <em>{systemInfo?.packaged === false ? 'Development build' : 'Desktop release'}</em>
+            </div>
+          </article>
+
+          <article>
+            <span className="settingsReleaseIcon">🗃️</span>
+            <div>
+              <small>Database</small>
+              <strong>{stats?.databaseEngine || data?.engine || 'Local'}</strong>
+              <em>{animeCount} library · {data?.catalog?.length || 0} catalog</em>
+            </div>
+          </article>
+
+          {providerRows.map((provider) => (
+            <article key={provider.id} className={provider.online ? 'online' : 'offline'}>
+              <span className="settingsProviderDot" aria-hidden="true" />
+              <div>
+                <small>{provider.role}</small>
+                <strong>{provider.label} · {provider.online ? 'Online' : 'Unavailable'}</strong>
+                <em>{provider.online ? `${provider.latencyMs} ms` : provider.message}</em>
+              </div>
+            </article>
+          ))}
+
+          {!providerRows.length && (
+            <article className="checking">
+              <span className="settingsProviderDot" aria-hidden="true" />
+              <div>
+                <small>Metadata providers</small>
+                <strong>{checkingProviders ? 'Checking Kitsu and Wikidata…' : 'Not checked'}</strong>
+                <em>Use Check Providers to test connectivity</em>
+              </div>
+            </article>
+          )}
+        </div>
+
+        <footer>
+          <span>Last database update</span>
+          <strong>{lastUpdateTime}</strong>
+          {lastUpdateSummary && (
+            <em>
+              {lastUpdateSummary.skipped} skipped · {lastUpdateSummary.refreshed} refreshed ·{' '}
+              {lastUpdateSummary.genome?.covered || 0} Genomes already covered
+            </em>
+          )}
+        </footer>
+      </section>
+
+      <section className="settingsAppearanceCard">
+        <header>
+          <div>
+            <p className="settingsWorkshopEyebrow">Appearance</p>
+            <h2>Choose Your World</h2>
+            <p>The entire JoeAnimeDB environment changes instantly and stays selected next time you open the app.</p>
+          </div>
+          <strong>{themeOptions.find((option) => option.id === theme)?.label || 'Neon'} active</strong>
+        </header>
+
+        <div className="settingsThemeGrid" role="group" aria-label="Application theme">
+          {themeOptions.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              className={`settingsThemeOption ${option.id} ${theme === option.id ? 'active' : ''}`}
+              onClick={() => onThemeChange?.(option.id)}
+              aria-pressed={theme === option.id}
+            >
+              <i aria-hidden="true" />
+              <span>
+                <b>{option.label}</b>
+                <small>{option.description}</small>
+              </span>
+              {theme === option.id && <em>Selected</em>}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="settingsProfileCard">
+        <div>
+          <p className="settingsWorkshopEyebrow">Profile</p>
+          <h2>What should JoeAI call you?</h2>
+          <p>This name appears on Home and in personalized JoeAI responses.</p>
+        </div>
+        <div className="settingsProfileControls">
+          <input
+            value={displayNameDraft}
+            onChange={(event) => setDisplayNameDraft(event.target.value)}
+            maxLength={32}
+            placeholder="Display name"
+            aria-label="JoeAnimeDB display name"
+          />
+          <button
+            type="button"
+            onClick={saveDisplayNamePreference}
+            disabled={!displayNameDraft.trim() || displayNameDraft.trim() === displayName}
+          >
+            Save Name
+          </button>
+        </div>
+      </section>
+
+      <section className="settingsJoeAIMemoryCard">
+        <header>
+          <div>
+            <p className="settingsWorkshopEyebrow">JoeAI Intelligence V1.1</p>
+            <h2>Memory Manager</h2>
+            <p>See exactly what JoeAI learned, remove a bad lesson, or clear its recent conversation without touching your library.</p>
+          </div>
+          <div className="settingsJoeAIMemoryStats" aria-label="JoeAI memory totals">
+            <span><strong>{joeAIPreferences.length}</strong> preferences</span>
+            <span><strong>{joeAIFeedback.length}</strong> feedback events</span>
+          </div>
+        </header>
+
+        <div className="settingsJoeAIMemoryActions">
+          <button
+            type="button"
+            onClick={undoLatestJoeAILesson}
+            disabled={!latestJoeAILesson}
+          >
+            ↶ Undo Latest Lesson
+          </button>
+          <button
+            type="button"
+            onClick={clearJoeAIConversation}
+            disabled={!joeAIConversation.lastPrompt && !joeAIConversation.lastReferencedTitle}
+          >
+            Clear Conversation
+          </button>
+          <button
+            type="button"
+            className="danger"
+            onClick={resetJoeAILearning}
+            disabled={!joeAIPreferences.length && !joeAIFeedback.length}
+          >
+            Reset Learning
+          </button>
+        </div>
+
+        {joeAIMemoryStatus && (
+          <p className="settingsJoeAIMemoryStatus">{joeAIMemoryStatus}</p>
+        )}
+
+        <div className="settingsJoeAIMemoryGrid">
+          <section>
+            <h3>Explicit Preferences</h3>
+            {joeAIPreferences.length ? (
+              <div className="settingsJoeAILessonList">
+                {joeAIPreferences.map((entry) => (
+                  <article key={entry.key}>
+                    <div>
+                      <strong>{joeAIPreferenceLabel(entry.key)}</strong>
+                      <span>{joeAIPreferenceValue(entry)}</span>
+                      <small>{joeAILessonDate(entry)}</small>
+                    </div>
+                    <button type="button" onClick={() => forgetJoeAIPreference(entry)}>
+                      Forget
+                    </button>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p className="settingsJoeAIEmpty">No explicit preferences saved yet.</p>
+            )}
+          </section>
+
+          <section>
+            <h3>Recent Recommendation Feedback</h3>
+            {joeAIFeedback.length ? (
+              <div className="settingsJoeAILessonList">
+                {joeAIFeedback.slice(0, 8).map((entry) => (
+                  <article key={entry.id}>
+                    <div>
+                      <strong>{entry.title}</strong>
+                      <span>
+                        {String(entry.action || '').replace(/_/g, ' ')}
+                        {entry.reason ? ` · ${String(entry.reason).replace(/_/g, ' ')}` : ''}
+                      </span>
+                      <small>{joeAILessonDate(entry)}</small>
+                    </div>
+                    <button type="button" onClick={() => forgetJoeAIFeedback(entry)}>
+                      Forget
+                    </button>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p className="settingsJoeAIEmpty">No recommendation feedback saved yet.</p>
+            )}
+          </section>
+        </div>
+
+        <footer>
+          <span>Conversation anchor</span>
+          <strong>
+            {joeAIConversation.lastReferencedTitle
+              || joeAIConversation.lastPrompt
+              || 'No active conversation'}
+          </strong>
+        </footer>
+      </section>
 
       <section className="settingsWorkshopSummary" aria-label="Workshop summary">
         <div>
@@ -2778,6 +3576,12 @@ export function SettingsPage({
       {metadataRepairStatus && (
         <p className="settingsStatus settingsMetadataRepairStatus">
           {metadataRepairStatus}
+        </p>
+      )}
+
+      {systemStatus && (
+        <p className="settingsStatus settingsSystemStatus">
+          {systemStatus}
         </p>
       )}
 
@@ -2810,6 +3614,24 @@ export function SettingsPage({
               <span>📦</span>
               <strong>Export Full Backup</strong>
               <small>Complete JoeAnimeDB JSON backup</small>
+            </button>
+
+            <input
+              ref={backupRestoreInputRef}
+              className="settingsImportInput"
+              type="file"
+              accept=".json,application/json"
+              onChange={handleBackupRestoreFile}
+            />
+
+            <button
+              type="button"
+              onClick={() => backupRestoreInputRef.current?.click()}
+              disabled={!onRestoreBackup}
+            >
+              <span>♻️</span>
+              <strong>Restore Full Backup</strong>
+              <small>Replace the current database from a JoeAnimeDB JSON backup</small>
             </button>
 
             <button type="button" onClick={() => exportLibraryList(data)}>
@@ -2883,15 +3705,39 @@ export function SettingsPage({
             </div>
           </section>
 
+          <section className="settingsLastUpdate">
+            <header>
+              <span>Last Updater Audit</span>
+              <strong>{lastUpdateTime}</strong>
+            </header>
+            {syncing ? (
+              <>
+                <div className="settingsLastUpdateTrack">
+                  <i style={{ width: `${Math.max(0, Math.min(100, Number(syncProgress?.percent || 0)))}%` }} />
+                </div>
+                <p>{syncText || syncProgress?.current || 'Updater is working…'}</p>
+              </>
+            ) : lastUpdateSummary ? (
+              <div className="settingsLastUpdateFacts">
+                <span><strong>{lastUpdateSummary.scanned}</strong> scanned</span>
+                <span><strong>{lastUpdateSummary.skipped}</strong> skipped</span>
+                <span><strong>{lastUpdateSummary.refreshed}</strong> refreshed</span>
+                <span><strong>{lastUpdateSummary.genome?.generated || 0}</strong> Genomes generated</span>
+              </div>
+            ) : (
+              <p>Run Update Database + Genomes to create the first audit report.</p>
+            )}
+          </section>
+
           <p className="settingsWorkshopDescription">
             Refresh metadata, rebuild Genome coverage, and inspect unresolved records.
           </p>
 
           <div className="settingsWorkshopActions">
-            <button type="button" onClick={updateDatabaseWithGenomes}>
+            <button type="button" onClick={updateDatabaseWithGenomes} disabled={syncing}>
               <span>🔄</span>
-              <strong>Update Database + Genomes</strong>
-              <small>Refresh Kitsu metadata and rebuild local intelligence</small>
+              <strong>{syncing ? 'Update In Progress' : 'Update Database + Genomes'}</strong>
+              <small>{syncing ? (syncProgress?.current || syncText) : 'Refresh Kitsu metadata and rebuild local intelligence'}</small>
               <b className="settingsActionBadge">Kitsu</b>
             </button>
 
@@ -2945,34 +3791,47 @@ export function SettingsPage({
           </p>
 
           <div className="settingsWorkshopActions">
-            <button type="button" disabled title="Open Data Folder is coming soon">
+            <button type="button" onClick={() => openSystemFolder('data')}>
               <span>🗂</span>
               <strong>Open Data Folder</strong>
-              <small>Coming soon</small>
+              <small>Open the SQLite database and backup location</small>
             </button>
 
-            <button type="button" disabled title="View Logs is coming soon">
+            <button type="button" onClick={() => openSystemFolder('logs')}>
               <span>📋</span>
               <strong>View Logs</strong>
-              <small>Coming soon</small>
+              <small>Open the local diagnostic logs folder</small>
+            </button>
+
+            <button type="button" onClick={downloadDiagnostics}>
+              <span>🩺</span>
+              <strong>Export Diagnostics</strong>
+              <small>Save provider, database, updater, and version details</small>
+            </button>
+
+            <button type="button" onClick={replayTutorial}>
+              <span>🎓</span>
+              <strong>Replay Tutorial</strong>
+              <small>Reopen the complete first-time setup and page tips</small>
             </button>
 
             <button
               type="button"
               className="danger"
-              onClick={() => {
-                const confirmed = window.confirm(
-                  'Reset all local JoeAnimeDB data? This cannot be undone unless you exported a backup.'
-                );
-
-                if (confirmed) resetData();
-              }}
+              onClick={resetLocalDatabase}
+              disabled={!onResetDatabase}
             >
               <span>🗑</span>
               <strong>Reset Local Data</strong>
               <small>Delete local profile and library data</small>
             </button>
           </div>
+
+          <footer className="settingsSystemFacts">
+            <span><b>App:</b> {appVersion}</span>
+            <span><b>Data:</b> {systemInfo?.database || systemInfo?.data || 'Desktop storage'}</span>
+            <span><b>Backups:</b> {systemInfo?.backups || 'Exported JSON files'}</span>
+          </footer>
         </section>
       </div>
 

@@ -793,3 +793,7 @@ body.joeCaretRepaint textarea {
   50% { opacity: 1; }
   100% { opacity: .995; }
 }
+
+
+/* Detail modal previous/next navigation */
+.detailNavigation{display:flex;align-items:center;gap:10px;margin:0 0 12px}.detailNavigation .eyebrow{margin:0}.detailNavigationButton{width:34px;height:30px;display:grid;place-items:center;border:1px solid rgba(55,234,255,.3);border-radius:10px;background:rgba(55,234,255,.08);color:var(--cyan);font-size:25px;line-height:1;cursor:pointer;transition:transform .14s ease,border-color .14s ease,background .14s ease}.detailNavigationButton:hover:not(:disabled){transform:translateY(-1px);border-color:rgba(55,234,255,.65);background:rgba(55,234,255,.15)}.detailNavigationButton:disabled{opacity:.24;cursor:default}

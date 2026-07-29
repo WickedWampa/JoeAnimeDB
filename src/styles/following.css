@@ -200,6 +200,12 @@
   font-size: 12px;
   font-weight: 900;
 }
+.followingStatus strong { color: inherit; }
+.followingStatus.release-airing { color: #4ce59a; }
+.followingStatus.release-upcoming { color: var(--cyan); }
+.followingStatus.release-delayed { color: #ff98a8; }
+.followingStatus.release-tba { color: #ffc857; }
+.followingStatus.release-finished { color: var(--muted); }
 
 .followingActions { display: flex; gap: 8px; margin-top: 18px; }
 .followingActions button {

@@ -1,7 +1,7 @@
 const { app, BrowserWindow, shell, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { execFile } = require('child_process');
+const { execFile, spawn } = require('child_process');
 const database = require('./database.cjs');
 
 const isDev = !app.isPackaged;
@@ -50,9 +50,28 @@ function registerDatabaseHandlers() {
   ipcMain.handle('db:getAll', async () => database.getAll());
   ipcMain.handle('db:getCatalog', async () => database.getCatalog());
   ipcMain.handle('db:replaceAll', async (_event, anime) => database.replaceAll(anime));
+  ipcMain.handle('db:restoreBackup', async (_event, snapshot) => {
+    const folders = ensureAppFolders();
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const safetyBackup = path.join(
+      folders.backups,
+      `JoeAnime-before-restore-${timestamp}.db`
+    );
+
+    await database.backupDatabase(safetyBackup);
+    return database.restoreDatabase(snapshot);
+  });
   ipcMain.handle('db:updateAnime', async (_event, anime) => database.upsertAnime(anime));
   ipcMain.handle('db:importCatalog', async (_event, catalog) => database.importCatalog(catalog));
   ipcMain.handle('db:updateCatalogAnime', async (_event, anime) => database.upsertCatalogAnime(anime));
+  ipcMain.handle('db:getJoeAIState', async () => database.getJoeAIState());
+  ipcMain.handle('db:recordJoeAIFeedback', async (_event, entry) => database.recordJoeAIFeedback(entry));
+  ipcMain.handle('db:setJoeAIPreference', async (_event, preference) => database.setJoeAIPreference(preference));
+  ipcMain.handle('db:deleteJoeAIFeedback', async (_event, id) => database.deleteJoeAIFeedback(id));
+  ipcMain.handle('db:deleteJoeAIPreference', async (_event, key) => database.deleteJoeAIPreference(key));
+  ipcMain.handle('db:resetJoeAILearning', async () => database.resetJoeAILearning());
+  ipcMain.handle('db:setJoeAIConversationContext', async (_event, context) => database.setJoeAIConversationContext(context));
+  ipcMain.handle('db:clearJoeAIConversationContext', async () => database.clearJoeAIConversationContext());
   ipcMain.handle('db:reset', async (_event, seedDatabase) => database.reset(seedDatabase));
 }
 
@@ -69,29 +88,95 @@ ipcMain.handle('app:getStorageInfo', async () => {
   };
 });
 
+ipcMain.handle('app:getInfo', async () => ({
+  name: app.getName(),
+  version: app.getVersion(),
+  packaged: app.isPackaged,
+  electron: process.versions.electron,
+  chrome: process.versions.chrome,
+  node: process.versions.node,
+  platform: process.platform,
+  architecture: process.arch
+}));
+
+ipcMain.handle('app:openFolder', async (_event, kind) => {
+  const folders = ensureAppFolders();
+  const target = kind === 'logs'
+    ? folders.logs
+    : kind === 'data'
+      ? folders.data
+      : kind === 'backups'
+        ? folders.backups
+      : null;
+
+  if (!target) {
+    return { ok: false, error: 'Unknown JoeAnimeDB folder.' };
+  }
+
+  const error = await shell.openPath(target);
+  return error
+    ? { ok: false, error }
+    : { ok: true, path: target };
+});
+
+ipcMain.handle('app:openExternal', async (_event, rawUrl) => {
+  try {
+    const target = new URL(String(rawUrl || ''));
+    const allowedHosts = new Set([
+      'github.com',
+      'kitsu.io',
+      'www.kitsu.io',
+      'wikidata.org',
+      'www.wikidata.org'
+    ]);
+
+    if (target.protocol !== 'https:' || !allowedHosts.has(target.hostname)) {
+      return { ok: false, error: 'JoeAnimeDB blocked an untrusted external link.' };
+    }
+
+    await shell.openExternal(target.toString());
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error?.message || String(error) };
+  }
+});
+
+
+function resolveAppScript(scriptName) {
+  const candidates = [
+    path.join(__dirname, '..', 'scripts', scriptName),
+    path.join(process.resourcesPath || '', 'scripts', scriptName)
+  ];
+
+  const found = candidates.find((candidate) => candidate && fs.existsSync(candidate));
+
+  if (!found) {
+    throw new Error(
+      `Required script not found: ${scriptName}\nChecked:\n${candidates.join('\n')}`
+    );
+  }
+
+  return found;
+}
 
 function runNodeScript(scriptPath, args = []) {
   return new Promise((resolve, reject) => {
-    execFile(process.execPath, [scriptPath, ...args], { cwd: path.join(__dirname, '..') }, (error, stdout, stderr) => {
-      if (error) {
-        error.stdout = stdout;
-        error.stderr = stderr;
-        reject(error);
-        return;
-      }
+    if (!fs.existsSync(scriptPath)) {
+      reject(new Error(`Node script not found: ${scriptPath}`));
+      return;
+    }
 
-      resolve({ stdout, stderr });
-    });
-  });
-}
-
-
-function joeRunNodeScript(scriptPath, args = []) {
-  return new Promise((resolve, reject) => {
     execFile(
       process.execPath,
       [scriptPath, ...args],
-      { cwd: path.join(__dirname, '..') },
+      {
+        cwd: path.join(__dirname, '..'),
+        env: {
+          ...process.env,
+          ELECTRON_RUN_AS_NODE: '1'
+        },
+        windowsHide: true
+      },
       (error, stdout, stderr) => {
         if (error) {
           error.stdout = stdout;
@@ -103,6 +188,108 @@ function joeRunNodeScript(scriptPath, args = []) {
         resolve({ stdout, stderr });
       }
     );
+  });
+}
+
+const joeRunNodeScript = runNodeScript;
+
+function normalizeProgressText(value = '') {
+  return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function runGenomeBatchWithProgress(event, scriptPath, args = [], animeList = []) {
+  return new Promise((resolve, reject) => {
+    const titles = animeList.map((item) =>
+      String(item?.officialTitle || item?.title || item?.titleEnglish || 'Unknown title').trim()
+    );
+    const normalizedTitles = titles.map(normalizeProgressText);
+    const reported = new Set();
+    let stdout = '';
+    let stderr = '';
+    let stdoutBuffer = '';
+
+    function sendProgress(processed, title, phase = 'generating') {
+      if (event.sender.isDestroyed()) return;
+      event.sender.send('genome:generationProgress', {
+        processed,
+        total: titles.length,
+        title,
+        phase,
+        percent: titles.length ? Math.round((processed / titles.length) * 100) : 100
+      });
+    }
+
+    function inspectLine(line = '') {
+      const cleanLine = normalizeProgressText(line);
+      if (!cleanLine) return;
+
+      // Prefer an explicit progress record if the batch runner supplies one.
+      const protocolMatch = line.match(/JOEANIME_GENOME_PROGRESS\s+(\{.+\})/);
+      if (protocolMatch) {
+        try {
+          const progress = JSON.parse(protocolMatch[1]);
+          const processed = Math.max(0, Math.min(titles.length, Number(progress.processed || 0)));
+          sendProgress(processed, progress.title || titles[processed] || '', progress.phase || 'generating');
+          return;
+        } catch {}
+      }
+
+      // Backward-compatible progress for the existing runner: its console
+      // output names each title while processing it. Count each title once.
+      const matchedIndex = normalizedTitles.findIndex((title, index) =>
+        title.length >= 3 && !reported.has(index) && cleanLine.includes(title)
+      );
+
+      if (matchedIndex >= 0) {
+        reported.add(matchedIndex);
+        sendProgress(reported.size, titles[matchedIndex], 'generating');
+      }
+    }
+
+    sendProgress(0, titles[0] || '', 'starting');
+
+    const child = spawn(
+      process.execPath,
+      [scriptPath, ...args],
+      {
+        cwd: path.join(__dirname, '..'),
+        env: {
+          ...process.env,
+          ELECTRON_RUN_AS_NODE: '1'
+        },
+        windowsHide: true
+      }
+    );
+
+    child.stdout.on('data', (chunk) => {
+      const text = chunk.toString();
+      stdout += text;
+      stdoutBuffer += text;
+
+      const lines = stdoutBuffer.split(/\r?\n/);
+      stdoutBuffer = lines.pop() || '';
+      lines.forEach(inspectLine);
+    });
+
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString();
+    });
+
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (stdoutBuffer) inspectLine(stdoutBuffer);
+
+      if (code !== 0) {
+        const error = new Error(`Genome batch exited with code ${code}.`);
+        error.stdout = stdout;
+        error.stderr = stderr;
+        reject(error);
+        return;
+      }
+
+      sendProgress(titles.length, titles[titles.length - 1] || '', 'complete');
+      resolve({ stdout, stderr });
+    });
   });
 }
 
@@ -148,8 +335,8 @@ ipcMain.handle('genome:generate', async (_event, title) => {
   }
 
   try {
-    const generatorScript = path.join(__dirname, '..', 'scripts', 'generateGenomeCardForTitle.cjs');
-    const rebuildScript = path.join(__dirname, '..', 'scripts', 'rebuildGenomeRegistry.cjs');
+    const generatorScript = resolveAppScript('generateGenomeCardForTitle.cjs');
+    const rebuildScript = resolveAppScript('rebuildGenomeRegistry.cjs');
 
     const generated = await runNodeScript(generatorScript, [cleanTitle]);
     const rebuilt = await runNodeScript(rebuildScript, []);
@@ -175,23 +362,23 @@ ipcMain.handle('genome:generate', async (_event, title) => {
 
 
 
-ipcMain.handle('genome:generateMissingForLibrary', async (_event, animeList, options = {}) => {
+ipcMain.handle('genome:generateMissingForLibrary', async (event, animeList, options = {}) => {
+  const folders = ensureAppFolders();
+  const tempFile = path.join(folders.runtime, '.tmp-genome-library.json');
+
   try {
     const cleanList = Array.isArray(animeList) ? animeList : [];
     const limit = Number(options.limit || 0);
-    const tempFile = path.join(__dirname, '..', '.tmp-genome-library.json');
-    const batchScript = path.join(__dirname, '..', 'scripts', 'generateMissingGenomesForList.cjs');
+    const batchScript = resolveAppScript('generateMissingGenomesForList.cjs');
 
     fs.writeFileSync(tempFile, JSON.stringify(cleanList, null, 2), 'utf8');
 
-    const result = await joeRunNodeScript(batchScript, [
-      tempFile,
-      String(limit)
-    ]);
-
-    try {
-      fs.unlinkSync(tempFile);
-    } catch {}
+    const result = await runGenomeBatchWithProgress(
+      event,
+      batchScript,
+      [tempFile, String(limit)],
+      cleanList
+    );
 
     return {
       ok: true,
@@ -205,6 +392,12 @@ ipcMain.handle('genome:generateMissingForLibrary', async (_event, animeList, opt
       stdout: error.stdout || '',
       stderr: error.stderr || ''
     };
+  } finally {
+    try {
+      if (fs.existsSync(tempFile)) {
+        fs.unlinkSync(tempFile);
+      }
+    } catch {}
   }
 });
 

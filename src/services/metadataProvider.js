@@ -1,13 +1,12 @@
 import { getManualMetadata, normalizeManualMetadataKey } from '../data/manualMetadataOverrides';
 import { manualMetadataToAnime } from './metadataResolver';
-import { fetchMetadata as fetchJikanMetadata } from './metadata';
 import { fetchKitsuMetadata } from './kitsuProvider';
 
 export function applyMetadataToAnime(item = {}, metadata = {}) {
   return {
     ...item,
     ...metadata,
-    id: item.id || metadata.id || metadata.malId || normalizeManualMetadataKey(metadata.title || item.title).replace(/\s+/g, '-'),
+    id: item.id || metadata.id || metadata.kitsuId || metadata.malId || normalizeManualMetadataKey(metadata.title || item.title).replace(/\s+/g, '-'),
     title: metadata.title || item.title,
     officialTitle: metadata.officialTitle || metadata.titleEnglish || metadata.title || item.officialTitle || item.title,
     description: metadata.description || metadata.synopsis || item.description || '',
@@ -38,16 +37,8 @@ export async function fetchMetadataFromProvider(item = {}) {
     return manualMetadataToAnime(item, manual);
   }
 
-  let fetched;
-  let provider = 'jikan';
-
-  try {
-    fetched = await fetchJikanMetadata(item);
-  } catch (jikanError) {
-    console.warn('Jikan metadata lookup failed; trying Kitsu fallback:', item?.title, jikanError);
-    fetched = await fetchKitsuMetadata(item);
-    provider = 'kitsu';
-  }
+  const fetched = await fetchKitsuMetadata(item);
+  const provider = 'kitsu';
 
   const needsRefresh = Boolean(fetched.metadataNeedsRefresh);
 

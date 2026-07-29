@@ -2,11 +2,7 @@ import catalogSeed from '../data/animeCatalogSeed.json';
 import { fetchMetadata, needsArtworkRepair, sleep } from './metadata';
 import { fetchKitsuCatalogPage, fetchKitsuLiveDiscoverFeeds } from './kitsuProvider';
 
-const JIKAN_TOP_ANIME_URL = 'https://api.jikan.moe/v4/top/anime';
-const JIKAN_CURRENT_SEASON_URL = 'https://api.jikan.moe/v4/seasons/now';
-const JIKAN_UPCOMING_SEASON_URL = 'https://api.jikan.moe/v4/seasons/upcoming';
-
-function titleKey(title = '') {
+export function titleKey(title = '') {
   return String(title)
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '');
@@ -33,25 +29,72 @@ function richness(item) {
   ].filter(Boolean).length;
 }
 
+function persistentCatalogFields(current = {}, incoming = {}) {
+  const currentUpdated = new Date(current.listUpdatedAt || 0).getTime() || 0;
+  const incomingUpdated = new Date(incoming.listUpdatedAt || 0).getTime() || 0;
+  return incomingUpdated >= currentUpdated && incoming.listUpdatedAt
+    ? incoming
+    : current;
+}
+
+function mergeCatalogPair(current = {}, incoming = {}) {
+  const metadataFirst = richness(incoming) >= richness(current)
+    ? { ...current, ...incoming }
+    : { ...incoming, ...current };
+  const persistent = persistentCatalogFields(current, incoming);
+
+  return {
+    ...metadataFirst,
+    id: current.id || incoming.id,
+    kitsuId: incoming.kitsuId || current.kitsuId || '',
+    malId: incoming.malId || incoming.mal_id || current.malId || current.mal_id || null,
+    followed: Boolean(persistent.followed),
+    ignored: Boolean(persistent.ignored),
+    followedAt: persistent.followedAt || '',
+    listUpdatedAt: persistent.listUpdatedAt || '',
+    followingSnapshot: persistent.followingSnapshot || current.followingSnapshot || incoming.followingSnapshot,
+    followingLastCheckedAt:
+      persistent.followingLastCheckedAt ||
+      current.followingLastCheckedAt ||
+      incoming.followingLastCheckedAt ||
+      '',
+    followingCheckError:
+      persistent.followingCheckError ??
+      current.followingCheckError ??
+      incoming.followingCheckError ??
+      '',
+    followingEvents:
+      persistent.followingEvents ||
+      current.followingEvents ||
+      incoming.followingEvents ||
+      []
+  };
+}
+
 export function mergeCatalogEntries({ library = [], catalog = [], seed = catalogSeed } = {}) {
-  const libraryKeys = new Set(library.map((item) => titleKey(item.title)).filter(Boolean));
-  const byKey = new Map();
+  const merged = [];
 
   for (const item of [...seed, ...catalog]) {
-    const key = titleKey(item.title);
-    if (!key || libraryKeys.has(key)) continue;
+    const keys = identityKeys(item);
+    if (!keys.size || library.some((entry) => sameCatalogIdentity(entry, item))) continue;
 
-    const current = byKey.get(key);
-    if (!current || richness(item) >= richness(current)) {
-      byKey.set(key, {
-        id: item.id || current?.id || `catalog-${key}`,
-        ...current,
+    const duplicateIndex = merged.findIndex((candidate) =>
+      sameCatalogIdentity(candidate, item)
+    );
+
+    if (duplicateIndex < 0) {
+      const key = titleKey(item.title);
+      merged.push({
+        id: item.id || `catalog-${key}`,
         ...item
       });
+      continue;
     }
+
+    merged[duplicateIndex] = mergeCatalogPair(merged[duplicateIndex], item);
   }
 
-  return [...byKey.values()];
+  return merged;
 }
 
 export function buildCatalogQueue({ library = [], catalog = [], seed = catalogSeed, limit = 50 } = {}) {
@@ -91,10 +134,9 @@ export async function updateCatalogMetadata({
 
     try {
       const enriched = await fetchMetadata(item);
-      const key = titleKey(enriched.title || item.title);
 
       nextCatalog = nextCatalog.map((candidate) =>
-        titleKey(candidate.title) === key
+        sameCatalogIdentity(candidate, item)
           ? {
               ...candidate,
               ...enriched,
@@ -132,50 +174,7 @@ export async function updateCatalogMetadata({
 }
 
 
-function remoteCover(match = {}) {
-  return match.images?.jpg?.large_image_url ||
-    match.images?.webp?.large_image_url ||
-    match.images?.jpg?.image_url ||
-    match.images?.webp?.image_url ||
-    '';
-}
-
-function normalizeTopAnime(match = {}) {
-  const genres = [
-    ...(match.genres || []),
-    ...(match.themes || []),
-    ...(match.demographics || [])
-  ].map((entry) => entry?.name).filter(Boolean);
-
-  return {
-    id: `catalog-mal-${match.mal_id}`,
-    malId: match.mal_id,
-    title: match.title_english || match.title || 'Unknown title',
-    officialTitle: match.title_english || match.title || 'Unknown title',
-    japaneseTitle: match.title_japanese || '',
-    titleSynonyms: match.title_synonyms || [],
-    cover: remoteCover(match),
-    synopsis: match.synopsis || '',
-    type: match.type || 'TV',
-    year: match.year || match.aired?.from?.slice?.(0, 4) || '',
-    episodeCount: match.episodes || 0,
-    episodes: match.episodes || 0,
-    communityScore: match.score || '',
-    malScore: match.score || '',
-    members: match.members || 0,
-    popularity: match.popularity || '',
-    rank: match.rank || '',
-    studio: match.studios?.length ? match.studios.map((studio) => studio.name).join(' / ') : '',
-    genres: [...new Set(genres)].slice(0, 10),
-    metadataReady: true,
-    canonicalTitleVersion: 1,
-    canonicalTitleUpdatedAt: new Date().toISOString(),
-    catalogSource: 'Jikan Top Anime',
-    metadataUpdatedAt: new Date().toISOString()
-  };
-}
-
-function identityKeys(item = {}) {
+export function identityKeys(item = {}) {
   const keys = new Set();
   const normalize = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
 
@@ -190,14 +189,30 @@ function identityKeys(item = {}) {
 
   const malId = item.malId || item.mal_id;
   if (malId) keys.add(`mal:${String(malId)}`);
+  const kitsuId = item.kitsuId || item.kitsu_id;
+  if (kitsuId) keys.add(`kitsu:${String(kitsuId)}`);
+
+  const embeddedKitsuId = String(item.id || '').match(
+    /(?:anime-kitsu|catalog-kitsu|kitsu)[-_]?(\d+)$/i
+  );
+  if (embeddedKitsuId) keys.add(`kitsu:${embeddedKitsuId[1]}`);
 
   return keys;
 }
 
-function makeIdentitySet(items = []) {
-  const keys = new Set();
-  items.forEach((item) => identityKeys(item).forEach((key) => keys.add(key)));
-  return keys;
+export function sameCatalogIdentity(left = {}, right = {}) {
+  const leftKitsu = left.kitsuId || left.kitsu_id;
+  const rightKitsu = right.kitsuId || right.kitsu_id;
+  if (leftKitsu && rightKitsu) return String(leftKitsu) === String(rightKitsu);
+
+  const leftMal = left.malId || left.mal_id;
+  const rightMal = right.malId || right.mal_id;
+  if (leftMal && rightMal) return String(leftMal) === String(rightMal);
+
+  const leftKeys = identityKeys(left);
+  return [...identityKeys(right)].some((key) =>
+    key.startsWith('title:') && leftKeys.has(key)
+  );
 }
 
 export async function fetchMoreCatalogTitles({
@@ -209,49 +224,22 @@ export async function fetchMoreCatalogTitles({
 } = {}) {
   const safePage = Math.max(1, Number(page || 1));
   const safeLimit = Math.max(1, Math.min(25, Number(limit || 25)));
+  if (signal?.aborted) throw new DOMException('Catalog request aborted.', 'AbortError');
+
   let providerResult;
-
   try {
-    const response = await fetch(`${JIKAN_TOP_ANIME_URL}?page=${safePage}&limit=${safeLimit}`, {
-      signal,
-      headers: { Accept: 'application/json' }
-    });
-
-    if (!response.ok) {
-      if ([429, 500, 502, 503, 504].includes(response.status)) {
-        throw new Error(`Jikan is temporarily unavailable (${response.status}).`);
-      }
-      throw new Error(`Catalog fetch failed (${response.status}).`);
-    }
-
-    const payload = await response.json();
-    const remoteTitles = Array.isArray(payload?.data) ? payload.data : [];
-    providerResult = {
-      rows: remoteTitles.map(normalizeTopAnime),
-      page: safePage,
-      nextPage: payload?.pagination?.has_next_page === false ? 1 : safePage + 1,
-      received: remoteTitles.length,
-      source: 'jikan'
-    };
-  } catch (jikanError) {
-    if (jikanError?.name === 'AbortError') throw jikanError;
-    console.warn('Jikan catalog page failed; trying Kitsu fallback.', jikanError);
-
-    try {
-      providerResult = await fetchKitsuCatalogPage({ page: safePage, limit: safeLimit });
-    } catch (kitsuError) {
-      console.warn('Kitsu catalog fallback failed.', kitsuError);
-      throw new Error('Neither Jikan nor Kitsu could fetch more Discover titles right now.');
-    }
+    providerResult = await fetchKitsuCatalogPage({ page: safePage, limit: safeLimit });
+  } catch (kitsuError) {
+    console.warn('Kitsu catalog page failed.', kitsuError);
+    throw new Error('Kitsu could not fetch more Discover titles right now.');
   }
 
-  const blockedKeys = makeIdentitySet([...library, ...catalog]);
+  const blocked = [...library, ...catalog];
   const added = [];
 
   for (const normalized of providerResult.rows || []) {
-    const keys = identityKeys(normalized);
-    if ([...keys].some((key) => blockedKeys.has(key))) continue;
-    keys.forEach((key) => blockedKeys.add(key));
+    if (blocked.some((item) => sameCatalogIdentity(item, normalized))) continue;
+    blocked.push(normalized);
     added.push(normalized);
   }
 
@@ -269,128 +257,6 @@ export async function fetchMoreCatalogTitles({
   };
 }
 
-function normalizeSeasonAnime(match = {}, bucket = 'current') {
-  const normalized = normalizeTopAnime(match);
-  const airedFrom = match.aired?.from || '';
-  const airedTo = match.aired?.to || '';
-  const broadcastDay = match.broadcast?.day || '';
-  const broadcastTime = match.broadcast?.time || '';
-
-  return {
-    ...normalized,
-    id: `catalog-mal-${match.mal_id}`,
-    status: match.status || '',
-    season: match.season || '',
-    year: match.year || normalized.year || '',
-    airedFrom,
-    airedTo,
-    broadcastDay,
-    broadcastTime,
-    trailerUrl: match.trailer?.url || '',
-    discoverBucket: bucket,
-    discoverSource: bucket === 'current' ? 'Jikan Current Season' : 'Jikan Upcoming Season',
-    discoverSyncedAt: new Date().toISOString(),
-    catalogSource: bucket === 'current' ? 'Jikan Current Season' : 'Jikan Upcoming Season'
-  };
-}
-
-function retryDelay(attempt, response) {
-  const retryAfter = Number(response?.headers?.get?.('retry-after') || 0);
-  if (Number.isFinite(retryAfter) && retryAfter > 0) {
-    return Math.min(15000, retryAfter * 1000);
-  }
-
-  return Math.min(12000, 1200 * (2 ** attempt)) + Math.round(Math.random() * 350);
-}
-
-async function fetchJikanPage(url, {
-  signal,
-  retries = 3,
-  timeoutMs = 18000,
-  label = 'Jikan feed'
-} = {}) {
-  let lastError = null;
-
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    const timeoutController = new AbortController();
-    const timeout = setTimeout(() => timeoutController.abort(), timeoutMs);
-
-    const abortFromParent = () => timeoutController.abort();
-    signal?.addEventListener?.('abort', abortFromParent, { once: true });
-
-    let response;
-
-    try {
-      response = await fetch(url, {
-        signal: timeoutController.signal,
-        headers: {
-          Accept: 'application/json',
-          'Cache-Control': 'no-cache'
-        }
-      });
-
-      if (response.ok) {
-        const payload = await response.json();
-        return Array.isArray(payload?.data) ? payload.data : [];
-      }
-
-      const retryable = [429, 500, 502, 503, 504].includes(response.status);
-      lastError = new Error(`${label} returned ${response.status}.`);
-
-      if (!retryable || attempt >= retries) break;
-    } catch (error) {
-      if (signal?.aborted) throw error;
-
-      lastError = error?.name === 'AbortError'
-        ? new Error(`${label} timed out.`)
-        : new Error(`${label} could not be reached.`);
-
-      if (attempt >= retries) break;
-    } finally {
-      clearTimeout(timeout);
-      signal?.removeEventListener?.('abort', abortFromParent);
-    }
-
-    await sleep(retryDelay(attempt, response));
-  }
-
-  throw lastError || new Error(`${label} is temporarily unavailable.`);
-}
-
-async function fetchJikanFeedWithFallback({
-  primaryUrl,
-  fallbackUrl,
-  signal,
-  label
-}) {
-  try {
-    return {
-      rows: await fetchJikanPage(primaryUrl, { signal, label }),
-      source: 'season'
-    };
-  } catch (primaryError) {
-    console.warn(`${label} primary endpoint failed; trying fallback.`, primaryError);
-
-    try {
-      return {
-        rows: await fetchJikanPage(fallbackUrl, {
-          signal,
-          label: `${label} fallback`,
-          retries: 2
-        }),
-        source: 'top'
-      };
-    } catch (fallbackError) {
-      console.warn(`${label} fallback endpoint failed.`, fallbackError);
-      return {
-        rows: [],
-        source: 'cache',
-        error: fallbackError?.message || primaryError?.message || `${label} failed.`
-      };
-    }
-  }
-}
-
 export async function fetchLiveDiscoverCatalog({
   library = [],
   catalog = [],
@@ -401,47 +267,37 @@ export async function fetchLiveDiscoverCatalog({
   const cachedCurrent = (catalog || []).filter((item) => item?.discoverBucket === 'current');
   const cachedUpcoming = (catalog || []).filter((item) => item?.discoverBucket === 'upcoming');
 
-  const currentResult = await fetchJikanFeedWithFallback({
-    primaryUrl: `${JIKAN_CURRENT_SEASON_URL}?limit=${safeLimit}&sfw=true`,
-    fallbackUrl: `${JIKAN_TOP_ANIME_URL}?filter=airing&limit=${safeLimit}&sfw=true`,
-    signal,
-    label: 'Current-season feed'
-  });
+  if (signal?.aborted) throw new DOMException('Live Discover request aborted.', 'AbortError');
 
-  await sleep(1400);
-
-  const upcomingResult = await fetchJikanFeedWithFallback({
-    primaryUrl: `${JIKAN_UPCOMING_SEASON_URL}?limit=${safeLimit}&sfw=true`,
-    fallbackUrl: `${JIKAN_TOP_ANIME_URL}?filter=upcoming&limit=${safeLimit}&sfw=true`,
-    signal,
-    label: 'Upcoming-season feed'
-  });
-
-  let currentRows = currentResult.rows.map((item) => normalizeSeasonAnime(item, 'current'));
-  let upcomingRows = upcomingResult.rows.map((item) => normalizeSeasonAnime(item, 'upcoming'));
-  const warnings = [currentResult.error, upcomingResult.error].filter(Boolean);
+  let currentRows = [];
+  let upcomingRows = [];
+  const warnings = [];
   const sources = {
-    current: currentRows.length ? `jikan-${currentResult.source}` : 'none',
-    upcoming: upcomingRows.length ? `jikan-${upcomingResult.source}` : 'none'
+    current: 'none',
+    upcoming: 'none'
   };
 
-  if (!currentRows.length || !upcomingRows.length) {
-    try {
-      const kitsu = await fetchKitsuLiveDiscoverFeeds({
-        currentLimit: Math.min(safeLimit, 40),
-        upcomingLimit: safeLimit
-      });
-      if (!currentRows.length && kitsu.current.length) {
-        currentRows = kitsu.current;
-        sources.current = 'kitsu';
-      }
-      if (!upcomingRows.length && kitsu.upcoming.length) {
-        upcomingRows = kitsu.upcoming;
-        sources.upcoming = 'kitsu';
-      }
-    } catch (kitsuError) {
-      warnings.push(`Kitsu fallback failed: ${kitsuError?.message || kitsuError}`);
-    }
+  try {
+    const kitsu = await fetchKitsuLiveDiscoverFeeds({
+      currentLimit: Math.min(safeLimit, 40),
+      upcomingLimit: safeLimit
+    });
+    currentRows = kitsu.current || [];
+    upcomingRows = kitsu.upcoming || [];
+    warnings.push(...(kitsu.warnings || []));
+    if (currentRows.length) sources.current = 'kitsu';
+    if (upcomingRows.length) sources.upcoming = 'kitsu';
+  } catch (kitsuError) {
+    if (signal?.aborted) throw new DOMException('Live Discover request aborted.', 'AbortError');
+    warnings.push(`Kitsu feed failed: ${kitsuError?.message || kitsuError}`);
+    console.warn('Kitsu live Discover feed failed; using cached rows when available.', kitsuError);
+  }
+
+  if (!currentRows.length && !cachedCurrent.length) {
+    warnings.push('Kitsu returned no current-season titles.');
+  }
+  if (!upcomingRows.length && !cachedUpcoming.length) {
+    warnings.push('Kitsu returned no upcoming titles.');
   }
 
   const usedCachedCurrent = !currentRows.length && cachedCurrent.length > 0;
@@ -452,7 +308,7 @@ export async function fetchLiveDiscoverCatalog({
   const incoming = [...currentRows, ...upcomingRows];
 
   if (!incoming.length && !usedCachedCurrent && !usedCachedUpcoming) {
-    throw new Error('Jikan and Kitsu are both unavailable, and no cached live Discover titles exist yet.');
+    throw new Error('Kitsu is unavailable, and no cached live Discover titles exist yet.');
   }
 
   const existingByProviderId = new Map();
@@ -462,26 +318,28 @@ export async function fetchLiveDiscoverCatalog({
   });
 
   const mergedIncoming = incoming.map((item) => {
-    const key = item.malId ? `mal:${item.malId}` : item.kitsuId ? `kitsu:${item.kitsuId}` : '';
+    const key = item.kitsuId
+      ? `kitsu:${item.kitsuId}`
+      : item.malId
+        ? `mal:${item.malId}`
+        : '';
     const current = key ? existingByProviderId.get(key) : null;
     return current ? { ...current, ...item, id: current.id || item.id } : item;
   });
 
   // mergeCatalogEntries intentionally keeps the richest metadata record. A live
-  // Jikan/Kitsu row can be less complete than an existing catalog record, though,
+  // Kitsu row can be less complete than an existing catalog record, though,
   // which previously caused discoverBucket/source fields to be discarded. The
   // status message still reported 20 fetched titles, but Discover could not find
   // any rows tagged as current/upcoming. Re-apply the live feed fields after the
   // metadata merge so the richer record is retained and the live classification
   // remains available to the UI.
-  const liveFieldsByTitle = new Map(
-    mergedIncoming.map((item) => [titleKey(item.title), item])
-  );
-
   const nextCatalog = incoming.length
     ? mergeCatalogEntries({ library, catalog: [...catalog, ...mergedIncoming], seed: [] })
         .map((item) => {
-          const live = liveFieldsByTitle.get(titleKey(item.title));
+          const live = mergedIncoming.find((candidate) =>
+            sameCatalogIdentity(candidate, item)
+          );
           if (!live) return item;
 
           return {
@@ -503,6 +361,10 @@ export async function fetchLiveDiscoverCatalog({
         })
     : catalog;
 
+  const allLive = sources.current === 'kitsu' && sources.upcoming === 'kitsu';
+  const allCached = sources.current === 'cache' && sources.upcoming === 'cache';
+  const state = allLive ? 'live' : allCached ? 'offline' : 'partial';
+
   return {
     catalog: nextCatalog,
     currentCount: currentRows.length || cachedCurrent.length,
@@ -512,7 +374,8 @@ export async function fetchLiveDiscoverCatalog({
     warnings,
     partial: warnings.length > 0 || Object.values(sources).includes('cache'),
     usedCache: usedCachedCurrent || usedCachedUpcoming,
+    offline: state === 'offline',
+    state,
     sources
   };
 }
-

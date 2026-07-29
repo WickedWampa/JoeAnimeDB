@@ -1,5 +1,5 @@
 // Phase 1: AI Genome Generator helpers.
-// Creates provisional/generated Genome Cards from Jikan metadata + optional AI JSON.
+// Creates provisional/generated Genome Cards from Kitsu metadata + optional AI JSON.
 
 export function slugify(value = '') {
   return String(value || '')
@@ -81,7 +81,7 @@ export function buildDraftGenomeCard({ metadata = {}, ai = {} } = {}) {
     needsReview: true,
     generatedAt: new Date().toISOString(),
     source: {
-      metadata: 'jikan',
+      metadata: 'kitsu',
       generator: ai.usedAI ? 'ai-assisted' : 'heuristic',
       model: ai.model || null
     },

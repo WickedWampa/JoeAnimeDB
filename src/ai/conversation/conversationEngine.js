@@ -303,9 +303,7 @@ function answerWhyAnime(text, anime = [], catalog = [], memory) {
     overlap.length ? 'Match breakdown:' : '',
     overlap.length ? overlap.map((trait) => `• ${trait.label} — ${trait.score}%${trait.personalHit ? ' (direct evidence)' : ''}`).join('\n') : '',
     '',
-    topTraits.length ? `Bottom line: your strongest current signals are ${topTraits.map((trait) => trait.label.toLowerCase()).join(', ')}. ${title} fits best when it feeds those patterns.` : '',
-    '',
-    isRecommendationQuestion ? 'What else I would compare it against: One Piece, Slime, Vinland Saga, Frieren, or any long-form story with political/worldbuilding payoff.' : ''
+    topTraits.length ? `Bottom line: your strongest current signals are ${topTraits.map((trait) => trait.label.toLowerCase()).join(', ')}. ${title} fits best when it feeds those patterns.` : ''
   ].filter(Boolean).join('\n');
 }
 
@@ -329,12 +327,36 @@ function answerTasteChange(memory) {
   ].filter(Boolean).join('\n');
 }
 
-export function routeJoeAIConversation({ text = '', anime = [], catalog = [] }) {
+function answerSavedLearning(text = '', joeAIState = {}) {
+  if (!/\b(what did i teach you|saved preferences|recommendation feedback|what preferences|remembered preferences)\b/i.test(text)) {
+    return null;
+  }
+
+  const feedback = Array.isArray(joeAIState.feedback) ? joeAIState.feedback : [];
+  const preferences = Array.isArray(joeAIState.preferences) ? joeAIState.preferences : [];
+
+  return [
+    '🎓 What you have taught JoeAI',
+    '',
+    `${feedback.length} recommendation feedback event${feedback.length === 1 ? '' : 's'} saved.`,
+    `${preferences.length} explicit preference${preferences.length === 1 ? '' : 's'} saved.`,
+    '',
+    preferences.length ? 'Saved preferences:' : '',
+    ...preferences.slice(0, 10).map((entry) => `• ${String(entry.key).replace(/[_:]+/g, ' ')}: ${String(entry.value)}`),
+    '',
+    feedback.length ? 'Recent feedback:' : '',
+    ...feedback.slice(0, 8).map((entry) => `• ${entry.title} — ${String(entry.action).replace(/_/g, ' ')}${entry.reason ? ` (${String(entry.reason).replace(/_/g, ' ')})` : ''}`)
+  ].filter(Boolean).join('\n');
+}
+
+export function routeJoeAIConversation({ text = '', anime = [], catalog = [], joeAIState = {} }) {
   const raw = String(text || '').trim();
   if (!raw) return null;
 
   const lower = raw.toLowerCase();
   const memory = buildJoeAIMemory(anime || [], { persist: true });
+  const learnedAnswer = answerSavedLearning(raw, joeAIState);
+  if (learnedAnswer) return { type: 'text', text: learnedAnswer };
 
   const reflectionAnswer = answerMemoryReflection(raw, memory);
   if (reflectionAnswer) return { type: 'text', text: reflectionAnswer };
