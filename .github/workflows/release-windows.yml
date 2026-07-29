@@ -48,7 +48,37 @@ jobs:
           }
 
       - name: Build Windows update
-        run: npm run pack:win
+        shell: pwsh
+        run: |
+          npm run build
+          npx electron-builder --win nsis --publish never
+
+      - name: Create update metadata
+        shell: pwsh
+        run: |
+          $installerName = "JoeAnimeDB-Setup-$env:RELEASE_VERSION.exe"
+          $installerPath = "dist-desktop/$installerName"
+          if (-not (Test-Path $installerPath)) {
+            throw "Installer was not generated: $installerPath"
+          }
+
+          $installerBytes = [System.IO.File]::ReadAllBytes($installerPath)
+          $sha512Bytes = [System.Security.Cryptography.SHA512]::HashData($installerBytes)
+          $sha512 = [Convert]::ToBase64String($sha512Bytes)
+          $size = (Get-Item $installerPath).Length
+          $releaseDate = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
+
+          $metadata = @(
+            "version: $env:RELEASE_VERSION",
+            "files:",
+            "  - url: $installerName",
+            "    sha512: $sha512",
+            "    size: $size",
+            "path: $installerName",
+            "sha512: $sha512",
+            "releaseDate: '$releaseDate'"
+          )
+          Set-Content -Path "dist-desktop/latest.yml" -Value $metadata -Encoding utf8
 
       - name: Verify release assets
         shell: pwsh
