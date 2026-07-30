@@ -1,4 +1,4 @@
-# JoeAnimeDB 5.0 Beta 7
+# JoeAnimeDB 5.0 Beta 8
 
 JoeAnimeDB is now available for both Windows and x86_64 Linux.
 
@@ -8,6 +8,7 @@ JoeAnimeDB is now available for both Windows and x86_64 Linux.
 - Confirmed JoeAnimeDB, JoeAI, and the native SQLite database run on Arch Linux.
 - Added a one-command Linux installer that downloads the newest AppImage, creates an application-menu entry, installs the JoeAnimeDB icon, and adds the `joeanime-db` terminal command.
 - Enabled application updates for supported installed Windows and Linux builds.
+- Added an app-wide notification when a newer JoeAnimeDB version is available, with one-click access to the update controls.
 - Repaired the Upcoming feed so future-dated Kitsu titles are not buried behind date-TBA entries.
 - Preserved separate Airing Now, Upcoming, Delayed, and Date TBA sections.
 - Kept the existing Windows installer, shortcuts, update metadata, and personal-data behavior unchanged.
@@ -16,7 +17,7 @@ JoeAnimeDB is now available for both Windows and x86_64 Linux.
 
 Download and run:
 
-`JoeAnimeDB-Setup-5.0.0-beta.7.exe`
+`JoeAnimeDB-Setup-5.0.0-beta.8.exe`
 
 Windows SmartScreen may display a warning because this public beta is not yet code signed.
 

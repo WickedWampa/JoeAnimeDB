@@ -1,0 +1,135 @@
+.appUpdateNotice {
+  position: fixed;
+  top: 18px;
+  right: 22px;
+  z-index: 95;
+  width: min(560px, calc(100vw - 44px));
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 14px;
+  color: var(--text);
+  border: 1px solid color-mix(in srgb, var(--cyan) 52%, transparent);
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--cyan) 13%, transparent), color-mix(in srgb, var(--pink) 9%, transparent)),
+    color-mix(in srgb, var(--panel) 94%, #050910);
+  box-shadow:
+    0 18px 60px rgba(0, 0, 0, 0.46),
+    0 0 30px color-mix(in srgb, var(--cyan) 13%, transparent);
+  backdrop-filter: blur(18px);
+  animation: appUpdateNoticeIn 220ms ease-out both;
+}
+
+.appUpdateNotice.state-downloaded {
+  border-color: color-mix(in srgb, var(--gold) 65%, transparent);
+  box-shadow:
+    0 18px 60px rgba(0, 0, 0, 0.46),
+    0 0 32px color-mix(in srgb, var(--gold) 16%, transparent);
+}
+
+.appUpdateNoticeIcon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border: 1px solid color-mix(in srgb, var(--cyan) 38%, transparent);
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.24);
+  font-size: 22px;
+}
+
+.appUpdateNoticeCopy {
+  min-width: 0;
+}
+
+.appUpdateNoticeCopy strong,
+.appUpdateNoticeCopy span {
+  display: block;
+}
+
+.appUpdateNoticeCopy strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.appUpdateNoticeCopy span {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.appUpdateNoticeOpen,
+.appUpdateNoticeDismiss {
+  border: 1px solid color-mix(in srgb, var(--cyan) 40%, transparent);
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.24);
+  cursor: pointer;
+  font-weight: 900;
+}
+
+.appUpdateNoticeOpen {
+  border-radius: 12px;
+  padding: 10px 13px;
+  white-space: nowrap;
+}
+
+.appUpdateNoticeOpen:hover {
+  color: var(--cyan);
+  background: color-mix(in srgb, var(--cyan) 12%, transparent);
+}
+
+.appUpdateNoticeDismiss {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-color: transparent;
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: 22px;
+  line-height: 1;
+}
+
+.appUpdateNoticeDismiss:hover {
+  color: var(--text);
+  border-color: rgba(255, 255, 255, 0.13);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+@keyframes appUpdateNoticeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-12px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (max-width: 720px) {
+  .appUpdateNotice {
+    top: 10px;
+    right: 10px;
+    width: calc(100vw - 20px);
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .appUpdateNoticeOpen {
+    grid-column: 2 / -1;
+    justify-self: stretch;
+  }
+
+  .appUpdateNoticeDismiss {
+    grid-column: 3;
+    grid-row: 1;
+  }
+}

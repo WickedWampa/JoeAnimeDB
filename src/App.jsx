@@ -16,6 +16,7 @@ import './styles/analytics-lab.css';
 import './styles/library-cleanup.css';
 import './styles/library-integrity.css';
 import './styles/settings-art.css';
+import './styles/update-notification.css';
 import React, { useEffect, useMemo, useState } from 'react';
 
 import { Sidebar } from './components/Sidebar';
@@ -91,12 +92,55 @@ function UpdateProgressOverlay({ syncText, syncProgress, theme = 'neon' }) {
   );
 }
 
+function AppUpdateNotice({ status, onOpen, onDismiss }) {
+  const state = status?.state || '';
+  const version = status?.availableVersion || '';
+
+  if (!['available', 'downloading', 'downloaded'].includes(state)) return null;
+
+  const title = state === 'downloaded'
+    ? `JoeAnimeDB v${version || 'Next'} is ready`
+    : state === 'downloading'
+      ? `Downloading v${version || 'Next'}`
+      : `JoeAnimeDB v${version || 'Next'} is available`;
+
+  const detail = state === 'downloaded'
+    ? 'Restart JoeAnimeDB to finish installing the update.'
+    : state === 'downloading'
+      ? `${Math.max(0, Math.min(100, Math.round(status?.percent || 0)))}% downloaded`
+      : 'A new desktop release is ready to download.';
+
+  return (
+    <aside className={`appUpdateNotice state-${state}`} role="status" aria-live="polite">
+      <span className="appUpdateNoticeIcon" aria-hidden="true">🍜</span>
+      <div className="appUpdateNoticeCopy">
+        <strong>{title}</strong>
+        <span>{detail}</span>
+      </div>
+      <button type="button" className="appUpdateNoticeOpen" onClick={onOpen}>
+        {state === 'downloaded' ? 'Install' : 'View Update'}
+      </button>
+      <button
+        type="button"
+        className="appUpdateNoticeDismiss"
+        onClick={onDismiss}
+        aria-label="Dismiss update notification"
+        title="Dismiss"
+      >
+        ×
+      </button>
+    </aside>
+  );
+}
+
 export function App() {
   const [view, setView] = useState('dashboard');
   const [selected, setSelected] = useState(null);
   const [mode, setMode] = useState('poster');
   const [onboardingState, setOnboardingState] = useState(() => readOnboardingState());
   const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [appUpdateStatus, setAppUpdateStatus] = useState(null);
+  const [dismissedUpdateVersion, setDismissedUpdateVersion] = useState('');
   const [theme, setTheme] = useState(() => {
     try {
       return localStorage.getItem('joeanime-theme') || 'neon';
@@ -128,6 +172,29 @@ export function App() {
     deleteAnime, fetchMoreCatalogTitles, refreshLiveDiscover,
     restoreBackup, resetDatabase
   } = library;
+
+  useEffect(() => {
+    const updates = window.JoeAnimeDB?.updates;
+    if (!updates) return undefined;
+
+    let active = true;
+    const receiveStatus = (nextStatus) => {
+      if (!active || !nextStatus) return;
+      setAppUpdateStatus(nextStatus);
+    };
+    const unsubscribe = updates.onStatus?.(receiveStatus);
+
+    updates.getStatus?.()
+      .then(receiveStatus)
+      .catch((error) => {
+        console.warn('Could not load application update status:', error);
+      });
+
+    return () => {
+      active = false;
+      unsubscribe?.();
+    };
+  }, []);
 
   function handleThemeChange(nextTheme) {
     setTheme(nextTheme);
@@ -373,6 +440,22 @@ export function App() {
       />
 
       <section className="content">
+        <AppUpdateNotice
+          status={
+            dismissedUpdateVersion &&
+            dismissedUpdateVersion === appUpdateStatus?.availableVersion
+              ? null
+              : appUpdateStatus
+          }
+          onOpen={() => {
+            setSelected(null);
+            setView('about');
+          }}
+          onDismiss={() => setDismissedUpdateVersion(
+            appUpdateStatus?.availableVersion || 'current'
+          )}
+        />
+
         {['library', 'favorites', 'rankings'].includes(view) && (
           <header className="topbar">
             <SearchBar query={query} setQuery={setQuery} view={view} setView={setView} />
