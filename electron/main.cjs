@@ -18,10 +18,13 @@ const isDev = !app.isPackaged;
  * Installer-safe storage.
  *
  * Development keeps using Electron's normal userData folder.
- * Packaged installer builds also use Electron's per-user AppData location,
- * which is writable without administrator permissions:
+ * Packaged desktop builds use Electron's per-user data location, which is
+ * writable without administrator permissions:
  *
- *   %APPDATA%\JoeAnimeDB\
+ *   Windows: %APPDATA%\JoeAnimeDB\
+ *   Linux:   ~/.config/JoeAnimeDB/
+ *
+ * Both contain:
  *     JoeAnime.db
  *     backups\
  *     logs\
@@ -83,7 +86,7 @@ const updateManager = createUpdateManager({
   autoUpdater,
   isSupported:
     app.isPackaged &&
-    process.platform === 'win32' &&
+    ['win32', 'linux'].includes(process.platform) &&
     !process.env.PORTABLE_EXECUTABLE_DIR,
   logger: {
     info: (...values) => writeUpdaterLog('info', ...values),

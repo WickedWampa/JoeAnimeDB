@@ -45,7 +45,7 @@ function createUpdateManager({
     percent: 0,
     message: isSupported
       ? 'Ready to check for updates.'
-      : 'Update checks are available in installed Windows builds.',
+      : 'Automatic updates are available in supported installed desktop builds.',
     checkedAt: ''
   };
 
@@ -74,7 +74,7 @@ function createUpdateManager({
         ok: false,
         reason: 'development',
         status: setStatus('development', {
-          message: 'Update checks are available in installed Windows builds.'
+          message: 'Automatic updates are available in supported installed desktop builds.'
         })
       };
     }

@@ -13,7 +13,7 @@ contextBridge.exposeInMainWorld('JoeAnimeDB', {
     };
   },
   generateGenome: (title) => ipcRenderer.invoke('genome:generate', title),
-  version: '5.0.0-beta.5',
+  version: '5.0.0-beta.6',
   desktop: true,
   app: {
     getInfo: () => ipcRenderer.invoke('app:getInfo'),

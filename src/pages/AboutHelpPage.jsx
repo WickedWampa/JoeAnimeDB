@@ -27,7 +27,7 @@ import '../styles/about-help.css';
 const RELEASE_NOTES_URL = 'https://github.com/WickedWampa/JoeAnimeDB/releases';
 const KITSU_URL = 'https://kitsu.io/';
 const WIKIDATA_URL = 'https://www.wikidata.org/';
-const FALLBACK_VERSION = '5.0.0-beta.5';
+const FALLBACK_VERSION = '5.0.0-beta.6';
 
 function displayVersion(value = '') {
   const clean = String(value || '').trim().replace(/^v/i, '');
@@ -79,7 +79,7 @@ export function AboutHelpPage({
     if (!updates) {
       setUpdateStatus({
         state: 'unavailable',
-        message: 'Automatic updates are available in the installed Windows app.',
+        message: 'Automatic updates are available in supported installed desktop builds.',
         percent: 0
       });
       return undefined;
@@ -231,7 +231,7 @@ export function AboutHelpPage({
     const handler = actions[action];
 
     if (!handler || updateBusy) {
-      setStatus('Automatic updates are available in the installed Windows app.');
+      setStatus('Automatic updates are available in supported installed desktop builds.');
       return;
     }
 
@@ -454,7 +454,7 @@ export function AboutHelpPage({
           <Download />
         </div>
         <div className="aboutUpdateCopy">
-          <p>Windows App Updates</p>
+          <p>Desktop App Updates</p>
           <h2>
             {updateState === 'downloaded'
               ? `v${updateVersion || 'Next'} is ready`
@@ -477,7 +477,7 @@ export function AboutHelpPage({
           )}
           <small>
             Update installs replace application files only. Your library and JoeAI data remain
-            in the Windows data folder.
+            in your local data folder.
           </small>
         </div>
         <div className="aboutUpdateActions">

@@ -1,4 +1,4 @@
-name: Release Windows Installer
+name: Release Desktop Builds
 
 on:
   push:
@@ -124,3 +124,65 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
             throw "Unable to upload release assets for $env:RELEASE_TAG."
           }
+
+  release-linux:
+    name: Release Linux AppImage
+    needs: release-windows
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.x'
+          cache: npm
+
+      - name: Resolve release version
+        shell: bash
+        run: |
+          package_version="$(node -p "require('./package.json').version")"
+          expected_tag="v${package_version}"
+          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref_name }}" != "${expected_tag}" ]]; then
+            echo "Tag ${{ github.ref_name }} does not match package.json version ${package_version}. Expected ${expected_tag}." >&2
+            exit 1
+          fi
+          echo "RELEASE_VERSION=${package_version}" >> "$GITHUB_ENV"
+          echo "RELEASE_TAG=${expected_tag}" >> "$GITHUB_ENV"
+
+      - name: Install dependencies
+        run: npm ci --include=dev --no-audit --no-fund
+
+      - name: Build Linux packages
+        run: |
+          npm run build
+          npx electron-builder --linux AppImage --x64 --publish never
+
+      - name: Verify Linux release assets
+        shell: bash
+        run: |
+          assets=(
+            "dist-desktop/JoeAnimeDB-${RELEASE_VERSION}.AppImage"
+            "dist-desktop/latest-linux.yml"
+          )
+          for asset in "${assets[@]}"; do
+            if [[ ! -f "$asset" ]]; then
+              echo "Required Linux release asset was not generated: $asset" >&2
+              exit 1
+            fi
+          done
+
+      - name: Publish Linux release assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          assets=(
+            "dist-desktop/JoeAnimeDB-${RELEASE_VERSION}.AppImage"
+            "dist-desktop/latest-linux.yml"
+          )
+          gh release upload "$RELEASE_TAG" "${assets[@]}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber
