@@ -350,6 +350,8 @@ export async function fetchLiveDiscoverCatalog({
             catalogSource: live.catalogSource || item.catalogSource,
             status: live.status || item.status,
             season: live.season || item.season,
+            startDate: live.startDate || live.airedFrom || item.startDate,
+            endDate: live.endDate || live.airedTo || item.endDate,
             airedFrom: live.airedFrom || item.airedFrom,
             airedTo: live.airedTo || item.airedTo,
             broadcastDay: live.broadcastDay || item.broadcastDay,

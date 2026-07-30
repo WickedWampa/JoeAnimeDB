@@ -112,10 +112,19 @@ jobs:
               --verify-tag `
               --prerelease `
               --title "JoeAnimeDB $env:RELEASE_VERSION" `
-              --notes "JoeAnimeDB $env:RELEASE_VERSION"
+              --notes-file "RELEASE_NOTES.md"
             if ($LASTEXITCODE -ne 0) {
               throw "Unable to create release $env:RELEASE_TAG."
             }
+          }
+
+          gh release edit $env:RELEASE_TAG `
+            --repo $env:GITHUB_REPOSITORY `
+            --title "JoeAnimeDB $env:RELEASE_VERSION" `
+            --notes-file "RELEASE_NOTES.md" `
+            --prerelease
+          if ($LASTEXITCODE -ne 0) {
+            throw "Unable to apply release notes to $env:RELEASE_TAG."
           }
 
           gh release upload $env:RELEASE_TAG $assets `
@@ -155,7 +164,7 @@ jobs:
       - name: Install dependencies
         run: npm ci --include=dev --no-audit --no-fund
 
-      - name: Build Linux packages
+      - name: Build Linux AppImage
         run: |
           npm run build
           npx electron-builder --linux AppImage --x64 --publish never

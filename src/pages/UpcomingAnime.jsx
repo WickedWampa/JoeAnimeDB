@@ -137,8 +137,8 @@ export function UpcomingAnime({
   useEffect(() => {
     const nextCurrent = cachedRows(catalog, 'current');
     const nextUpcoming = cachedRows(catalog, 'upcoming');
-    if (nextCurrent.length) setCurrent(nextCurrent);
-    if (nextUpcoming.length) setUpcoming(nextUpcoming);
+    setCurrent(nextCurrent);
+    setUpcoming(nextUpcoming);
   }, [catalog]);
 
   const followedKeys = useMemo(() => {

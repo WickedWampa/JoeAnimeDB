@@ -635,7 +635,7 @@ export async function fetchKitsuLiveDiscoverFeeds({
   const today = new Date();
   const todayKey = today.toISOString().slice(0, 10);
 
-  const [currentResult, upcomingResult] = await Promise.allSettled([
+  const [currentResult, futureResult, tbaResult] = await Promise.allSettled([
     fetchPaginatedKitsuCollection({
       target: Math.max(safeCurrentLimit * 2, 40),
       paths: [
@@ -646,33 +646,49 @@ export async function fetchKitsuLiveDiscoverFeeds({
     fetchPaginatedKitsuCollection({
       target: Math.max(safeUpcomingLimit * 2, 80),
       paths: [
-        '/anime?filter[status]=tba&sort=startDate',
-        '/anime?filter[status]=unreleased&sort=startDate',
         '/anime?filter[status]=upcoming&sort=startDate',
-        '/anime?sort=startDate'
+        '/anime?filter[status]=unreleased&sort=startDate',
+        '/anime?sort=-startDate'
+      ]
+    }),
+    fetchPaginatedKitsuCollection({
+      target: Math.min(Math.max(safeUpcomingLimit, 20), 60),
+      paths: [
+        '/anime?filter[status]=tba&sort=-userCount',
+        '/anime?filter[status]=tba'
       ]
     })
   ]);
 
-  if (currentResult.status === 'rejected' && upcomingResult.status === 'rejected') {
+  if (
+    currentResult.status === 'rejected' &&
+    futureResult.status === 'rejected' &&
+    tbaResult.status === 'rejected'
+  ) {
     throw new Error(
-      `Kitsu live feeds failed: ${currentResult.reason?.message || currentResult.reason}; ${upcomingResult.reason?.message || upcomingResult.reason}`
+      `Kitsu live feeds failed: ${currentResult.reason?.message || currentResult.reason}; ${futureResult.reason?.message || futureResult.reason}; ${tbaResult.reason?.message || tbaResult.reason}`
     );
   }
 
   const currentResources = currentResult.status === 'fulfilled'
     ? currentResult.value
     : [];
-  const upcomingResources = upcomingResult.status === 'fulfilled'
-    ? upcomingResult.value
-    : [];
+  const upcomingResources = [
+    ...(futureResult.status === 'fulfilled' ? futureResult.value : []),
+    ...(tbaResult.status === 'fulfilled' ? tbaResult.value : [])
+  ].filter((resource, index, rows) => (
+    rows.findIndex((candidate) => String(candidate?.id || '') === String(resource?.id || '')) === index
+  ));
   const warnings = [];
 
   if (currentResult.status === 'rejected') {
     warnings.push(`Kitsu current feed failed: ${currentResult.reason?.message || currentResult.reason}`);
   }
-  if (upcomingResult.status === 'rejected') {
-    warnings.push(`Kitsu upcoming feed failed: ${upcomingResult.reason?.message || upcomingResult.reason}`);
+  if (futureResult.status === 'rejected') {
+    warnings.push(`Kitsu future-date feed failed: ${futureResult.reason?.message || futureResult.reason}`);
+  }
+  if (tbaResult.status === 'rejected') {
+    warnings.push(`Kitsu date-TBA feed failed: ${tbaResult.reason?.message || tbaResult.reason}`);
   }
 
   const current = currentResources
