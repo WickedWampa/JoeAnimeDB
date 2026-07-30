@@ -1,6 +1,6 @@
 {
   "name": "joeanime-db-4",
-  "version": "5.0.0-beta.4",
+  "version": "5.0.0-beta.5",
   "private": true,
   "description": "JoeAnimeDB desktop anime library powered by JoeAI",
   "main": "electron/main.cjs",
@@ -73,6 +73,7 @@
     "nsis": {
       "oneClick": false,
       "perMachine": false,
+      "license": "installer/LICENSE.txt",
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,

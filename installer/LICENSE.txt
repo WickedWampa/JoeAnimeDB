@@ -1,7 +1,15 @@
-JoeAnimeDB 5.0 Beta Test License
+JoeAnimeDB 5.0 Public Beta License
 
-This beta build is provided for private testing and evaluation.
+Copyright © 2026 WickedWampa. All rights reserved.
 
-The software is provided "as is", without warranty of any kind. Testers should keep backups of any important data. Redistribution, resale, or commercial use is not authorized without permission from the project owner.
+JoeAnimeDB is provided as a public beta for personal, non-commercial use.
 
-By installing this beta build, you acknowledge that unfinished features and defects may be present.
+You may download, install, and use JoeAnimeDB on your personal devices. You may not sell, repackage, redistribute, or commercially exploit the software without written permission from the project owner. Please direct others to the official JoeAnimeDB download page instead of re-uploading the installer.
+
+This software is provided "as is", without warranty of any kind. Because this is beta software, unfinished features, errors, service interruptions, or data loss may occur. Users should maintain backups of important library data.
+
+To the fullest extent permitted by law, the project owner is not liable for damages or data loss resulting from installing or using JoeAnimeDB.
+
+JoeAnimeDB retrieves public anime metadata from third-party providers. JoeAnimeDB is not affiliated with or endorsed by any anime studio, publisher, streaming service, metadata provider, or rights holder.
+
+By installing or using JoeAnimeDB, you acknowledge and accept these terms.

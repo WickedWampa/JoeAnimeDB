@@ -1,4 +1,4 @@
-JOEANIMEDB 5.0.0 BETA 2 — WINDOWS INSTALLER
+JOEANIMEDB 5.0.0 BETA 5 — WINDOWS INSTALLER
 
 BUILD
 1. Open the JoeAnimeDB project root.
@@ -8,8 +8,8 @@ BUILD
 
 RELEASE FILES
 Keep these files from the same build together:
-- JoeAnimeDB-Setup-5.0.0-beta.2.exe
-- JoeAnimeDB-Setup-5.0.0-beta.2.exe.blockmap
+- JoeAnimeDB-Setup-5.0.0-beta.5.exe
+- JoeAnimeDB-Setup-5.0.0-beta.5.exe.blockmap
 - latest.yml
 
 The installer can be shared by itself for a manual installation. All three
