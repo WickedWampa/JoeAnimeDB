@@ -254,12 +254,15 @@ export function buildDiscoverPlan({ library = [], candidates = [], daySeed = 0, 
     const result = [];
     const shelfIds = new Set();
     const shelfFranchises = new Set();
-    const maxAppearances = Number(options.maxAppearances || 2);
+    const maxAppearances = Number(options.maxAppearances ?? 1);
+    const source = options.source || ranked;
+    const excludedIds = options.excludedIds || new Set();
 
-    for (const entry of ranked) {
+    for (const entry of source) {
       if (!predicate(entry)) continue;
       const key = identity(entry.item);
       const family = franchise(entry.item);
+      if (excludedIds.has(key)) continue;
       if (shelfIds.has(key)) continue;
       if ((appearanceCounts.get(key) || 0) >= maxAppearances) continue;
       if (!options.allowFranchiseRepeat && shelfFranchises.has(family)) continue;
@@ -322,23 +325,64 @@ export function buildDiscoverPlan({ library = [], candidates = [], daySeed = 0, 
     .filter((entry) => Number(entry.confidenceReceipt?.dataConfidence || 0) >= 35)
     .map(enrichDiscoverItem);
 
+  const airingNow = take(isCurrent);
+  const comingSoon = take(isUpcoming);
+  const becauseYouLoved = anchor
+    ? take((entry) => (
+      tagsOf(entry.item).some((tag) => anchorTags.has(lower(tag)))
+      || studiosOf(entry.item).some((studio) => studiosOf(anchor).map(lower).includes(lower(studio)))
+    ))
+    : [];
+  const bestMatches = take(() => true);
+  const bestMatchIds = new Set(bestMatches.map(identity));
+  const communityRanked = [...ranked].sort((a, b) => {
+    const scoreDifference = communityScore(b.item) - communityScore(a.item);
+    if (scoreDifference !== 0) return scoreDifference;
+
+    const audienceDifference = membersOf(b.item) - membersOf(a.item);
+    if (audienceDifference !== 0) return audienceDifference;
+
+    return b.score - a.score;
+  });
+  const highestRated = take(
+    (entry) => communityScore(entry.item) > 0,
+    12,
+    {
+      source: communityRanked,
+      excludedIds: bestMatchIds
+    }
+  );
+  const hiddenGems = take(isHidden);
+  const mindBenders = take((entry) => [...genreSet(entry)].some((genre) => (
+    ['psychological', 'mystery', 'sci-fi', 'suspense', 'supernatural'].includes(genre)
+  )));
+  const emotionalDamage = take((entry) => {
+    const genres = genreSet(entry);
+    return genres.has('drama') && (
+      genres.has('romance')
+      || genres.has('award winning')
+      || genres.has('slice of life')
+    );
+  });
+  const movieNight = take(isMovie);
+  const studioSpotlight = topStudio
+    ? take((entry) => studiosOf(entry.item).map(lower).includes(topStudio))
+    : [];
+
   return {
     profile,
     ranked,
     dailyPick: daily,
-    airingNow: take(isCurrent),
-    comingSoon: take(isUpcoming),
-    bestMatches: take(() => true),
-    highestRated: take((entry) => communityScore(entry.item) > 0),
-    becauseYouLoved: anchor ? take((entry) => tagsOf(entry.item).some((tag) => anchorTags.has(lower(tag))) || studiosOf(entry.item).some((studio) => studiosOf(anchor).map(lower).includes(lower(studio)))) : [],
-    studioSpotlight: topStudio ? take((entry) => studiosOf(entry.item).map(lower).includes(topStudio)) : [],
-    hiddenGems: take(isHidden),
-    mindBenders: take((entry) => [...genreSet(entry)].some((genre) => ['psychological', 'mystery', 'sci-fi', 'suspense', 'supernatural'].includes(genre))),
-    emotionalDamage: take((entry) => {
-      const genres = genreSet(entry);
-      return genres.has('drama') && (genres.has('romance') || genres.has('award winning') || genres.has('slice of life'));
-    }),
-    movieNight: take(isMovie),
+    airingNow,
+    comingSoon,
+    bestMatches,
+    highestRated,
+    becauseYouLoved,
+    studioSpotlight,
+    hiddenGems,
+    mindBenders,
+    emotionalDamage,
+    movieNight,
     anchor,
     topStudio,
     surprisePools: {

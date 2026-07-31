@@ -69,6 +69,10 @@ function franchiseTitleKey(value = '') {
     return 'rezero';
   }
 
+  if (/\breincarnated as a slime\b/.test(title)) {
+    return 'reincarnatedasaslime';
+  }
+
   return title
     .replace(/\bstarting life in another world\b/g, ' ')
     .replace(/\barise from the shadow\b/g, ' ')
@@ -187,6 +191,10 @@ function scoreKitsuCandidate(candidate = {}, wantedItem = {}) {
   }
 
   const type = String(candidate.type || '').toLowerCase();
+  const wantedType = String(wantedItem.type || '').toLowerCase();
+
+  if (wantedType && type === wantedType) score += 8;
+  if (wantedType === 'movie' && type && type !== 'movie') score -= 20;
   if (type === 'tv') score += 4;
   if (/special|ova|ona/.test(type) && !/special|ova|ona/i.test(wantedItem.type || '')) {
     score -= 10;
@@ -330,6 +338,7 @@ export function normalizeKitsuAnime(resource = {}, base = {}) {
       ? `https://www.youtube.com/watch?v=${attributes.youtubeVideoId}`
       : base.trailerUrl || '',
     ageRating: attributes.ageRating || base.ageRating || '',
+    airingStatus: attributes.status || base.airingStatus || base.releaseStatus || '',
     status: base.status || attributes.status || 'Watching',
     metadataSource: 'kitsu',
     metadataReady: Boolean(
@@ -432,11 +441,27 @@ export async function searchKitsuAnime(title, { limit = 8 } = {}) {
 }
 
 export async function fetchKitsuMetadata(item = {}) {
-  const wantedTitle = item.title || item.officialTitle || '';
-  const results = await searchKitsuAnime(wantedTitle, { limit: 8 });
+  const wantedTitle = item.officialTitle || item.title || '';
+  let directMatch = null;
+
+  if (item.kitsuId) {
+    try {
+      const payload = await fetchKitsu(`/anime/${encodeURIComponent(item.kitsuId)}`);
+      if (payload?.data) directMatch = normalizeKitsuAnime(payload.data);
+    } catch (error) {
+      console.warn('[Kitsu Metadata] direct ID lookup failed; trying title search:', item.kitsuId, error);
+    }
+  }
+
+  const results = directMatch
+    ? [directMatch]
+    : await searchKitsuAnime(wantedTitle, { limit: 8 });
   if (!results.length) throw new Error('Kitsu returned no matches');
 
-  const match = bestKitsuMatch(results, item);
+  const match = directMatch || bestKitsuMatch(results, {
+    ...item,
+    title: wantedTitle
+  });
   if (!match) {
     throw new Error(`Kitsu returned no confident title match for ${wantedTitle}`);
   }
@@ -453,6 +478,7 @@ export async function fetchKitsuMetadata(item = {}) {
     title: item.title || match.title,
     officialTitle: match.officialTitle || match.title || item.officialTitle || wantedTitle,
     status: item.status || match.status || 'Watching',
+    airingStatus: match.airingStatus || item.airingStatus || item.releaseStatus || '',
     favorite: Boolean(item.favorite),
     rewatches: Number(item.rewatches || 0),
     notes: item.notes || match.notes || '',

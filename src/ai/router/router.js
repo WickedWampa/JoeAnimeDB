@@ -144,6 +144,8 @@ export async function routeJoeAI({ question = '', intent, anime = [], catalog = 
     case 'stats':
     case 'watchingList':
     case 'generateGenome':
+    case 'genreDNA':
+    case 'tastePattern':
       return executeJoeAICommand({ intent, anime, catalog, updateAnime, brain });
 
     case 'bulkAdd': {

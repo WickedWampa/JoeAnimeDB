@@ -1,23 +1,31 @@
-# JoeAnimeDB 5.0 Beta 8
+# JoeAnimeDB 5.0 Beta 9
 
-JoeAnimeDB is now available for both Windows and x86_64 Linux.
+Beta 9 makes JoeAI answers more dependable, gives Discover shelves genuinely different identities, and completes a substantial metadata-repair cleanup.
 
 ## Highlights
 
-- Added the first Linux AppImage release.
-- Confirmed JoeAnimeDB, JoeAI, and the native SQLite database run on Arch Linux.
-- Added a one-command Linux installer that downloads the newest AppImage, creates an application-menu entry, installs the JoeAnimeDB icon, and adds the `joeanime-db` terminal command.
-- Enabled application updates for supported installed Windows and Linux builds.
-- Added an app-wide notification when a newer JoeAnimeDB version is available, with one-click access to the update controls.
-- Repaired the Upcoming feed so future-dated Kitsu titles are not buried behind date-TBA entries.
-- Preserved separate Airing Now, Upcoming, Delayed, and Date TBA sections.
-- Kept the existing Windows installer, shortcuts, update metadata, and personal-data behavior unchanged.
+- Fixed personal taste questions such as “Why do I like long adventures?” so JoeAI answers the taste pattern directly instead of analyzing an unrelated title.
+- Improved JoeAI routing for genre, theme, mood, and viewing-pattern questions.
+- Prevented Discover from repeating the same recommendations across multiple shelves.
+- Changed Highest Rated to rank unseen titles by their actual community score instead of recommendation order.
+- Preserved JoeAI Picks as a separate personalized shelf.
+- Centered the JoeAI dashboard’s episodes, rewatches, and comfort-anchor statistics.
+
+## Metadata Repair
+
+- Added Kitsu-first repair for missing studio, genre, year, and episode data.
+- Added direct Kitsu ID lookups and stronger alternate-title matching.
+- Improved movie and franchise matching, including shortened titles such as Reincarnated as a Slime Movie.
+- Added another Wikidata release-date fallback for titles whose year is stored as a start date.
+- Stopped treating an unknown final episode total as damaged metadata for currently airing or date-TBA series.
+- Expanded Metadata Health to report missing studio, genre, year, and episode-count fields clearly.
+- Improved repair reports so repaired and unresolved titles show the provider result and fields affected.
 
 ## Install on Windows
 
 Download and run:
 
-`JoeAnimeDB-Setup-5.0.0-beta.8.exe`
+`JoeAnimeDB-Setup-5.0.0-beta.9.exe`
 
 Windows SmartScreen may display a warning because this public beta is not yet code signed.
 
@@ -39,7 +47,7 @@ The Linux beta currently supports x86_64 systems. Some distributions require a F
 
 ## Updating
 
-Supported packaged builds check GitHub for newer JoeAnimeDB releases. Updates replace application files only; the library, ratings, notes, Anime DNA, Genome data, and JoeAI data remain in the operating system's per-user data folder.
+Supported packaged Windows and Linux builds check GitHub for newer JoeAnimeDB releases. Updates replace application files only; your library, ratings, notes, Anime DNA, Genome data, and JoeAI data remain in the operating system’s per-user data folder.
 
 ## Beta Notes
 

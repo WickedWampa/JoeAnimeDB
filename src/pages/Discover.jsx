@@ -1218,18 +1218,38 @@ export function Discover({
   const topStudioName = engineV3.topStudio;
   const topStudioDisplay = studios.find(([name]) => name.toLowerCase() === topStudioName)?.[0] || topStudioName || 'Studio';
 
-  const recommendationPlan = {
-    airingNow: engineV3.airingNow,
-    comingSoon: engineV3.comingSoon,
-    becauseYouLoved: engineV3.becauseYouLoved,
-    joeAIPicks: engineV3.bestMatches,
-    highestRated: engineV3.highestRated,
-    hiddenGems: engineV3.hiddenGems,
-    mindBenders: engineV3.mindBenders,
-    emotionalDamage: engineV3.emotionalDamage,
-    movieNight: engineV3.movieNight,
-    studioSpotlight: engineV3.studioSpotlight
-  };
+  const recommendationPlan = useMemo(() => {
+    const claimed = [];
+    const claimUnique = (items = []) => items.filter((item) => {
+      const alreadyClaimed = claimed.some((candidate) => (
+        cardKey(candidate) === cardKey(item)
+        || sameAnimeIdentity(candidate, item)
+      ));
+
+      if (alreadyClaimed) return false;
+      claimed.push(item);
+      return true;
+    });
+
+    // The daily pick gets first claim so it is not repeated in a shelf.
+    if (engineV3.dailyPick?.item) claimed.push(engineV3.dailyPick.item);
+
+    // Claim shelf titles in the same order they are rendered. This final-page
+    // guard keeps a title from leaking into multiple rows even if an engine or
+    // cached catalog result supplies overlapping arrays.
+    return {
+      airingNow: claimUnique(engineV3.airingNow),
+      comingSoon: claimUnique(engineV3.comingSoon),
+      becauseYouLoved: claimUnique(engineV3.becauseYouLoved),
+      joeAIPicks: claimUnique(engineV3.bestMatches),
+      highestRated: claimUnique(engineV3.highestRated),
+      hiddenGems: claimUnique(engineV3.hiddenGems),
+      mindBenders: claimUnique(engineV3.mindBenders),
+      emotionalDamage: claimUnique(engineV3.emotionalDamage),
+      movieNight: claimUnique(engineV3.movieNight),
+      studioSpotlight: claimUnique(engineV3.studioSpotlight)
+    };
+  }, [engineV3]);
 
   async function saveDiscoverFeedback(
     item,

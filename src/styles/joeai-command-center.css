@@ -1433,17 +1433,17 @@ main::-webkit-scrollbar-thumb:hover,
   grid-template-columns: repeat(3,minmax(105px,1fr));
   max-width: 690px;
 }
-.joeAIHeroStats > div {
+.joeAICommandCenter .joeAIHeroStats > div {
   grid-template-columns: 1fr;
   grid-template-areas:
     "icon"
     "value"
     "label";
   justify-items: center;
+  align-items: center;
   text-align: center;
 }
 @media (max-width: 900px) {
   .joeAIHeroCopy { width: 100%; }
   .joeAIHeroStats { grid-template-columns: 1fr; }
 }
-

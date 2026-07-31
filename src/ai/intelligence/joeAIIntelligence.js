@@ -446,6 +446,7 @@ export function resolveJoeAIFollowUp(text = '', context = {}) {
 export function updateJoeAIConversationContext(result, prompt = '', current = {}) {
   const items = Array.isArray(result?.items) ? result.items : [];
   const titleMatch = String(prompt).match(/(?:recommend|about|like|why)\s+(.+?)[?.!]*$/i);
+  const isTastePatternExplanation = result?.type === 'genreDNAExplanation';
 
   return {
     ...current,
@@ -454,7 +455,7 @@ export function updateJoeAIConversationContext(result, prompt = '', current = {}
     lastReferencedTitle:
       result?.sourceTitle
       || (items.length === 1 ? items[0].officialTitle || items[0].title : '')
-      || titleMatch?.[1]?.trim()
+      || (!isTastePatternExplanation ? titleMatch?.[1]?.trim() : '')
       || current.lastReferencedTitle
       || ''
   };

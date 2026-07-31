@@ -198,6 +198,12 @@ function claimTimeYear(entity = {}, property = 'P577') {
   return 0;
 }
 
+function claimReleaseYear(entity = {}) {
+  // Films commonly use publication date (P577), while anime series often use
+  // start time (P580). Treat either as a valid release year.
+  return claimTimeYear(entity, 'P577') || claimTimeYear(entity, 'P580');
+}
+
 function claimQuantity(entity = {}, property = '') {
   const amount = entity.claims?.[property]?.[0]?.mainsnak?.datavalue?.value?.amount;
   const number = Number(amount);
@@ -271,7 +277,7 @@ function scoreEntity(item = {}, searchRow = {}, entity = {}, matchedQuery = '') 
   }
 
   const sourceYear = Number(item.year || 0);
-  const entityYear = claimTimeYear(entity);
+  const entityYear = claimReleaseYear(entity);
 
   if (sourceYear && entityYear) {
     const difference = Math.abs(sourceYear - entityYear);
@@ -328,7 +334,7 @@ function debugCandidate(entry = {}, item = {}) {
     confidence: entry.confidence || 0,
     instanceOfIds: claimEntityIds(entity, 'P31'),
     productionCompanyIds: claimEntityIds(entity, 'P272'),
-    releaseYear: claimTimeYear(entity),
+    releaseYear: claimReleaseYear(entity),
     episodeCount: claimQuantity(entity, 'P1113'),
     matchedQueries: entry.matchedQueries || []
   };
@@ -401,11 +407,25 @@ async function collectRankedCandidates(item = {}) {
 }
 
 export function wikidataRepairNeeds(item = {}) {
+  const releaseStatus = clean(
+    item.airingStatus ||
+    item.releaseStatus ||
+    item.broadcastStatus ||
+    ''
+  ).toLowerCase();
+  const episodeTotalIsOpen = [
+    'current',
+    'airing',
+    'upcoming',
+    'unreleased',
+    'tba'
+  ].some((status) => releaseStatus.includes(status));
+
   return {
     studio: !String(item.studio || '').trim(),
     genres: !Array.isArray(item.genres) || item.genres.length === 0,
     year: !Number(item.year || 0),
-    episodes: !Number(item.episodeCount || item.episodes || 0)
+    episodes: !Number(item.episodeCount || item.episodes || 0) && !episodeTotalIsOpen
   };
 }
 
@@ -414,9 +434,66 @@ export function needsWikidataRepair(item = {}) {
 }
 
 export async function fetchWikidataRepair(item = {}, library = []) {
-  const needs = wikidataRepairNeeds(item);
+  const requestedNeeds = wikidataRepairNeeds(item);
+  let kitsuPatch = {};
+  let kitsuFields = [];
+
+  try {
+    const kitsu = await fetchKitsuMetadata(item);
+    const kitsuStudios = studioNames(kitsu);
+
+    kitsuPatch = {
+      kitsuId: kitsu.kitsuId || item.kitsuId || '',
+      airingStatus: kitsu.airingStatus || item.airingStatus || '',
+      startDate: kitsu.startDate || kitsu.airedFrom || item.startDate || item.airedFrom || '',
+      airedFrom: kitsu.airedFrom || kitsu.startDate || item.airedFrom || item.startDate || '',
+      airedTo: kitsu.airedTo || item.airedTo || '',
+      metadataRepairSource: 'kitsu-primary-repair',
+      kitsuRepairUpdatedAt: new Date().toISOString()
+    };
+
+    if (requestedNeeds.studio && kitsuStudios.length) {
+      kitsuPatch.studio = kitsuStudios.join(' / ');
+      kitsuPatch.productionStudios = kitsuStudios;
+      kitsuFields.push('studio');
+    }
+
+    if (requestedNeeds.genres && kitsu.genres?.length) {
+      kitsuPatch.genres = [...new Set(kitsu.genres)];
+      kitsuFields.push('genres');
+    }
+
+    if (requestedNeeds.year && Number(kitsu.year || 0)) {
+      kitsuPatch.year = Number(kitsu.year);
+      kitsuFields.push('year');
+    }
+
+    const kitsuEpisodes = Number(kitsu.episodeCount || kitsu.episodes || 0);
+    if (requestedNeeds.episodes && kitsuEpisodes) {
+      kitsuPatch.episodeCount = kitsuEpisodes;
+      kitsuPatch.episodes = kitsuEpisodes;
+      kitsuFields.push('episodes');
+    }
+  } catch (error) {
+    console.warn('[Metadata Repair] Kitsu pass unavailable; trying Wikidata:', item.title || item.officialTitle || 'title', error);
+  }
+
+  const kitsuCompletedItem = { ...item, ...kitsuPatch };
+  const needs = wikidataRepairNeeds(kitsuCompletedItem);
+
+  if (!Object.values(needs).some(Boolean)) {
+    return {
+      patch: kitsuPatch,
+      confidence: 100,
+      matchedTitle: kitsuCompletedItem.officialTitle || kitsuCompletedItem.title,
+      matchedQuery: item.kitsuId ? `kitsu:${item.kitsuId}` : 'Kitsu title match',
+      remainingNeeds: needs,
+      resolvedFields: kitsuFields.length ? kitsuFields : ['ongoing episode total']
+    };
+  }
+
   const inheritedStudio = needs.studio
-    ? findLocalFranchiseStudio(item, library)
+    ? findLocalFranchiseStudio(kitsuCompletedItem, library)
     : null;
 
   const inheritedPatch = inheritedStudio
@@ -435,23 +512,62 @@ export async function fetchWikidataRepair(item = {}, library = []) {
   const otherMissing = needs.genres || needs.year || needs.episodes;
   if (inheritedStudio && !otherMissing) {
     return {
-      patch: inheritedPatch,
+      patch: { ...kitsuPatch, ...inheritedPatch },
       confidence: inheritedStudio.confidence,
       matchedTitle: inheritedStudio.inheritedFrom,
-      matchedQuery: 'local franchise inheritance'
+      matchedQuery: 'local franchise inheritance',
+      remainingNeeds: wikidataRepairNeeds({
+        ...kitsuCompletedItem,
+        ...inheritedPatch
+      }),
+      resolvedFields: [...new Set([...kitsuFields, 'studio'])]
     };
   }
 
-  const ranked = await collectRankedCandidates(item);
+  let ranked;
+  try {
+    ranked = await collectRankedCandidates(kitsuCompletedItem);
+  } catch (error) {
+    if (!kitsuFields.length) throw error;
+
+    return {
+      patch: kitsuPatch,
+      confidence: 95,
+      matchedTitle: kitsuCompletedItem.officialTitle || kitsuCompletedItem.title,
+      matchedQuery: item.kitsuId ? `kitsu:${item.kitsuId}` : 'Kitsu title match',
+      remainingNeeds: needs,
+      unresolvedReason: error?.message || String(error),
+      resolvedFields: kitsuFields
+    };
+  }
   const best = ranked[0];
 
   if (!best || best.confidence < MIN_CONFIDENCE) {
     if (inheritedStudio) {
       return {
-        patch: inheritedPatch,
+        patch: { ...kitsuPatch, ...inheritedPatch },
         confidence: inheritedStudio.confidence,
         matchedTitle: inheritedStudio.inheritedFrom,
-        matchedQuery: 'local franchise inheritance'
+        matchedQuery: 'local franchise inheritance',
+        remainingNeeds: wikidataRepairNeeds({
+          ...kitsuCompletedItem,
+          ...inheritedPatch
+        }),
+        resolvedFields: [...new Set([...kitsuFields, 'studio'])]
+      };
+    }
+
+    if (kitsuFields.length) {
+      return {
+        patch: kitsuPatch,
+        confidence: 95,
+        matchedTitle: kitsuCompletedItem.officialTitle || kitsuCompletedItem.title,
+        matchedQuery: item.kitsuId ? `kitsu:${item.kitsuId}` : 'Kitsu title match',
+        remainingNeeds: needs,
+        unresolvedReason: best
+          ? `No confident Wikidata match (${best.confidence}%)`
+          : 'No Wikidata entity could be loaded',
+        resolvedFields: kitsuFields
       };
     }
 
@@ -500,6 +616,7 @@ export async function fetchWikidataRepair(item = {}, library = []) {
   });
 
   const patch = {
+    ...kitsuPatch,
     ...inheritedPatch,
     wikidataId: item.wikidataId || best.row.id,
     metadataRepairSource: 'wikidata-smart-resolver',
@@ -519,7 +636,7 @@ export async function fetchWikidataRepair(item = {}, library = []) {
     patch.genres = [...new Set(genreNames)];
   }
 
-  const year = claimTimeYear(entity);
+  const year = claimReleaseYear(entity);
   if (needs.year && year) patch.year = year;
 
   // P1113 = number of episodes.
@@ -533,7 +650,9 @@ export async function fetchWikidataRepair(item = {}, library = []) {
     patch,
     confidence: best.confidence,
     matchedTitle: best.row.label || entity.labels?.en?.value || item.title,
-    matchedQuery: best.matchedQueries[0] || ''
+    matchedQuery: best.matchedQueries[0] || '',
+    remainingNeeds: wikidataRepairNeeds({ ...kitsuCompletedItem, ...patch }),
+    resolvedFields: [...new Set(kitsuFields)]
   };
 }
 
@@ -582,6 +701,39 @@ export async function enrichMissingMetadata(item = {}, library = []) {
     if (patch.genres?.length) fields.push('genres');
     if (patch.year) fields.push('year');
     if (patch.episodeCount || patch.episodes) fields.push('episodes');
+
+    const remainingNeeds = result.remainingNeeds || wikidataRepairNeeds({
+      ...item,
+      ...patch
+    });
+    const remainingFields = Object.entries(remainingNeeds)
+      .filter(([, missing]) => missing)
+      .map(([field]) => field);
+    const resolvedFields = fields.length
+      ? fields
+      : result.resolvedFields || [];
+
+    if (!remainingFields.length && resolvedFields.length && !fields.length) {
+      return {
+        anime: {
+          ...item,
+          ...patch,
+          cover: item.cover, poster: item.poster, image: item.image,
+          posterImage: item.posterImage, coverImage: item.coverImage,
+          joeScore: item.joeScore, score: item.score, favorite: item.favorite,
+          rewatches: item.rewatches, notes: item.notes, status: item.status,
+          metadataNeedsReview: false, metadataReviewReason: '',
+          metadataRepairAttemptedAt: new Date().toISOString()
+        },
+        improved: true,
+        fields: resolvedFields,
+        unresolved: false,
+        source: patch.metadataRepairSource || 'kitsu-primary-repair',
+        matchedTitle: result.matchedTitle,
+        matchedQuery: result.matchedQuery,
+        confidence: result.confidence
+      };
+    }
 
     if (!fields.length) {
       const kitsuResult = await tryKitsuStudioFallback(item);
@@ -633,13 +785,18 @@ export async function enrichMissingMetadata(item = {}, library = []) {
         notes: item.notes,
         status: item.status,
 
-        metadataNeedsReview: false,
-        metadataReviewReason: '',
+        metadataNeedsReview: Boolean(remainingFields.length),
+        metadataReviewReason: remainingFields.length
+          ? `Still missing ${remainingFields.join(', ')}.`
+          : '',
         metadataRepairAttemptedAt: new Date().toISOString()
       },
       improved: true,
       fields,
-      unresolved: false,
+      unresolved: Boolean(remainingFields.length),
+      reason: remainingFields.length
+        ? result.unresolvedReason || `Still missing ${remainingFields.join(', ')}.`
+        : '',
       source: patch.metadataRepairSource || 'wikidata-smart-resolver',
       matchedTitle: result.matchedTitle,
       matchedQuery: result.matchedQuery,

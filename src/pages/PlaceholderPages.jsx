@@ -19,7 +19,11 @@ import {
 import { checkMetadataProviders } from '../services/providerHealth';
 import { createAnimeBrain } from '../engine/animeBrain'; import { fetchMetadata } from '../services/metadata'; import { maybeKnowledgeFirstRecommendation } from '../ai/knowledgeFirstRecommender'; import { parseJoeAIIntent } from '../ai/intentParser'; import { executeJoeAICommand } from '../ai/commandExecutor'; import { routeJoeAIRecommendation, routeJoeAITitleQuestion } from '../ai/joeAIRecommendationRouter';
 import { buildTonightsWatch } from '../ai/tonightsWatch'; import { importAnimeByTitle, mergeAnimeMetadata, searchAnimeCandidates } from '../services/animeImporter';
-import { fetchWikidataRepair, needsWikidataRepair } from '../services/wikidataRepair';
+import {
+  fetchWikidataRepair,
+  needsWikidataRepair,
+  wikidataRepairNeeds
+} from '../services/wikidataRepair';
 import { getAnimeStudios, getAnimeTasteSignals } from '../utils/metadataAdapters';
 import { coordinateJoeAIRecommendation } from '../ai/recommendationCoordinator';
 import { friendlyJoeAIError } from '../ai/joeAIErrorResponse';
@@ -820,6 +824,20 @@ export function Assistant({
       return;
     }
 
+    if (intent.kind === 'tastePattern' || intent.kind === 'genreDNA') {
+      const result = await executeJoeAICommand({
+        intent,
+        anime,
+        catalog,
+        updateAnime,
+        brain,
+        joeAIState: activeJoeAIState
+      });
+
+      appendBotResult(result, routedText);
+      return;
+    }
+
     if (intent.kind === 'recommendation') {
       const result = coordinateJoeAIRecommendation({
         text: routedText,
@@ -1566,6 +1584,98 @@ export function Assistant({
   }
 
   function renderMessage(message, index) {
+    if (message.type === 'genreDNAExplanation') {
+      const strength = Number(message.strength);
+      const hasStrength = Number.isFinite(strength);
+      const metrics = Array.isArray(message.metrics) ? message.metrics : [];
+      const contributors = Array.isArray(message.contributors) ? message.contributors : [];
+      const companions = Array.isArray(message.companions) ? message.companions : [];
+      const reasons = Array.isArray(message.reasons) ? message.reasons : [];
+
+      return (
+        <div key={index} className="chat bot joeaiGenreDNAExplanation">
+          <header className="joeaiGenreDNAHeader">
+            <p>🧬 Personal Anime DNA Analysis</p>
+            <h2>{message.title || `Why you like ${message.genre || 'this pattern'}`}</h2>
+            <span>{message.summary}</span>
+          </header>
+
+          {hasStrength && (
+            <section className="joeaiGenreDNAStrength">
+              <div>
+                <span>JoeAI signal strength</span>
+                <strong>{Math.max(0, Math.min(100, strength))}%</strong>
+              </div>
+              <i><b style={{ width: `${Math.max(0, Math.min(100, strength))}%` }} /></i>
+            </section>
+          )}
+
+          {metrics.length > 0 && (
+            <section className="joeaiGenreDNAMetrics">
+              {metrics.map((metric) => (
+                <div key={metric.label}>
+                  <strong>{metric.value}</strong>
+                  <small>{metric.label}</small>
+                </div>
+              ))}
+            </section>
+          )}
+
+          {contributors.length > 0 && (
+            <section className="joeaiGenreDNASection">
+              <h3>Your strongest evidence</h3>
+              <div className="joeaiGenreDNAContributors">
+                {contributors.map((item) => (
+                  <article key={item.id || item.title}>
+                    <strong>{item.title}</strong>
+                    <span>
+                      {[
+                        item.score ? `★ ${item.score}` : '',
+                        item.rewatches ? `${item.rewatches} rewatch${item.rewatches === 1 ? '' : 'es'}` : '',
+                        item.episodes ? `${item.episodes} episodes` : '',
+                        item.favorite ? 'Favorite' : ''
+                      ].filter(Boolean).join(' · ') || item.status || 'Library evidence'}
+                    </span>
+                  </article>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {companions.length > 0 && (
+            <section className="joeaiGenreDNASection">
+              <h3>What this pattern overlaps with</h3>
+              <div className="joeaiGenreDNACompanions">
+                {companions.map((item) => (
+                  <div key={item.name}>
+                    <span>{item.name}</span>
+                    <strong>{item.percent}%</strong>
+                    <i><b style={{ width: `${Math.max(0, Math.min(100, Number(item.percent) || 0))}%` }} /></i>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {reasons.length > 0 && (
+            <section className="joeaiGenreDNASection">
+              <h3>Why JoeAI believes it</h3>
+              <div className="joeaiGenreDNAReasons">
+                {reasons.map((reason) => <span key={reason}>✓ {reason}</span>)}
+              </div>
+            </section>
+          )}
+
+          {message.bottomLine && (
+            <footer className="joeaiGenreDNABottomLine">
+              <strong>JoeAI bottom line</strong>
+              <p>{message.bottomLine}</p>
+            </footer>
+          )}
+        </div>
+      );
+    }
+
     if (message.type === 'helpCard') {
       return renderHelpCard(message, index);
     }
@@ -3002,7 +3112,9 @@ export function SettingsPage({
       metadata: {
         repairsRemaining: metadataRepairCount,
         missingStudios: missingStudioCount,
-        missingGenres: missingGenreCount
+        missingGenres: missingGenreCount,
+        missingYears: missingYearCount,
+        missingEpisodeCounts: missingEpisodeCount
       }
     });
     setSystemStatus('Diagnostics exported. Personal notes and ratings were not included.');
@@ -3095,14 +3207,28 @@ export function SettingsPage({
         if (patch.year) repairedFields.push('year');
         if (patch.episodeCount || patch.episodes) repairedFields.push('episodes');
 
-        if (!repairedFields.length) {
+        const remainingNeeds = result.remainingNeeds || wikidataRepairNeeds({
+          ...item,
+          ...patch
+        });
+        const missingLabels = [
+          remainingNeeds.studio ? 'studio' : '',
+          remainingNeeds.genres ? 'genres' : '',
+          remainingNeeds.year ? 'year' : '',
+          remainingNeeds.episodes ? 'episode count' : ''
+        ].filter(Boolean);
+        const reportedFields = repairedFields.length
+          ? repairedFields
+          : result.resolvedFields || [];
+
+        if (!reportedFields.length && missingLabels.length) {
           unresolved.push({
             title: item.officialTitle || item.title,
-            reason: 'A confident title match was found, but Wikidata did not contain the missing fields.'
+            reason: result.unresolvedReason || `Still missing ${missingLabels.join(', ')}; neither Kitsu nor Wikidata provided ${missingLabels.length === 1 ? 'that field' : 'those fields'}.`
           });
         } else {
           repairedFields.forEach((field) => {
-            fieldTotals[field] += 1;
+            if (Object.hasOwn(fieldTotals, field)) fieldTotals[field] += 1;
           });
 
           await updateAnime({
@@ -3119,9 +3245,14 @@ export function SettingsPage({
             posterImage: item.posterImage,
             coverImage: item.coverImage,
 
+            metadataNeedsReview: Boolean(missingLabels.length),
+            metadataReviewReason: missingLabels.length
+              ? `Still missing ${missingLabels.join(', ')}.`
+              : '',
+
             syncStatus: {
               ...(item.syncStatus || {}),
-              dirty: false,
+              dirty: Boolean(missingLabels.length),
               wikidataManualRepair: true,
               lastMetadataSync: new Date().toISOString()
             }
@@ -3133,8 +3264,15 @@ export function SettingsPage({
             matchedQuery: result.matchedQuery,
             confidence: result.confidence,
             source: result.patch?.metadataRepairSource || 'wikidata-smart-resolver',
-            fields: repairedFields
+            fields: reportedFields
           });
+
+          if (missingLabels.length) {
+            unresolved.push({
+              title: item.officialTitle || item.title,
+              reason: result.unresolvedReason || `Improved, but still missing ${missingLabels.join(', ')}.`
+            });
+          }
         }
       } catch (error) {
         unresolved.push({
@@ -3305,6 +3443,12 @@ export function SettingsPage({
   ).length;
   const missingGenreCount = animeRows.filter(
     (item) => getAnimeTasteSignals(item).length === 0
+  ).length;
+  const missingYearCount = animeRows.filter(
+    (item) => wikidataRepairNeeds(item).year
+  ).length;
+  const missingEpisodeCount = animeRows.filter(
+    (item) => wikidataRepairNeeds(item).episodes
   ).length;
   const metadataRepairCount = animeRows.filter(needsWikidataRepair).length;
   const metadataHealthyCount = Math.max(0, animeCount - metadataRepairCount);
@@ -3701,6 +3845,8 @@ export function SettingsPage({
             <div className="settingsMetadataHealthFacts">
               <span><strong>{missingStudioCount}</strong> missing studio</span>
               <span><strong>{missingGenreCount}</strong> missing genre</span>
+              <span><strong>{missingYearCount}</strong> missing year</span>
+              <span><strong>{missingEpisodeCount}</strong> missing episode count</span>
               <span><strong>{metadataHealthyCount}</strong> healthy titles</span>
             </div>
           </section>
