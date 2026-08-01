@@ -169,6 +169,7 @@ function extractBroadRecommendationIntent(question = '') {
 
   const studioMatch = String(question).match(/\bfrom\s+([A-Za-z0-9 .&'-]+)\s*$/i);
   const studio = studioMatch?.[1]?.trim();
+  const wantsMovie = /\b(movie|film)\b/.test(q);
 
   if (/hidden gems?|underrated|under rated/.test(q)) {
     return {
@@ -233,10 +234,23 @@ function extractBroadRecommendationIntent(question = '') {
   const profile = moodProfiles.find((entry) => entry.test.test(q));
   if (!profile && !studio) return null;
 
-  return profile ? { ...profile, studio } : {
+  if (profile) {
+    const compoundMovieRequest = wantsMovie && profile.id !== 'movie';
+    return {
+      ...profile,
+      studio,
+      format: wantsMovie ? 'movie' : null,
+      label: compoundMovieRequest
+        ? `${profile.id === 'emotional' ? 'Sad / emotional' : profile.label.replace(/^Something\s+/i, '')} anime movies`
+        : profile.label
+    };
+  }
+
+  return {
     id: 'studio',
     label: `Shows from ${studio}`,
     studio,
+    format: wantsMovie ? 'movie' : null,
     keywords: []
   };
 }
@@ -251,7 +265,7 @@ function scoreMoodItem(item = {}, intent = {}, owned = false) {
     if (eps > 0 && eps <= 13) score += 42;
     else if (eps > 0 && eps <= 24) score += 20;
   }
-  if (intent.id === 'movie') {
+  if (intent.id === 'movie' || intent.format === 'movie') {
     if (/\b(movie|film)\b/i.test(String(item.type || ''))) score += 50;
     if (Number(item.episodeCount || item.episodes || 0) === 1) score += 25;
   }
@@ -294,6 +308,11 @@ function formatMoodRecommendationCards(intent, anime = [], catalog = []) {
     });
 
   const scored = pool
+    .filter((item) => intent.format !== 'movie' || /\b(movie|film)\b/i.test(String(item.type || '')))
+    .filter((item) => {
+      if (intent.id === 'movie' || intent.id === 'studio' || intent.mode === 'hiddenGems') return true;
+      return (intent.keywords || []).some((keyword) => textBlob(item).includes(norm(keyword)));
+    })
     .map((item) => {
       const owned = ownedKeys.has(itemKey(item));
       const rawScore = scoreMoodItem(item, intent, owned);
@@ -311,6 +330,7 @@ function formatMoodRecommendationCards(intent, anime = [], catalog = []) {
         blurb: moodBlurb(item, intent),
         deepDive: [
           `Mood request: ${intent.label}`,
+          intent.format === 'movie' ? 'Format filter: anime movie' : '',
           intent.studio ? `Studio filter: ${intent.studio}` : '',
           `JoeAI matched this using metadata, genres, themes, studio, episode count, and library ownership.`,
           `This is a broad recommendation mode, not a title-similarity Genome match yet.`

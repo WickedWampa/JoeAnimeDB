@@ -59,7 +59,7 @@ const PAGE_TIPS = {
     icon: '⚙',
     eyebrow: 'Settings tip',
     title: 'Import, back up, and maintain your library.',
-    body: 'Import Library List accepts JoeAnimeDB CSV, plain-text, and ranked-list exports. You can also create full backups, check providers, change themes, and replay this tutorial.'
+    body: 'Import Library List accepts MyAnimeList XML/XML.GZ, AniList JSON/CSV, and JoeAnimeDB CSV, plain-text, or ranked-list exports. Imports run locally and carry over supported personal list data.'
   },
   about: {
     icon: '?',
@@ -530,7 +530,7 @@ export function FirstTimeOnboarding({
                     <div>
                       <strong>Import a saved file</strong>
                       <span className="firstLaunchPath">Settings <i>›</i> Library <i>›</i> Import Library List</span>
-                      <p>Choose a JoeAnimeDB CSV, plain-text library list, or ranked TXT list. Existing titles are skipped, while available scores and watch statuses are carried into the new library.</p>
+                      <p>Choose a MyAnimeList XML/XML.GZ export, an AniList JSON/CSV export, or a JoeAnimeDB CSV, TXT, or ranked list. Scores, watch status, episode progress, rewatches, dates, and notes are carried over when present; existing titles receive the personal data without replacing their metadata.</p>
                     </div>
                   </article>
                 </div>

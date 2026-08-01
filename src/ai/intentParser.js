@@ -126,6 +126,41 @@ function cleanKnownTitleQueryForGenome(value = '') {
     .trim();
 }
 
+function isExactGenomeTitleQuery(value = '') {
+  const cleaned = cleanKnownTitleQueryForGenome(value);
+  const normalized = String(cleaned).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  if (!normalized) return false;
+
+  const card = findGenomeCardByTitle(cleaned);
+  if (!card) return false;
+
+  return [card.id, card.title, ...(card.titles || []), ...(card.aliases || [])]
+    .filter(Boolean)
+    .some((name) => String(name).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() === normalized);
+}
+
+function isGenericRecommendationDescription(value = '') {
+  const normalized = String(value).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  if (!normalized) return false;
+
+  if (/^(?:something|anime|shows?|movies?|films?|hidden gems?)\s+from\s+.+$/.test(normalized)) {
+    return true;
+  }
+
+  const genericWords = new Set([
+    'a', 'an', 'some', 'something', 'any', 'really', 'very', 'more',
+    'anime', 'show', 'shows', 'movie', 'movies', 'film', 'films',
+    'dark', 'darker', 'gritty', 'violent', 'brutal', 'gory', 'scary', 'creepy',
+    'funny', 'comedy', 'romance', 'romantic', 'isekai', 'action', 'adventure',
+    'fantasy', 'horror', 'sports', 'mecha', 'sci', 'fi', 'science', 'fiction',
+    'emotional', 'sad', 'tearjerker', 'heartbreaking', 'cozy', 'comforting',
+    'wholesome', 'short', 'underrated', 'hidden', 'gem', 'gems', 'classic',
+    'masterpiece'
+  ]);
+  const words = normalized.split(' ').filter(Boolean);
+  return words.length <= 7 && words.every((word) => genericWords.has(word));
+}
+
 function isKnownGenomeTitleQuery(value = '') {
   const raw = String(value || '').trim();
   if (!raw) return false;
@@ -227,6 +262,19 @@ export function parseJoeAIIntent(input = '') {
   const hasSimilarityWording =
     /\b(similar to|something like|anime like|show like|shows like|show me something like)\b/i.test(raw);
 
+  // Explicit requests that describe a kind of anime must reach the
+  // recommendation router before fuzzy title matching. Otherwise phrases
+  // such as "recommend a sad movie" can be mistaken for a loosely matching
+  // Genome title (the same class of bug that previously surfaced Space Dandy).
+  const explicitRecommendationPrompt =
+    /\b(recommend|suggest|find|give me|show me|what should i watch|watch next|something to watch|hidden gem|surprise me|next anime)\b/i.test(raw);
+  const recommendationDescription =
+    isGenericRecommendationDescription(cleanKnownTitleQueryForGenome(raw));
+
+  if (explicitRecommendationPrompt && recommendationDescription && !isExactGenomeTitleQuery(raw)) {
+    return { kind: 'recommendation', text: raw };
+  }
+
   // An exact known title wins before broad recommendation wording. This keeps
   // "recommend One Piece" on its direct Genome answer while
   // "recommend something like One Piece" still produces explained picks.
@@ -239,9 +287,6 @@ export function parseJoeAIIntent(input = '') {
   }
 
   // Explicit recommendation requests own broad and similarity searches.
-  const explicitRecommendationPrompt =
-    /\b(recommend|suggest|find|give me|show me|what should i watch|watch next|something to watch|hidden gem|surprise me|next anime)\b/i.test(raw);
-
   if (explicitRecommendationPrompt) {
     return { kind: 'recommendation', text: raw };
   }

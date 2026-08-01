@@ -28,6 +28,12 @@ import { getAnimeStudios, getAnimeTasteSignals } from '../utils/metadataAdapters
 import { coordinateJoeAIRecommendation } from '../ai/recommendationCoordinator';
 import { friendlyJoeAIError } from '../ai/joeAIErrorResponse';
 import {
+  importTitleKey,
+  importedPersonalData,
+  parseLibraryImport as parseExternalLibraryImport,
+  readLibraryImportFile
+} from '../services/libraryListImporter';
+import {
   inferFeedbackTraits,
   recommendationKey,
   resolveJoeAIFollowUp,
@@ -2468,7 +2474,7 @@ export function SettingsPage({
     setLibraryImportSummary(summary);
 
     try {
-      if (summary?.failed?.length || summary?.added?.length || summary?.skipped?.length) {
+      if (summary?.failed?.length || summary?.added?.length || summary?.updated?.length || summary?.skipped?.length) {
         localStorage.setItem(
           'joeanime-library-import-review-v1',
           JSON.stringify(summary)
@@ -2492,62 +2498,6 @@ export function SettingsPage({
     }
   }
 
-  function parseCsvLine(line = '') {
-    const values = [];
-    let current = '';
-    let quoted = false;
-
-    for (let index = 0; index < line.length; index += 1) {
-      const character = line[index];
-
-      if (character === '"') {
-        if (quoted && line[index + 1] === '"') {
-          current += '"';
-          index += 1;
-        } else {
-          quoted = !quoted;
-        }
-      } else if (character === ',' && !quoted) {
-        values.push(current.trim());
-        current = '';
-      } else {
-        current += character;
-      }
-    }
-
-    values.push(current.trim());
-    return values;
-  }
-
-  const LIBRARY_IMPORT_TITLE_ALIASES = new Map([
-    ['re zero starting life in another world', 'Re:ZERO -Starting Life in Another World-'],
-    ['tsukimichi moonlit fantasy', 'TSUKIMICHI -Moonlit Fantasy-'],
-    ['solo leveling season 2 arise from the shadow', 'Solo Leveling Season 2: Arise from the Shadow'],
-    ['that time i got reincarnated as a slime the movie scarlet bond', 'That Time I Got Reincarnated as a Slime: The Movie - Scarlet Bond'],
-    ['demon slayer kimetsu no yaiba', 'Demon Slayer: Kimetsu no Yaiba']
-  ]);
-
-  function importTitleKey(value = '') {
-    return String(value || '')
-      .normalize('NFKD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/&/g, ' and ')
-      .replace(/[’‘]/g, "'")
-      .replace(/[^a-z0-9]+/gi, ' ')
-      .trim()
-      .toLowerCase()
-      .replace(/\s+/g, ' ');
-  }
-
-  function normalizeLibraryImportTitle(value = '') {
-    const clean = String(value || '')
-      .replace(/[‐‑‒–—―]/g, '-')
-      .replace(/\s+/g, ' ')
-      .trim();
-
-    return LIBRARY_IMPORT_TITLE_ALIASES.get(importTitleKey(clean)) || clean;
-  }
-
   function importedTitleMatchesLibraryItem(requestedTitle = '', item = {}) {
     const wanted = importTitleKey(requestedTitle);
     if (!wanted) return false;
@@ -2565,111 +2515,20 @@ export function SettingsPage({
     return titles.includes(wanted);
   }
 
-  function normalizeImportedStatus(value = '') {
-    const normalized = String(value || '').trim().toLowerCase();
-
-    if (normalized.includes('complete') || normalized.includes('watched') || normalized.includes('finished')) {
-      return 'Completed';
-    }
-    if (normalized.includes('watching') || normalized.includes('current')) return 'Watching';
-    if (normalized.includes('hold')) return 'On Hold';
-    if (normalized.includes('drop')) return 'Dropped';
-    if (normalized.includes('plan')) return 'Plan to Watch';
-
-    return 'Completed';
-  }
-
-  function cleanImportedTitle(value = '') {
-    return String(value || '')
-      .replace(/^\uFEFF/, '')
-      .replace(/^\s*\d+\s*[.)-]\s*/, '')
-      .replace(/^\s*[-*•]\s*/, '')
-      .replace(/\s*\|\s*Score:.*$/i, '')
-      .trim();
-  }
-
-  function parseLibraryImport(text = '', filename = '') {
-    const raw = String(text || '').replace(/\r/g, '');
-    const isCsv =
-      String(filename || '').toLowerCase().endsWith('.csv') ||
-      /^\s*"?title"?\s*,/i.test(raw);
-
-    const rows = [];
-
-    if (isCsv) {
-      const lines = raw.split('\n').filter((line) => line.trim());
-      if (!lines.length) return rows;
-
-      const headers = parseCsvLine(lines[0]).map((header) =>
-        String(header || '').trim().toLowerCase()
-      );
-      const titleIndex = Math.max(0, headers.findIndex((header) => header === 'title'));
-      const statusIndex = headers.findIndex((header) => header === 'status');
-      const scoreIndex = headers.findIndex((header) => header === 'score');
-
-      lines.slice(1).forEach((line) => {
-        const columns = parseCsvLine(line);
-        const title = cleanImportedTitle(columns[titleIndex]);
-
-        if (!title) return;
-
-        rows.push({
-          title: normalizeLibraryImportTitle(title),
-          requestedTitle: title,
-          status: normalizeImportedStatus(
-            statusIndex >= 0 ? columns[statusIndex] : 'Completed'
-          ),
-          score:
-            scoreIndex >= 0 && Number.isFinite(Number(columns[scoreIndex]))
-              ? Number(columns[scoreIndex])
-              : undefined
-        });
-      });
-    } else {
-      raw.split('\n').forEach((line) => {
-        const trimmed = line.trim();
-
-        if (
-          !trimmed ||
-          /^JoeAnimeDB /i.test(trimmed) ||
-          /^Exported:/i.test(trimmed) ||
-          /^Total titles:/i.test(trimmed)
-        ) {
-          return;
-        }
-
-        const statusMatch = trimmed.match(/\|\s*Status:\s*([^|]+)\s*$/i);
-        const scoreMatch = trimmed.match(/\|\s*Score:\s*([^|]+)(?:\||$)/i);
-        const title = cleanImportedTitle(trimmed);
-
-        if (!title) return;
-
-        const parsedScore = Number(scoreMatch?.[1]);
-
-        rows.push({
-          title: normalizeLibraryImportTitle(title),
-          requestedTitle: title,
-          status: normalizeImportedStatus(statusMatch?.[1] || 'Completed'),
-          score: Number.isFinite(parsedScore) ? parsedScore : undefined
-        });
-      });
-    }
-
-    const seen = new Set();
-
-    return rows.filter((row) => {
-      const key = row.title.toLowerCase().replace(/[^a-z0-9]+/g, '');
-      if (!key || seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
+  function findImportedLibraryItem(row = {}, library = []) {
+    return library.find((item) =>
+      (row.malId && String(item.malId || item.mal_id || '') === String(row.malId)) ||
+      (row.anilistId && String(item.anilistId || '') === String(row.anilistId)) ||
+      importedTitleMatchesLibraryItem(row.requestedTitle || row.title, item)
+    );
   }
 
   async function importLibraryRows(rows = []) {
     if (!rows.length || !updateAnime) return;
 
+    const sourceName = rows[0]?.sourceName || 'the selected file';
     const confirmed = window.confirm(
-      `Import ${rows.length} title${rows.length === 1 ? '' : 's'} into JoeAnimeDB? Existing titles will be skipped.`
+      `Import ${rows.length} title${rows.length === 1 ? '' : 's'} from ${sourceName}? Existing titles will keep their metadata while imported personal data is merged.`
     );
 
     if (!confirmed) return;
@@ -2679,6 +2538,7 @@ export function SettingsPage({
 
     let liveLibrary = [...(data?.anime || [])];
     const added = [];
+    const updated = [];
     const addedIds = new Set();
     const skipped = [];
     const failed = [];
@@ -2696,6 +2556,24 @@ export function SettingsPage({
       );
 
       try {
+        const existingBeforeLookup = findImportedLibraryItem(row, liveLibrary);
+
+        if (existingBeforeLookup) {
+          const merged = {
+            ...existingBeforeLookup,
+            ...importedPersonalData(row),
+            id: existingBeforeLookup.id,
+            title: existingBeforeLookup.title,
+            officialTitle: existingBeforeLookup.officialTitle || existingBeforeLookup.title
+          };
+          const saved = await updateAnime(merged);
+          liveLibrary = saved?.anime || liveLibrary.map((item) =>
+            String(item.id) === String(merged.id) ? merged : item
+          );
+          updated.push(merged.officialTitle || merged.title);
+          continue;
+        }
+
         const result = await importAnimeByTitle({
           title: row.requestedTitle || row.title,
           normalizedTitle: row.title,
@@ -2710,11 +2588,18 @@ export function SettingsPage({
           );
 
           if (exactDuplicate) {
-            skipped.push({
-              requested: row.requestedTitle || row.title,
-              matched: result.duplicate.officialTitle || result.duplicate.title,
-              exact: true
-            });
+            const merged = {
+              ...result.duplicate,
+              ...importedPersonalData(row),
+              id: result.duplicate.id,
+              title: result.duplicate.title,
+              officialTitle: result.duplicate.officialTitle || result.duplicate.title
+            };
+            const saved = await updateAnime(merged);
+            liveLibrary = saved?.anime || liveLibrary.map((item) =>
+              String(item.id) === String(merged.id) ? merged : item
+            );
+            updated.push(merged.officialTitle || merged.title);
             continue;
           }
 
@@ -2724,6 +2609,7 @@ export function SettingsPage({
           ].filter(Boolean);
 
           failed.push({
+            ...row,
             title: row.requestedTitle || row.title,
             normalizedTitle: row.title,
             status: row.status || 'Completed',
@@ -2738,6 +2624,7 @@ export function SettingsPage({
         const candidate = result.candidate;
         if (!candidate) {
           failed.push({
+            ...row,
             title: row.requestedTitle || row.title,
             normalizedTitle: row.title,
             status: row.status || 'Completed',
@@ -2750,19 +2637,18 @@ export function SettingsPage({
 
         const next = {
           ...candidate,
+          ...importedPersonalData(row),
           id: candidate.id,
           title: candidate.title || row.title,
-          status: row.status || candidate.status || 'Completed',
-          joeScore:
-            row.score !== undefined
-              ? row.score
-              : candidate.joeScore,
+          officialTitle: candidate.officialTitle || candidate.title || row.title,
+          addedFrom: row.sourceName || 'Library import',
           favorite: Boolean(candidate.favorite),
-          rewatches: Number(candidate.rewatches || 0),
+          rewatches:
+            row.rewatches !== undefined
+              ? row.rewatches
+              : Number(candidate.rewatches || 0),
           finalRank: liveLibrary.length + 1,
-          notes:
-            candidate.notes ||
-            'Imported from a shared JoeAnimeDB library list.'
+          notes: row.notes !== undefined ? row.notes : (candidate.notes || '')
         };
 
         const saved = await updateAnime(next);
@@ -2781,6 +2667,7 @@ export function SettingsPage({
         }
 
         failed.push({
+          ...row,
           title: row.title,
           status: row.status || 'Completed',
           score: row.score,
@@ -2888,13 +2775,14 @@ export function SettingsPage({
     setLibraryImportProgress(null);
     saveLibraryImportSummary({
       added,
+      updated,
       skipped,
       failed,
       autoRepaired,
       autoUnresolved
     });
     setLibraryImportStatus(
-      `Import finished — ${added.length} added, ${autoRepaired.length} automatically completed, ${skipped.length} already present, ${failed.length} failed.`
+      `Import finished — ${added.length} added, ${updated.length} updated, ${autoRepaired.length} metadata repairs, ${skipped.length} skipped, ${failed.length} failed.`
     );
   }
 
@@ -2927,18 +2815,18 @@ export function SettingsPage({
 
       const next = {
         ...candidate,
+        ...importedPersonalData(failedItem),
         id: candidate.id || candidate.kitsuId || `import-${Date.now()}`,
         title: candidate.title || candidate.officialTitle || failedItem.title,
         officialTitle: candidate.officialTitle || candidate.title || failedItem.title,
-        status: failedItem.status || 'Completed',
-        joeScore:
-          failedItem.score !== undefined
-            ? failedItem.score
-            : candidate.joeScore,
+        addedFrom: failedItem.sourceName || 'Library import',
         favorite: Boolean(candidate.favorite),
-        rewatches: Number(candidate.rewatches || 0),
+        rewatches:
+          failedItem.rewatches !== undefined
+            ? failedItem.rewatches
+            : Number(candidate.rewatches || 0),
         finalRank: currentLibrary.length + 1,
-        notes: 'Imported after manual review from a shared JoeAnimeDB list.'
+        notes: failedItem.notes !== undefined ? failedItem.notes : (candidate.notes || '')
       };
 
       await updateAnime(next);
@@ -2980,12 +2868,12 @@ export function SettingsPage({
 
     try {
       setLibraryImportStatus(`Reading ${file.name}...`);
-      const text = await file.text();
-      const rows = parseLibraryImport(text, file.name);
+      const text = await readLibraryImportFile(file);
+      const rows = parseExternalLibraryImport(text, file.name.replace(/\.gz$/i, ''));
 
       if (!rows.length) {
         setLibraryImportStatus(
-          'No anime titles were found. Use a JoeAnimeDB TXT or CSV export.'
+          'No anime titles were found. Choose a MAL XML/XML.GZ, AniList JSON/CSV, or JoeAnimeDB TXT/CSV file.'
         );
         return;
       }
@@ -3800,7 +3688,7 @@ export function SettingsPage({
               ref={libraryImportInputRef}
               className="settingsImportInput"
               type="file"
-              accept=".txt,.csv,text/plain,text/csv"
+              accept=".txt,.csv,.json,.xml,.gz,text/plain,text/csv,application/json,application/xml,text/xml,application/gzip"
               onChange={handleLibraryImportFile}
             />
 
@@ -3816,7 +3704,7 @@ export function SettingsPage({
                   : 'Import Library List'}
               </strong>
               <small>
-                {libraryImportProgress?.title || 'Load a JoeAnimeDB TXT or CSV export'}
+                {libraryImportProgress?.title || 'MAL XML · AniList JSON/CSV · JoeAnimeDB TXT/CSV'}
               </small>
             </button>
           </div>
@@ -3990,19 +3878,39 @@ export function SettingsPage({
       {libraryImportSummary ? (
         <section className="settingsImportSummary">
           <div>
-            <strong>{libraryImportSummary.added.length}</strong>
+            <strong>{libraryImportSummary.added?.length || 0}</strong>
             <span>Added</span>
           </div>
           <div>
-            <strong>{libraryImportSummary.skipped.length}</strong>
+            <strong>{libraryImportSummary.updated?.length || 0}</strong>
+            <span>Personal Data Updated</span>
+          </div>
+          <div>
+            <strong>{libraryImportSummary.skipped?.length || 0}</strong>
             <span>Already Present</span>
           </div>
           <div>
-            <strong>{libraryImportSummary.failed.length}</strong>
+            <strong>{libraryImportSummary.failed?.length || 0}</strong>
             <span>Failed</span>
           </div>
 
-          {libraryImportSummary.skipped.length ? (
+          {libraryImportSummary.updated?.length ? (
+            <details className="settingsImportSkipped">
+              <summary>
+                Show {libraryImportSummary.updated.length} updated title{libraryImportSummary.updated.length === 1 ? '' : 's'}
+              </summary>
+              <div>
+                {libraryImportSummary.updated.map((title, index) => (
+                  <p key={`${title}-${index}`}>
+                    <strong>{title}</strong>
+                    <span>personal list data merged</span>
+                  </p>
+                ))}
+              </div>
+            </details>
+          ) : null}
+
+          {libraryImportSummary.skipped?.length ? (
             <details className="settingsImportSkipped">
               <summary>
                 Show {libraryImportSummary.skipped.length} already-present title{libraryImportSummary.skipped.length === 1 ? '' : 's'}
@@ -4019,7 +3927,7 @@ export function SettingsPage({
             </details>
           ) : null}
 
-          {libraryImportSummary.failed.length ? (
+          {libraryImportSummary.failed?.length ? (
             <section id="library-import-needs-review" className="settingsImportReview">
               <header>
                 <div>

@@ -1,56 +1,80 @@
-# JoeAnimeDB 5.0 Beta 9
+\# JoeAnimeDB 5.0 Beta 10
 
-Beta 9 makes JoeAI answers more dependable, gives Discover shelves genuinely different identities, and completes a substantial metadata-repair cleanup.
 
-## Highlights
 
-- Fixed personal taste questions such as “Why do I like long adventures?” so JoeAI answers the taste pattern directly instead of analyzing an unrelated title.
-- Improved JoeAI routing for genre, theme, mood, and viewing-pattern questions.
-- Prevented Discover from repeating the same recommendations across multiple shelves.
-- Changed Highest Rated to rank unseen titles by their actual community score instead of recommendation order.
-- Preserved JoeAI Picks as a separate personalized shelf.
-- Centered the JoeAI dashboard’s episodes, rewatches, and comfort-anchor statistics.
+\## MAL and AniList Import
 
-## Metadata Repair
 
-- Added Kitsu-first repair for missing studio, genre, year, and episode data.
-- Added direct Kitsu ID lookups and stronger alternate-title matching.
-- Improved movie and franchise matching, including shortened titles such as Reincarnated as a Slime Movie.
-- Added another Wikidata release-date fallback for titles whose year is stored as a start date.
-- Stopped treating an unknown final episode total as damaged metadata for currently airing or date-TBA series.
-- Expanded Metadata Health to report missing studio, genre, year, and episode-count fields clearly.
-- Improved repair reports so repaired and unresolved titles show the provider result and fields affected.
 
-## Install on Windows
+JoeAnimeDB can now import existing anime libraries from:
 
-Download and run:
 
-`JoeAnimeDB-Setup-5.0.0-beta.9.exe`
 
-Windows SmartScreen may display a warning because this public beta is not yet code signed.
+\- MyAnimeList XML and compressed XML.GZ exports
 
-## Install on Linux
+\- AniList JSON and CSV exports
 
-Run:
+\- Existing JoeAnimeDB CSV, TXT, and ranked-list files
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/WickedWampa/JoeAnimeDB/main/install-linux.sh | bash
-```
 
-Then open JoeAnimeDB from the application menu or run:
 
-```bash
-joeanime-db
-```
+Imported data can include:
 
-The Linux beta currently supports x86_64 systems. Some distributions require a FUSE 2 package to run AppImages.
 
-## Updating
 
-Supported packaged Windows and Linux builds check GitHub for newer JoeAnimeDB releases. Updates replace application files only; your library, ratings, notes, Anime DNA, Genome data, and JoeAI data remain in the operating system’s per-user data folder.
+\- Watch status
 
-## Beta Notes
+\- Personal score
 
-- JoeAnimeDB remains a public beta.
-- Export a full backup before upgrading.
-- Report crashes, interface bugs, recommendation issues, metadata mismatches, installation problems, and Linux compatibility results through GitHub Issues.
+\- Episode progress
+
+\- Rewatch count
+
+\- Start and completion dates
+
+\- Notes
+
+\- Tags
+
+\- Priority
+
+
+
+Imports are processed locally. JoeAnimeDB does not require your MAL or AniList username, password, token, or account access.
+
+
+
+\## Improvements
+
+
+
+\- Updated first-time onboarding with MAL and AniList instructions
+
+\- Improved import-format detection
+
+\- Better preservation of personal list data
+
+\- Clearer import summaries and unmatched-title reporting
+
+\- Existing library entries are matched instead of blindly duplicated
+
+
+
+\## Testing
+
+
+
+MyAnimeList XML importing has been successfully tested with a real exported library.
+
+
+
+\## Notes
+
+
+
+JoeAnimeDB imports exported files; it does not currently provide live MAL or AniList synchronization.
+
+
+
+This is a public beta. Please report import mismatches, missing titles, incorrect scores, or lost personal data.
+
