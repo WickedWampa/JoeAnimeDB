@@ -1,0 +1,439 @@
+.mobileBottomNav,
+.mobileMoreBackdrop {
+  display: none;
+}
+
+.platformBootError {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  color: #edf7ff;
+  background: #050910;
+}
+
+.platformBootError section {
+  width: min(100%, 440px);
+  padding: 24px;
+  border: 1px solid rgba(55, 234, 255, .28);
+  border-radius: 20px;
+  background: rgba(13, 22, 34, .92);
+}
+
+@media (max-width: 760px) {
+  html {
+    overscroll-behavior-y: none;
+  }
+
+  body {
+    min-width: 320px;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  button,
+  a,
+  input,
+  select,
+  textarea {
+    touch-action: manipulation;
+  }
+
+  .shell {
+    display: block;
+    min-height: 100dvh;
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .sidebar {
+    display: none;
+  }
+
+  .content {
+    width: 100%;
+    padding: 0 12px calc(92px + env(safe-area-inset-bottom));
+  }
+
+  .topbar {
+    top: env(safe-area-inset-top);
+    height: auto;
+    min-height: 64px;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    margin: 0 -12px 14px;
+    padding: 9px 12px;
+  }
+
+  .topbar .search {
+    max-width: none;
+    min-height: 46px;
+  }
+
+  .viewModes {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .viewModes button {
+    min-height: 44px;
+  }
+
+  .viewModes button:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .mobileBottomNav {
+    position: fixed;
+    z-index: 90;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    min-height: 66px;
+    padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--line);
+    background: color-mix(in srgb, var(--bg) 91%, transparent);
+    box-shadow: 0 -14px 36px rgba(0, 0, 0, .36);
+    backdrop-filter: blur(20px) saturate(1.3);
+  }
+
+  .mobileBottomNav button,
+  .mobileMoreGrid button {
+    position: relative;
+    min-width: 0;
+    min-height: 52px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 4px;
+    border: 0;
+    border-radius: 13px;
+    color: var(--muted);
+    background: transparent;
+    font-size: 10px;
+    font-weight: 850;
+  }
+
+  .mobileBottomNav button.active,
+  .mobileMoreGrid button.active {
+    color: var(--cyan);
+    background: rgba(55, 234, 255, .11);
+  }
+
+  .mobileNavIcon {
+    position: relative;
+    display: grid;
+    place-items: center;
+  }
+
+  .mobileNavIcon b {
+    position: absolute;
+    top: -7px;
+    right: -12px;
+    min-width: 17px;
+    height: 17px;
+    display: grid;
+    place-items: center;
+    padding: 0 4px;
+    border-radius: 999px;
+    color: #080b10;
+    background: var(--gold);
+    font-size: 9px;
+  }
+
+  .mobileMoreBackdrop {
+    position: fixed;
+    z-index: 89;
+    inset: 0;
+    display: flex;
+    align-items: flex-end;
+    padding-bottom: calc(67px + env(safe-area-inset-bottom));
+    background: rgba(0, 0, 0, .62);
+    backdrop-filter: blur(4px);
+  }
+
+  .mobileMoreSheet {
+    width: 100%;
+    max-height: min(68dvh, 560px);
+    overflow-y: auto;
+    padding: 16px 14px 20px;
+    border: 1px solid var(--line);
+    border-width: 1px 0 0;
+    border-radius: 24px 24px 0 0;
+    background: color-mix(in srgb, var(--bg) 94%, #111827);
+    box-shadow: 0 -22px 60px rgba(0, 0, 0, .5);
+  }
+
+  .mobileMoreSheet header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+
+  .mobileMoreSheet header strong,
+  .mobileMoreSheet header small {
+    display: block;
+  }
+
+  .mobileMoreSheet header strong {
+    font-size: 22px;
+  }
+
+  .mobileMoreSheet header small {
+    color: var(--muted);
+  }
+
+  .mobileMoreSheet header button {
+    width: 44px;
+    height: 44px;
+    display: grid;
+    place-items: center;
+    border: 1px solid rgba(255, 255, 255, .12);
+    border-radius: 14px;
+    color: var(--text);
+    background: rgba(255, 255, 255, .06);
+  }
+
+  .mobileMoreGrid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 9px;
+  }
+
+  .mobileMoreGrid button {
+    min-height: 86px;
+    border: 1px solid rgba(255, 255, 255, .08);
+    background: rgba(255, 255, 255, .035);
+    font-size: 12px;
+  }
+
+  .posterGrid,
+  .posterGrid.small,
+  .libraryPosterGrid,
+  .upcomingGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 11px;
+  }
+
+  .animeCard,
+  .posterGrid.small .animeCard {
+    height: auto;
+    min-height: 0;
+    aspect-ratio: 2 / 3;
+    border-radius: 16px;
+  }
+
+  .animeCard:hover,
+  .spotlightCard:hover,
+  .recommendationCard:hover {
+    transform: none;
+  }
+
+  .animeCard .cardInfo {
+    padding: 12px;
+  }
+
+  .animeCard .cardInfo h3 {
+    font-size: 16px;
+    line-height: 1.12;
+  }
+
+  .animeCard .cardInfo p,
+  .animeCard .tags {
+    display: none;
+  }
+
+  .favoriteButton {
+    right: 9px;
+    top: 46px;
+    width: 40px;
+    height: 40px;
+  }
+
+  .score,
+  .ribbon {
+    top: 9px;
+  }
+
+  .score { right: 9px; }
+  .ribbon { left: 9px; }
+
+  .tablePanel {
+    overflow-x: auto;
+  }
+
+  .tablePanel table {
+    min-width: 700px;
+  }
+
+  .modalBackdrop {
+    display: block;
+    padding: 0;
+    background: var(--bg);
+  }
+
+  .detailModal,
+  .upgradedModal {
+    width: 100%;
+    height: 100dvh;
+    max-height: none;
+    display: block;
+    overflow-y: auto;
+    padding: calc(58px + env(safe-area-inset-top)) 14px calc(34px + env(safe-area-inset-bottom));
+    border: 0;
+    border-radius: 0;
+    background: linear-gradient(180deg, color-mix(in srgb, var(--bg) 90%, #07101a), var(--bg));
+  }
+
+  .detailModal .close {
+    position: fixed;
+    z-index: 4;
+    top: calc(10px + env(safe-area-inset-top));
+    right: 12px;
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
+    background: rgba(3, 8, 14, .84);
+    backdrop-filter: blur(12px);
+  }
+
+  .detailArtRail {
+    max-width: none;
+  }
+
+  .detailPoster {
+    width: min(72vw, 310px);
+    height: auto;
+    aspect-ratio: 2 / 3;
+    margin: 0 auto;
+  }
+
+  .detailBody {
+    margin-top: 20px;
+  }
+
+  .detailModal h1 {
+    padding-right: 0;
+    font-size: clamp(34px, 10vw, 48px);
+  }
+
+  .detailStats,
+  .glowPanel,
+  .shrineStats,
+  .stats,
+  .homeV3HeroStats,
+  .analyticsLabStats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .scoreEditor input[type='range'] {
+    min-height: 44px;
+  }
+
+  .stepper button,
+  .statusControl select,
+  .heroFavorite,
+  .removeAnimeButton,
+  .trailer {
+    min-height: 48px;
+  }
+
+  .addAnimeModal {
+    width: 100%;
+    height: 100dvh;
+    max-height: none;
+    border: 0;
+    border-radius: 0;
+    padding: calc(58px + env(safe-area-inset-top)) 14px calc(24px + env(safe-area-inset-bottom));
+  }
+
+  .homeV3Hero,
+  .libraryArchiveHeroLive,
+  .favoritesHero,
+  .discoverHero,
+  .followingHero,
+  .upcomingHero,
+  .analyticsLabHero,
+  .settingsPageHeader,
+  .joeAIHero {
+    min-height: 300px;
+    border-radius: 19px;
+    background-position: center center;
+  }
+
+  .theme-neon { --mobile-theme-art-x: 62%; }
+  .theme-sakura { --mobile-theme-art-x: 58%; }
+  .theme-vapor { --mobile-theme-art-x: 60%; }
+  .theme-ramen { --mobile-theme-art-x: 64%; }
+  .theme-inferno { --mobile-theme-art-x: 60%; }
+  .theme-amoled { --mobile-theme-art-x: 56%; }
+
+  :where(
+    .homeV3Hero,
+    .libraryArchiveLiveArt,
+    .favoritesHeroArt,
+    .analyticsLabBackdrop
+  ) {
+    background-position: var(--mobile-theme-art-x, 60%) center !important;
+  }
+
+  .discoverHero::before,
+  .followingHero::before,
+  .upcomingHero::before,
+  .joeAICommandCenter .joeAIHero::before {
+    background-position: var(--mobile-theme-art-x, 60%) center !important;
+  }
+
+  .panel.settingsPage::before {
+    background-position: var(--mobile-theme-art-x, 60%) top !important;
+  }
+
+  .homeV3HeroCopy,
+  .libraryArchiveLiveCopy,
+  .favoritesHeroCopy,
+  .followingHeroContent,
+  .upcomingHero > div,
+  .analyticsLabCopy,
+  .joeAIHeroCopy {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .homeV3Hero h1,
+  .libraryArchiveHeroLive h1,
+  .favoritesHero h1,
+  .discoverHero h1,
+  .followingHero h1,
+  .upcomingHero h1,
+  .analyticsLabHero h1,
+  .joeAIHero h1 {
+    font-size: clamp(34px, 11vw, 52px);
+  }
+
+  .onboardingPageTip {
+    bottom: calc(80px + env(safe-area-inset-bottom));
+    left: 10px;
+    right: 10px;
+    width: auto;
+  }
+}
+
+@media (max-width: 390px) {
+  .posterGrid,
+  .posterGrid.small,
+  .libraryPosterGrid,
+  .upcomingGrid {
+    gap: 8px;
+  }
+
+  .mobileBottomNav button {
+    font-size: 9px;
+  }
+
+  .mobileMoreGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

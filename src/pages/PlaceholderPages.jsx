@@ -12,6 +12,8 @@ import {
   exportLibraryList,
   exportRankedLibraryList,
   exportLibraryCsv,
+  buildMalXmlExport,
+  exportMalCompatibleXml,
   parseBackupText,
   applyBackupPreferences,
   exportDiagnostics
@@ -2408,6 +2410,7 @@ export function SettingsPage({
   const [metadataRepairSummary, setMetadataRepairSummary] = React.useState(null);
   const [libraryImportStatus, setLibraryImportStatus] = React.useState('');
   const [libraryImportProgress, setLibraryImportProgress] = React.useState(null);
+  const [libraryExportSummary, setLibraryExportSummary] = React.useState(null);
   const [joeAIMemoryStatus, setJoeAIMemoryStatus] = React.useState('');
   const [systemStatus, setSystemStatus] = React.useState('');
   const [systemInfo, setSystemInfo] = React.useState(null);
@@ -2432,6 +2435,39 @@ export function SettingsPage({
   });
   const libraryImportInputRef = React.useRef(null);
   const backupRestoreInputRef = React.useRef(null);
+
+  function handleMalCompatibleExport(target) {
+    const platform = target === 'anilist' ? 'AniList' : 'MyAnimeList';
+    const preview = buildMalXmlExport(data);
+
+    if (!preview.exported.length) {
+      setLibraryExportSummary({ ...preview, platform });
+      setLibraryImportStatus(
+        `Nothing was exported for ${platform}. Every library title is missing a MyAnimeList ID.`
+      );
+      return;
+    }
+
+    if (preview.unresolved.length) {
+      const confirmed = window.confirm(
+        `${preview.exported.length} title${preview.exported.length === 1 ? '' : 's'} can be exported for ${platform}. ` +
+        `${preview.unresolved.length} title${preview.unresolved.length === 1 ? ' is' : 's are'} missing a MyAnimeList ID and will be skipped. Continue?`
+      );
+      if (!confirmed) {
+        setLibraryExportSummary({ ...preview, platform });
+        setLibraryImportStatus(`Export cancelled. Review the ${preview.unresolved.length} unresolved title${preview.unresolved.length === 1 ? '' : 's'} below.`);
+        return;
+      }
+    }
+
+    const report = exportMalCompatibleXml(data, target);
+    setLibraryExportSummary({ ...report, platform });
+    setLibraryImportStatus(
+      `Exported ${report.exported.length} title${report.exported.length === 1 ? '' : 's'} for ${platform}.` +
+      (report.unresolved.length ? ` ${report.unresolved.length} unresolved title${report.unresolved.length === 1 ? ' was' : 's were'} skipped.` : '') +
+      (report.roundedScores.length ? ` ${report.roundedScores.length} decimal score${report.roundedScores.length === 1 ? ' was' : 's were'} rounded to MAL's 1–10 scale.` : '')
+    );
+  }
 
   React.useEffect(() => {
     setDisplayNameDraft(displayName);
@@ -3684,6 +3720,18 @@ export function SettingsPage({
               <small>Spreadsheet-ready library data</small>
             </button>
 
+            <button type="button" onClick={() => handleMalCompatibleExport('mal')}>
+              <span>🔷</span>
+              <strong>Export for MyAnimeList</strong>
+              <small>MAL-compatible XML with status, scores, and progress</small>
+            </button>
+
+            <button type="button" onClick={() => handleMalCompatibleExport('anilist')}>
+              <span>🔹</span>
+              <strong>Export for AniList</strong>
+              <small>MAL XML accepted by AniList's list importer</small>
+            </button>
+
             <input
               ref={libraryImportInputRef}
               className="settingsImportInput"
@@ -3873,6 +3921,57 @@ export function SettingsPage({
         <p className="settingsStatus settingsImportStatus">
           {libraryImportStatus}
         </p>
+      ) : null}
+
+      {libraryExportSummary ? (
+        <section className="settingsImportSummary">
+          <div>
+            <strong>{libraryExportSummary.exported?.length || 0}</strong>
+            <span>Exported for {libraryExportSummary.platform}</span>
+          </div>
+          <div>
+            <strong>{libraryExportSummary.unresolved?.length || 0}</strong>
+            <span>Missing MAL ID</span>
+          </div>
+          <div>
+            <strong>{libraryExportSummary.roundedScores?.length || 0}</strong>
+            <span>Scores Rounded</span>
+          </div>
+
+          {libraryExportSummary.unresolved?.length ? (
+            <details className="settingsImportSkipped">
+              <summary>
+                Show {libraryExportSummary.unresolved.length} title{libraryExportSummary.unresolved.length === 1 ? '' : 's'} not included
+              </summary>
+              <div>
+                {libraryExportSummary.unresolved.map((item, index) => (
+                  <p key={`${item.title}-${index}`}>
+                    <strong>{item.title}</strong>
+                    <span>{item.reason}</span>
+                    <b>{item.anilistId ? `AniList ${item.anilistId}` : item.kitsuId ? `Kitsu ${item.kitsuId}` : 'No external ID'}</b>
+                  </p>
+                ))}
+              </div>
+            </details>
+          ) : null}
+
+          {libraryExportSummary.roundedScores?.length ? (
+            <details className="settingsImportSkipped">
+              <summary>
+                Show {libraryExportSummary.roundedScores.length} rounded score{libraryExportSummary.roundedScores.length === 1 ? '' : 's'}
+              </summary>
+              <div>
+                {libraryExportSummary.roundedScores.map((item, index) => (
+                  <p key={`${item.title}-${index}`}>
+                    <strong>{item.title}</strong>
+                    <span>MAL uses whole-number scores</span>
+                    <b>{item.from} → {item.to}</b>
+                  </p>
+                ))}
+              </div>
+            </details>
+          ) : null}
+        </section>
       ) : null}
 
       {libraryImportSummary ? (

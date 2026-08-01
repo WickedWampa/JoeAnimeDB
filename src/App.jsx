@@ -20,6 +20,7 @@ import './styles/update-notification.css';
 import React, { useEffect, useMemo, useState } from 'react';
 
 import { Sidebar } from './components/Sidebar';
+import { MobileNavigation } from './components/MobileNavigation';
 import { SearchBar } from './components/SearchBar';
 import { DetailModal } from './components/DetailModal';
 import { FirstTimeOnboarding, OnboardingPageTip } from './components/FirstTimeOnboarding';
@@ -43,6 +44,7 @@ import {
   readOnboardingState,
   updateOnboardingStep
 } from './services/onboardingState';
+import { installAndroidBackHandler } from './platform/runtime';
 
 const UPDATE_THEME_APPEARANCE = {
   neon: { icon: '⚡', label: 'Neon Signal' },
@@ -172,6 +174,20 @@ export function App() {
     deleteAnime, fetchMoreCatalogTitles, refreshLiveDiscover,
     restoreBackup, resetDatabase
   } = library;
+
+  useEffect(() => installAndroidBackHandler(() => {
+    if (selected) {
+      setSelected(null);
+      return true;
+    }
+
+    if (view !== 'dashboard') {
+      setView('dashboard');
+      return true;
+    }
+
+    return false;
+  }), [selected, view]);
 
   useEffect(() => {
     const updates = window.JoeAnimeDB?.updates;
@@ -436,6 +452,12 @@ export function App() {
         view={view}
         setView={setView}
         syncMetadata={syncMetadata}
+        followingCount={followingCount}
+      />
+
+      <MobileNavigation
+        view={view}
+        setView={setView}
         followingCount={followingCount}
       />
 
