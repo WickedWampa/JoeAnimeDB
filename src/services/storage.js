@@ -215,8 +215,260 @@ export function exportLibraryCsv(data = {}) {
   downloadText("JoeAnimeDB-library.csv", rows.join("\n"));
 }
 
-function downloadText(filename, text){
-  const blob=new Blob([text],{type:"text/plain;charset=utf-8"});
+function firstDefined(...values) {
+  return values.find((value) => value !== undefined && value !== null && value !== '');
+}
+
+function integerValue(value, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.max(0, Math.round(parsed)) : fallback;
+}
+
+function malIdFor(item = {}) {
+  const value = firstDefined(
+    item.malId,
+    item.mal_id,
+    item.myanimelistId,
+    item.myAnimeListId,
+    item.externalIds?.mal,
+    item.externalIds?.myanimelist,
+    item.ids?.mal
+  );
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : 0;
+}
+
+function xmlText(value = '') {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function xmlCdata(value = '') {
+  return `<![CDATA[${String(value).replace(/\]\]>/g, ']]]]><![CDATA[>')}]]>`;
+}
+
+function malDate(value) {
+  if (!value) return '0000-00-00';
+
+  if (typeof value === 'object') {
+    const year = integerValue(value.year);
+    const month = integerValue(value.month);
+    const day = integerValue(value.day);
+    if (year > 0) {
+      return [
+        String(year).padStart(4, '0'),
+        String(month || 1).padStart(2, '0'),
+        String(day || 1).padStart(2, '0')
+      ].join('-');
+    }
+  }
+
+  const raw = String(value).trim();
+  const direct = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (direct) {
+    return `${direct[1]}-${direct[2].padStart(2, '0')}-${direct[3].padStart(2, '0')}`;
+  }
+
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime())
+    ? '0000-00-00'
+    : parsed.toISOString().slice(0, 10);
+}
+
+function malStatus(value) {
+  const normalized = String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ');
+
+  if (['completed', 'complete', 'finished'].includes(normalized)) return 'Completed';
+  if (['watching', 'current', 'rewatching', 're watching'].includes(normalized)) return 'Watching';
+  if (['on hold', 'onhold', 'paused'].includes(normalized)) return 'On-Hold';
+  if (['dropped', 'drop'].includes(normalized)) return 'Dropped';
+  if (['plan to watch', 'planned', 'planning', 'plan'].includes(normalized)) return 'Plan to Watch';
+  return 'Plan to Watch';
+}
+
+function malSeriesType(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'tv' || normalized.includes('television')) return 'TV';
+  if (normalized === 'movie' || normalized.includes('film')) return 'Movie';
+  if (normalized === 'ova') return 'OVA';
+  if (normalized === 'ona') return 'ONA';
+  if (normalized === 'special') return 'Special';
+  if (normalized === 'music') return 'Music';
+  return 'Unknown';
+}
+
+function malPriority(value) {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (normalized === '2' || normalized === 'high') return 2;
+  if (normalized === '1' || normalized === 'medium' || normalized === 'med') return 1;
+  return 0;
+}
+
+function listTags(item = {}) {
+  const tags = firstDefined(item.tags, item.personalTags, item.userTags, []);
+  if (Array.isArray(tags)) {
+    return tags
+      .map((tag) => typeof tag === 'string' ? tag : tag?.name)
+      .filter(Boolean)
+      .join(', ');
+  }
+  return String(tags || '');
+}
+
+function exportScore(item = {}) {
+  const raw = Number(firstDefined(
+    item.joeScore,
+    item.score,
+    item.finalScore,
+    item.rating,
+    item.personalScore,
+    0
+  ));
+  if (!Number.isFinite(raw) || raw <= 0) return { from: 0, to: 0, rounded: false };
+  const clamped = Math.min(10, Math.max(1, raw));
+  const rounded = Math.round(clamped);
+  return { from: raw, to: rounded, rounded: rounded !== raw };
+}
+
+function watchedEpisodes(item = {}, status, totalEpisodes) {
+  const explicit = firstDefined(
+    item.watchedEpisodes,
+    item.episodesWatched,
+    item.episodeProgress,
+    item.progress,
+    item.watchedEpisodeCount,
+    item.currentEpisode
+  );
+  if (explicit !== undefined) return integerValue(explicit);
+  return status === 'Completed' ? totalEpisodes : 0;
+}
+
+function malAnimeXml(item, malId, scoreInfo) {
+  const title = String(item.officialTitle || item.title || '').trim();
+  const status = malStatus(firstDefined(item.status, item.watchStatus));
+  const totalEpisodes = integerValue(firstDefined(item.episodeCount, item.episodes, item.totalEpisodes));
+  const progress = watchedEpisodes(item, status, totalEpisodes);
+  const rewatches = integerValue(firstDefined(item.rewatches, item.rewatchCount, item.timesRewatched));
+  const isRewatching = Boolean(item.rewatching) || /rewatch/i.test(String(item.status || ''));
+  const startDate = malDate(firstDefined(item.startDate, item.startedAt, item.watchStartDate));
+  const finishDate = malDate(firstDefined(
+    item.finishDate,
+    item.completedDate,
+    item.completedAt,
+    item.watchEndDate
+  ));
+  const notes = firstDefined(item.notes, item.personalNotes, '');
+
+  return [
+    '  <anime>',
+    `    <series_animedb_id>${malId}</series_animedb_id>`,
+    `    <series_title>${xmlCdata(title)}</series_title>`,
+    `    <series_type>${malSeriesType(firstDefined(item.type, item.subtype, item.format))}</series_type>`,
+    `    <series_episodes>${totalEpisodes}</series_episodes>`,
+    '    <my_id>0</my_id>',
+    `    <my_watched_episodes>${progress}</my_watched_episodes>`,
+    `    <my_start_date>${xmlText(startDate)}</my_start_date>`,
+    `    <my_finish_date>${xmlText(finishDate)}</my_finish_date>`,
+    `    <my_score>${scoreInfo.to}</my_score>`,
+    `    <my_status>${status}</my_status>`,
+    `    <my_comments>${xmlCdata(notes)}</my_comments>`,
+    `    <my_times_watched>${rewatches}</my_times_watched>`,
+    '    <my_rewatch_value>0</my_rewatch_value>',
+    `    <my_priority>${malPriority(item.priority)}</my_priority>`,
+    `    <my_tags>${xmlCdata(listTags(item))}</my_tags>`,
+    `    <my_rewatching>${isRewatching ? 1 : 0}</my_rewatching>`,
+    `    <my_rewatching_ep>${isRewatching ? progress : 0}</my_rewatching_ep>`,
+    '    <my_discuss>1</my_discuss>',
+    '    <my_sns>default</my_sns>',
+    '    <update_on_import>1</update_on_import>',
+    '  </anime>'
+  ].join('\n');
+}
+
+export function buildMalXmlExport(data = {}) {
+  const exported = [];
+  const unresolved = [];
+  const roundedScores = [];
+  const animeXml = [];
+  const statusCounts = {
+    Watching: 0,
+    Completed: 0,
+    'On-Hold': 0,
+    Dropped: 0,
+    'Plan to Watch': 0
+  };
+
+  sortedAnime(data).forEach((item) => {
+    const title = String(item.officialTitle || item.title || 'Untitled anime').trim();
+    const malId = malIdFor(item);
+
+    if (!malId) {
+      unresolved.push({
+        title,
+        reason: 'A MyAnimeList ID is required for MAL and AniList list imports.',
+        anilistId: firstDefined(item.anilistId, item.anilist_id, item.externalIds?.anilist),
+        kitsuId: firstDefined(item.kitsuId, item.kitsu_id, item.externalIds?.kitsu)
+      });
+      return;
+    }
+
+    const scoreInfo = exportScore(item);
+    if (scoreInfo.rounded) {
+      roundedScores.push({ title, from: scoreInfo.from, to: scoreInfo.to });
+    }
+
+    const status = malStatus(firstDefined(item.status, item.watchStatus));
+    statusCounts[status] += 1;
+    exported.push({ title, malId });
+    animeXml.push(malAnimeXml(item, malId, scoreInfo));
+  });
+
+  const xml = [
+    '<?xml version="1.0" encoding="UTF-8" ?>',
+    '<myanimelist>',
+    '  <myinfo>',
+    '    <user_id>0</user_id>',
+    '    <user_name>JoeAnimeDB User</user_name>',
+    '    <user_export_type>1</user_export_type>',
+    `    <user_total_anime>${exported.length}</user_total_anime>`,
+    `    <user_total_watching>${statusCounts.Watching}</user_total_watching>`,
+    `    <user_total_completed>${statusCounts.Completed}</user_total_completed>`,
+    `    <user_total_onhold>${statusCounts['On-Hold']}</user_total_onhold>`,
+    `    <user_total_dropped>${statusCounts.Dropped}</user_total_dropped>`,
+    `    <user_total_plantowatch>${statusCounts['Plan to Watch']}</user_total_plantowatch>`,
+    '  </myinfo>',
+    ...animeXml,
+    '</myanimelist>',
+    ''
+  ].join('\n');
+
+  return { xml, exported, unresolved, roundedScores };
+}
+
+export function exportMalCompatibleXml(data = {}, target = 'mal') {
+  const report = buildMalXmlExport(data);
+  if (!report.exported.length) return report;
+
+  const destination = String(target).toLowerCase() === 'anilist' ? 'AniList' : 'MyAnimeList';
+  const date = new Date().toISOString().slice(0, 10);
+  downloadText(
+    `JoeAnimeDB-${destination}-export-${date}.xml`,
+    report.xml,
+    'application/xml;charset=utf-8'
+  );
+  return report;
+}
+
+function downloadText(filename, text, mimeType = "text/plain;charset=utf-8"){
+  const blob=new Blob([text],{type:mimeType});
   const url=URL.createObjectURL(blob);
   const a=document.createElement("a");
   a.href=url;a.download=filename;
