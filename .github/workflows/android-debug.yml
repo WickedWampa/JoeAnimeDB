@@ -52,7 +52,10 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x android/gradlew
 
-      - name: Build debug APK
+      - name: Sync Android project
+  run: npm run android:sync
+
+- name: Build debug APK
         run: npm run android:debug
 
       - name: Upload debug APK
