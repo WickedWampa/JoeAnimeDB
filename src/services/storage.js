@@ -53,9 +53,40 @@ export function buildBackupPayload(data = {}) {
   };
 }
 
-export function exportBackup(data) {
-  const payload = buildBackupPayload(data);
-  saveTextExport(
+function backupSnapshotWeight(snapshot = {}) {
+  const animeCount = Array.isArray(snapshot?.anime) ? snapshot.anime.length : 0;
+  const catalogCount = Array.isArray(snapshot?.catalog) ? snapshot.catalog.length : 0;
+  return (animeCount * 1000) + catalogCount;
+}
+
+async function resolveLiveBackupDatabase(data = {}) {
+  const currentSnapshot = data && typeof data === 'object' ? data : {};
+  const getDatabase = window.JoeAnimeDB?.database?.getDatabase;
+
+  if (typeof getDatabase !== 'function') return currentSnapshot;
+
+  try {
+    const liveSnapshot = await getDatabase();
+    if (!liveSnapshot || !Array.isArray(liveSnapshot.anime)) {
+      return currentSnapshot;
+    }
+
+    // Prefer the snapshot containing the most real records. This protects
+    // against a stale React seed snapshot in Settings without allowing an
+    // unexpectedly empty bridge response to replace valid in-memory data.
+    return backupSnapshotWeight(liveSnapshot) >= backupSnapshotWeight(currentSnapshot)
+      ? liveSnapshot
+      : currentSnapshot;
+  } catch (error) {
+    console.warn('Could not read the live database for backup; using the current app snapshot.', error);
+    return currentSnapshot;
+  }
+}
+
+export async function exportBackup(data) {
+  const database = await resolveLiveBackupDatabase(data);
+  const payload = buildBackupPayload(database);
+  await saveTextExport(
     `JoeAnimeDB-5-backup-${new Date().toISOString().slice(0, 10)}.json`,
     JSON.stringify(payload, null, 2),
     'application/json'

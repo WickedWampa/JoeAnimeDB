@@ -1,0 +1,2 @@
+# The Android wrapper runs on Linux CI and must never be checked out with CRLF.
+android/gradlew text eol=lf

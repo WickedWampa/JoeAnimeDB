@@ -7,6 +7,7 @@ import {
   resolveJoeAIFollowUp
 } from './joeAIIntelligence';
 import { enrichRecommendationItems } from '../recommendationCoordinator';
+import { routeJoeAIRecommendation } from '../joeAIRecommendationRouter';
 import { buildDiscoverPlan } from '../../services/recommendationEngineV3';
 
 function assert(condition, message) {
@@ -81,6 +82,27 @@ export function runJoeAIRegressionSuite() {
   );
   assert(!learnedRecommendations.some((item) => item.title === 'Claymore'), 'feedback did not change recommendation results');
   assert(learnedRecommendations[0]?.confidenceReceipt?.predictionConfidence > 0, 'recommendation lost confidence receipts');
+
+  const catalogBackedSimilarity = routeJoeAIRecommendation(
+    'recommend something like Bleach',
+    [{ title: 'Bleach', status: 'Completed', joeScore: 9.5 }],
+    [{
+      id: 'kitsu:1776',
+      kitsuId: '1776',
+      malId: 392,
+      title: 'Yu Yu Hakusho',
+      cover: 'https://media.kitsu.example/yu-yu-hakusho.jpg',
+      year: 1992,
+      episodes: 112,
+      synopsis: 'A teenage spirit detective investigates supernatural cases.',
+      studio: 'Studio Pierrot'
+    }]
+  );
+  const catalogBackedCard = catalogBackedSimilarity?.items?.find((item) => item.title === 'Yu Yu Hakusho');
+  assert(catalogBackedCard?.cover, 'Genome discovery lost its Kitsu poster');
+  assert(catalogBackedCard?.kitsuId === '1776', 'Genome discovery lost its Kitsu ID');
+  assert(catalogBackedCard?.year === 1992 && catalogBackedCard?.episodes === 112, 'Genome discovery lost catalog details');
+  assert(catalogBackedCard?.owned === false && catalogBackedCard?.bucket === 'discovery', 'catalog title was marked as owned');
 
   const timestampSafe = applyLearnedSignals(
     { title: 'Frieren', genres: ['Fantasy'] },
@@ -219,7 +241,7 @@ export function runJoeAIRegressionSuite() {
   );
 
   return {
-    passed: 20,
+    passed: 21,
     prompts: [
       'tell me why you recommend One Piece Fan Letter',
       'why the second one?',
@@ -234,6 +256,7 @@ export function runJoeAIRegressionSuite() {
       'confidence receipts',
       'feedback-aware recommendation ranking',
       'recommendation confidence propagation',
+      'catalog-backed Genome discovery metadata',
       'timestamp-safe latest feedback',
       'candidate-specific confidence',
       'learned Genome re-ranking',

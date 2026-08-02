@@ -434,8 +434,10 @@ function sharedGenomeTags(sourceCard = {}, targetCard = {}) {
   return [...new Set(shared)].slice(0, 5);
 }
 
-function genomeCardToRecommendationItem(card = {}, index = 0, sourceCard = {}, anime = []) {
-  const local = findLibraryItemForCard(card, anime);
+function genomeCardToRecommendationItem(card = {}, index = 0, sourceCard = {}, anime = [], catalog = []) {
+  const libraryItem = findItemForGenomeCard(card, anime, []);
+  const catalogItem = libraryItem ? null : findItemForGenomeCard(card, [], catalog);
+  const local = libraryItem || catalogItem;
   const name = title(card);
   const shared = sharedGenomeTags(sourceCard, card);
   const preferredIds = sourceCard.idealFollowUps || sourceCard.successors || [];
@@ -445,15 +447,21 @@ function genomeCardToRecommendationItem(card = {}, index = 0, sourceCard = {}, a
   return {
     ...(local || {}),
     id: local?.id || card.id || name,
+    kitsuId: local?.kitsuId || local?.kitsu_id || card.kitsuId,
+    malId: local?.malId || local?.mal_id || card.malId,
     title: local?.title || name,
     officialTitle: local?.officialTitle || name,
     year: local?.year || card.year,
     episodes: local?.episodes || local?.episodeCount || card.episodes,
+    episodeCount: local?.episodeCount || local?.episodes || card.episodeCount || card.episodes,
     studio: local?.studio || card.studio,
-    cover: local?.cover || card.cover || card.image,
+    studios: local?.studios || card.studios || (local?.studio || card.studio ? [local?.studio || card.studio] : []),
+    cover: local?.cover || local?.poster || local?.posterUrl || local?.imageUrl || local?.image || card.cover || card.image,
+    imageUrl: local?.imageUrl || local?.cover || local?.poster || local?.posterUrl || local?.image || card.imageUrl || card.cover || card.image,
+    synopsis: local?.synopsis || local?.description || card.synopsis || card.description || '',
     communityScore: local?.communityScore || local?.malScore || card.communityScore || card.malScore,
-    owned: Boolean(local),
-    bucket: local ? 'library' : 'discovery',
+    owned: Boolean(libraryItem),
+    bucket: libraryItem ? 'library' : 'discovery',
     match: Math.min(99, Math.max(72, baseMatch)),
     matchLabel: isPreferred ? 'Genome Follow-up' : 'Genome Neighbor',
     tags: shared.length ? shared : [card.domain, card.subdomain, ...(card.viewerMotivations || [])].filter(Boolean).slice(0, 5),
@@ -469,7 +477,7 @@ function genomeCardToRecommendationItem(card = {}, index = 0, sourceCard = {}, a
   };
 }
 
-function formatSimilarGenomeCards(sourceCard, anime = []) {
+function formatSimilarGenomeCards(sourceCard, anime = [], catalog = []) {
   const sourceTitle = title(sourceCard);
   const related = scoreRelatedCards(sourceCard);
 
@@ -502,7 +510,7 @@ function formatSimilarGenomeCards(sourceCard, anime = []) {
       chasing.length ? `Likely chase: ${chasing.join(', ')}` : '',
       'Cards are ranked from ideal follow-ups plus inferred Genome neighbors.'
     ].filter(Boolean).join('\\n'),
-    items: related.map((card, index) => genomeCardToRecommendationItem(card, index, sourceCard, anime))
+    items: related.map((card, index) => genomeCardToRecommendationItem(card, index, sourceCard, anime, catalog))
   };
 }
 
@@ -722,7 +730,7 @@ export function routeJoeAIRecommendation(question = '', anime = [], catalog = []
   const similarTitle = extractSimilarityTitle(question);
   if (similarTitle) {
     const sourceCard = findGenomeCardByTitle(similarTitle);
-    if (sourceCard) return formatSimilarGenomeCards(sourceCard, anime);
+    if (sourceCard) return formatSimilarGenomeCards(sourceCard, anime, catalog);
 
     // Only fall back to the older knowledge-first text path when there is no
     // Genome source card to build structured recommendation cards from.

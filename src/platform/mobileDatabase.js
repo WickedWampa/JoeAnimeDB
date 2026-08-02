@@ -1,4 +1,4 @@
-import { CapacitorSQLite } from '@capacitor-community/sqlite';
+import { CapacitorSQLite, SQLiteConnection } from '@capacitor-community/sqlite';
 
 const DATABASE_NAME = 'joeanime_mobile';
 const DATABASE_VERSION = 1;
@@ -7,6 +7,8 @@ const MAX_JOEAI_FEEDBACK = 500;
 
 let openPromise = null;
 let writeQueue = Promise.resolve();
+const sqlite = new SQLiteConnection(CapacitorSQLite);
+let databaseConnection = null;
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
@@ -64,28 +66,39 @@ async function ensureOpen() {
   if (openPromise) return openPromise;
 
   openPromise = (async () => {
-    await CapacitorSQLite.createConnection({
-      database: DATABASE_NAME,
-      encrypted: false,
-      mode: 'no-encryption',
-      version: DATABASE_VERSION,
-      readonly: false
-    });
-    await CapacitorSQLite.open({ database: DATABASE_NAME, readonly: false });
-    await CapacitorSQLite.execute({
-      database: DATABASE_NAME,
-      transaction: true,
-      statements: `
+    // Native connections can outlive the WebView that created them. Reconcile
+    // the JavaScript connection map before opening so a resume, renderer reload,
+    // or Android process restoration does not fail with "connection exists".
+    const consistency = await sqlite.checkConnectionsConsistency();
+    const hasConnection = consistency.result &&
+      (await sqlite.isConnection(DATABASE_NAME, false)).result;
+
+    databaseConnection = hasConnection
+      ? await sqlite.retrieveConnection(DATABASE_NAME, false)
+      : await sqlite.createConnection(
+          DATABASE_NAME,
+          false,
+          'no-encryption',
+          DATABASE_VERSION,
+          false
+        );
+
+    const isOpen = await databaseConnection.isDBOpen();
+    if (!isOpen.result) await databaseConnection.open();
+
+    await databaseConnection.execute(`
         CREATE TABLE IF NOT EXISTS app_state (
           id INTEGER PRIMARY KEY NOT NULL,
           schema_version INTEGER NOT NULL,
           payload TEXT NOT NULL,
           updated_at TEXT NOT NULL
         );
-      `
-    });
+      `, true);
+
+    return databaseConnection;
   })().catch((error) => {
     openPromise = null;
+    databaseConnection = null;
     throw error;
   });
 
@@ -93,13 +106,11 @@ async function ensureOpen() {
 }
 
 async function readStoredSnapshot() {
-  await ensureOpen();
-  const result = await CapacitorSQLite.query({
-    database: DATABASE_NAME,
-    statement: 'SELECT payload FROM app_state WHERE id = ? LIMIT 1',
-    values: [STATE_ROW_ID],
-    readonly: false
-  });
+  const connection = await ensureOpen();
+  const result = await connection.query(
+    'SELECT payload FROM app_state WHERE id = ? LIMIT 1',
+    [STATE_ROW_ID]
+  );
   const payload = result?.values?.[0]?.payload;
   if (!payload) return null;
 
@@ -111,11 +122,10 @@ async function readStoredSnapshot() {
 }
 
 async function writeStoredSnapshot(snapshot) {
-  await ensureOpen();
+  const connection = await ensureOpen();
   const normalized = normalizeSnapshot(snapshot);
-  await CapacitorSQLite.run({
-    database: DATABASE_NAME,
-    statement: `
+  await connection.run(
+    `
       INSERT INTO app_state (id, schema_version, payload, updated_at)
       VALUES (?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
@@ -123,15 +133,14 @@ async function writeStoredSnapshot(snapshot) {
         payload = excluded.payload,
         updated_at = excluded.updated_at
     `,
-    values: [
+    [
       STATE_ROW_ID,
       DATABASE_VERSION,
       JSON.stringify(normalized),
       new Date().toISOString()
     ],
-    transaction: true,
-    readonly: false
-  });
+    true
+  );
   return clone(normalized);
 }
 

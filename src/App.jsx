@@ -94,6 +94,58 @@ function UpdateProgressOverlay({ syncText, syncProgress, theme = 'neon' }) {
   );
 }
 
+function DatabaseUpdateConfirm({ open, theme = 'neon', onCancel, onConfirm }) {
+  const appearance = UPDATE_THEME_APPEARANCE[theme] || UPDATE_THEME_APPEARANCE.neon;
+
+  useEffect(() => {
+    if (!open) return undefined;
+
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') onCancel?.();
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [open, onCancel]);
+
+  if (!open) return null;
+
+  return (
+    <div className="updateConfirmOverlay" role="presentation" onClick={onCancel}>
+      <section
+        className="updateConfirmCard"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="database-update-title"
+        aria-describedby="database-update-description"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="updateConfirmGlow" aria-hidden="true" />
+        <p className="updateConfirmEyebrow">
+          <span aria-hidden="true">{appearance.icon}</span> {appearance.label}
+        </p>
+        <h2 id="database-update-title">Update the anime catalog?</h2>
+        <p id="database-update-description">
+          JoeAnimeDB will download public anime metadata and rebuild your recommendation catalog.
+        </p>
+
+        <div className="updateConfirmList" aria-label="Before you start">
+          <span><b aria-hidden="true">📶</b> Wi-Fi recommended. Mobile data may be used.</span>
+          <span><b aria-hidden="true">⏱</b> Usually takes a few minutes.</span>
+          <span className="updateConfirmWide"><b aria-hidden="true">📱</b> Keep JoeAnimeDB open until the progress bar finishes.</span>
+        </div>
+
+        <div className="updateConfirmActions">
+          <button type="button" onClick={onCancel}>Not Now</button>
+          <button type="button" className="primary" onClick={onConfirm} autoFocus>
+            Update Catalog
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function AppUpdateNotice({ status, onOpen, onDismiss }) {
   const state = status?.state || '';
   const version = status?.availableVersion || '';
@@ -140,16 +192,13 @@ function AppUpdateNotice({ status, onOpen, onDismiss }) {
 
 export function App() {
   const [view, setView] = useState('dashboard');
-  // Discover is expensive to assemble (recommendation shelves, posters, and
-  // live catalog data). Mount it on first use, then keep it alive so switching
-  // away and back does not rebuild the entire page.
-  const [discoverMounted, setDiscoverMounted] = useState(false);
   const [selected, setSelected] = useState(null);
   const [mode, setMode] = useState('poster');
   const [onboardingState, setOnboardingState] = useState(() => readOnboardingState());
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [appUpdateStatus, setAppUpdateStatus] = useState(null);
   const [dismissedUpdateVersion, setDismissedUpdateVersion] = useState('');
+  const [databaseUpdateRequest, setDatabaseUpdateRequest] = useState(null);
   const [theme, setTheme] = useState(() => {
     try {
       return localStorage.getItem('joeanime-theme') || 'neon';
@@ -183,7 +232,19 @@ export function App() {
   } = library;
 
   useEffect(() => {
-    if (view === 'discover') setDiscoverMounted(true);
+    const frame = window.requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+
+      // Most pages use the window scroll, but resetting the content element too
+      // keeps navigation correct if a platform shell gives it its own scroller.
+      document.querySelector('.content')?.scrollTo?.({
+        top: 0,
+        left: 0,
+        behavior: 'auto'
+      });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
   }, [view]);
 
   useEffect(() => installAndroidBackHandler(() => {
@@ -229,6 +290,31 @@ export function App() {
       localStorage.setItem('joeanime-theme', nextTheme);
     } catch (error) {
       console.warn('Could not save theme preference:', error);
+    }
+  }
+
+  function requestDatabaseUpdate() {
+    if (syncing || databaseUpdateRequest) return Promise.resolve(false);
+
+    return new Promise((resolve, reject) => {
+      setDatabaseUpdateRequest({ resolve, reject });
+    });
+  }
+
+  function cancelDatabaseUpdate() {
+    databaseUpdateRequest?.resolve(false);
+    setDatabaseUpdateRequest(null);
+  }
+
+  async function confirmDatabaseUpdate() {
+    const request = databaseUpdateRequest;
+    setDatabaseUpdateRequest(null);
+
+    try {
+      const summary = await syncMetadata();
+      request?.resolve(summary);
+    } catch (error) {
+      request?.reject(error);
     }
   }
 
@@ -462,7 +548,7 @@ export function App() {
       <Sidebar
         view={view}
         setView={setView}
-        syncMetadata={syncMetadata}
+        syncMetadata={requestDatabaseUpdate}
         followingCount={followingCount}
       />
 
@@ -495,7 +581,7 @@ export function App() {
             <div className="viewModes">
               <button className={mode === 'poster' ? 'active' : ''} onClick={() => setMode('poster')}>Poster</button>
               <button className={mode === 'list' ? 'active' : ''} onClick={() => setMode('list')}>List</button>
-              <button onClick={syncMetadata}>Update Database</button>
+              <button onClick={requestDatabaseUpdate}>Update Database</button>
             </div>
           </header>
         )}
@@ -524,25 +610,19 @@ export function App() {
             title={view === 'rankings' ? 'Rankings' : 'Library'}
           />
         )}
-        {(discoverMounted || view === 'discover') && (
-          <div
-            className="discoverKeepAlive"
-            style={{ display: view === 'discover' ? 'contents' : 'none' }}
-            aria-hidden={view !== 'discover'}
-          >
-            <Discover
-              anime={anime}
-              catalog={catalog}
-              setSelected={setSelected}
-              setView={setView}
-              updateAnime={handleUpdateAnime}
-              updateCatalogAnime={updateCatalogAnime}
-              joeAIState={joeAI}
-              onRecommendationFeedback={recordJoeAIFeedback}
-              fetchMoreCatalogTitles={fetchMoreCatalogTitles}
-              refreshLiveDiscover={refreshLiveDiscover}
-            />
-          </div>
+        {view === 'discover' && (
+          <Discover
+            anime={anime}
+            catalog={catalog}
+            setSelected={setSelected}
+            setView={setView}
+            updateAnime={handleUpdateAnime}
+            updateCatalogAnime={updateCatalogAnime}
+            joeAIState={joeAI}
+            onRecommendationFeedback={recordJoeAIFeedback}
+            fetchMoreCatalogTitles={fetchMoreCatalogTitles}
+            refreshLiveDiscover={refreshLiveDiscover}
+          />
         )}
         {view === 'favorites' && (
           <FavoritesPage
@@ -591,7 +671,7 @@ export function App() {
             anime={anime}
             updateData={updateData}
             setSelected={setSelected}
-            syncMetadata={syncMetadata}
+            syncMetadata={requestDatabaseUpdate}
             onBack={() => setView('settings')}
           />
         )}
@@ -599,7 +679,7 @@ export function App() {
           <SettingsPage
             data={data}
             updateAnime={handleUpdateAnime}
-            syncMetadata={syncMetadata}
+            syncMetadata={requestDatabaseUpdate}
             stats={stats}
             theme={theme}
             onThemeChange={handleThemeChange}
@@ -666,6 +746,12 @@ export function App() {
         onStepChange={handleOnboardingStep}
         onComplete={handleFinishOnboarding}
         onSkip={handleSkipOnboarding}
+      />
+      <DatabaseUpdateConfirm
+        open={Boolean(databaseUpdateRequest)}
+        theme={theme}
+        onCancel={cancelDatabaseUpdate}
+        onConfirm={confirmDatabaseUpdate}
       />
       {syncing && <UpdateProgressOverlay syncText={syncText} syncProgress={syncProgress} theme={theme} />}
     </main>

@@ -20,6 +20,48 @@
   background: rgba(13, 22, 34, .92);
 }
 
+/* Discover builds its expensive shelves over several paints. Keep a small,
+   stable status card in the flow when those stages take long enough to see. */
+.discoverProgressiveLoad {
+  min-height: 72px;
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  margin: 12px 0 16px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--cyan) 34%, transparent);
+  border-radius: 18px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .2);
+}
+
+.discoverProgressiveLoad div,
+.discoverProgressiveLoad strong,
+.discoverProgressiveLoad small {
+  display: block;
+}
+
+.discoverProgressiveLoad small {
+  margin-top: 3px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.discoverProgressivePulse {
+  flex: 0 0 auto;
+  width: 17px;
+  height: 17px;
+  border: 3px solid color-mix(in srgb, var(--cyan) 26%, transparent);
+  border-top-color: var(--cyan);
+  border-radius: 50%;
+  animation: discoverProgressiveSpin .75s linear infinite;
+}
+
+@keyframes discoverProgressiveSpin {
+  to { transform: rotate(360deg); }
+}
+
 @media (max-width: 760px) {
   html {
     overscroll-behavior-y: none;
@@ -435,5 +477,363 @@
 
   .mobileMoreGrid {
     grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Android phone layout — keep hero content and cards in the document flow. */
+@media (max-width: 760px) {
+  .homeV3Hero {
+    box-sizing: border-box;
+    min-height: 0 !important;
+    height: auto !important;
+    display: flex !important;
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: 14px;
+    padding: 24px 20px 20px;
+  }
+
+  .homeV3HeroCopy {
+    position: relative !important;
+    inset: auto !important;
+    z-index: 3;
+    width: 100% !important;
+    max-width: none !important;
+    padding: 0 !important;
+  }
+
+  .homeV3HeroActions {
+    gap: 9px;
+    margin-top: 16px;
+  }
+
+  .homeV3HeroActions button {
+    min-height: 44px;
+    padding: 9px 12px;
+  }
+
+  .homeV3HeroStats {
+    position: relative !important;
+    inset: auto !important;
+    z-index: 3;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 9px !important;
+  }
+
+  .homeV3StatPill {
+    min-width: 0;
+    min-height: 70px;
+    padding: 10px 11px;
+    column-gap: 9px;
+    border-radius: 14px;
+  }
+
+  .homeV3StatIcon {
+    font-size: 19px;
+  }
+
+  .homeV3StatPill strong {
+    font-size: 19px;
+  }
+
+  .homeV3StatPill small {
+    min-width: 0;
+    font-size: 10px;
+    line-height: 1.15;
+  }
+
+  .posterGrid.libraryPosterGrid {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    justify-content: stretch !important;
+    align-items: start;
+    gap: 10px !important;
+  }
+
+  .posterGrid.libraryPosterGrid > .animeCard {
+    width: 100% !important;
+    min-width: 0 !important;
+    height: auto !important;
+    min-height: 0 !important;
+    aspect-ratio: 2 / 3;
+    border-radius: 15px;
+  }
+
+  .libraryPosterGrid .cardInfo {
+    padding: 10px !important;
+    transform: none !important;
+  }
+
+  .libraryPosterGrid .cardInfo h3 {
+    display: -webkit-box;
+    margin: 0 0 5px !important;
+    overflow: hidden;
+    font-size: 14px !important;
+    line-height: 1.12 !important;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+  }
+
+  .libraryPosterGrid .metaPills {
+    gap: 4px;
+  }
+
+  .libraryPosterGrid .metaPills span {
+    padding: 3px 6px;
+    font-size: 9px;
+  }
+
+  .libraryPosterGrid .rankRibbon,
+  .libraryPosterGrid .scoreBadge {
+    top: 7px !important;
+    padding: 5px 7px;
+    font-size: 10px;
+  }
+
+  .libraryPosterGrid .rankRibbon {
+    left: 7px !important;
+  }
+
+  .libraryPosterGrid .scoreBadge {
+    right: 7px !important;
+  }
+
+  .libraryPosterGrid .favoriteButton {
+    top: 39px !important;
+    right: 7px !important;
+    width: 36px;
+    height: 36px;
+  }
+}
+
+/* Small tablets get an extra library column without changing desktop layouts. */
+@media (min-width: 560px) and (max-width: 760px) {
+  .posterGrid.libraryPosterGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+}
+
+/* JoeAI on phones: compact the cinematic hero and use one natural page scroll. */
+@media (max-width: 760px) {
+  .joeAICommandCenter {
+    gap: 12px;
+    padding-bottom: calc(82px + env(safe-area-inset-bottom));
+  }
+
+  .joeAICommandCenter .joeAIHero {
+    min-height: 0 !important;
+    height: auto !important;
+    display: flex !important;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 18px 14px 14px;
+  }
+
+  /* Recompose the landscape theme art instead of simply shrinking the desktop crop. */
+  .joeAICommandCenter .joeAIHero::before {
+    background-image:
+      linear-gradient(
+        180deg,
+        rgba(2, 7, 14, .74) 0%,
+        rgba(2, 7, 14, .58) 45%,
+        rgba(2, 7, 14, .86) 100%
+      ),
+      var(--joeai-hero-image) !important;
+    background-position:
+      center,
+      var(--mobile-theme-art-x, 60%) center !important;
+    background-size:
+      100% 100%,
+      auto max(100%, 440px) !important;
+  }
+
+  .joeAICommandCenter .joeAIHeroCopy {
+    width: 100% !important;
+    padding: 0 !important;
+  }
+
+  .joeAICommandCenter .joeAIHeroTitle {
+    gap: 10px;
+    margin-bottom: 13px;
+  }
+
+  .joeAICommandCenter .joeAIHeroIcon {
+    width: 40px;
+    height: 40px;
+    border-radius: 13px;
+    font-size: 21px;
+  }
+
+  .joeAICommandCenter .joeAIHeroTitle h1 {
+    font-size: 30px;
+  }
+
+  .joeAICommandCenter .joeAIHeroCopy > h2 {
+    max-width: 330px;
+    margin: 8px 0 10px;
+    font-size: clamp(30px, 9vw, 38px) !important;
+    line-height: 1;
+  }
+
+  .joeAICommandCenter .joeAIHeroBody {
+    max-width: 340px;
+    margin-top: 0;
+    font-size: 15px;
+    line-height: 1.48;
+  }
+
+  .joeAICommandCenter .joeAIAnalysisLink {
+    margin-top: 12px;
+    min-height: 38px;
+    text-align: left;
+  }
+
+  /* The themed background already supplies the art; this grid cell only added height. */
+  .joeAICommandCenter .joeAIHeroBrain {
+    display: none !important;
+  }
+
+  .joeAICommandCenter .joeAIHeroStats {
+    position: relative !important;
+    inset: auto !important;
+    order: 3;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 2px 0 0 !important;
+    padding: 7px !important;
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 6px !important;
+    border-radius: 16px;
+  }
+
+  .joeAICommandCenter .joeAIHeroStats > div {
+    min-width: 0;
+    min-height: 76px !important;
+    padding: 8px 3px !important;
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    grid-template-areas: "icon" "value" "label" !important;
+    place-items: center;
+    gap: 2px !important;
+    border-radius: 12px;
+    text-align: center;
+  }
+
+  .joeAICommandCenter .joeAIHeroStats span {
+    font-size: 16px !important;
+  }
+
+  .joeAICommandCenter .joeAIHeroStats strong {
+    font-size: 18px !important;
+    line-height: 1;
+  }
+
+  .joeAICommandCenter .joeAIHeroStats small {
+    overflow-wrap: anywhere;
+    font-size: clamp(7.5px, 2.15vw, 9px) !important;
+    line-height: 1.15;
+    letter-spacing: .05em;
+  }
+
+  /* Remove the desktop scroll-within-a-scroll. Swipes over cards now move the page. */
+  .joeAICommandCenter .joeAIChatShell {
+    min-height: 0 !important;
+    height: auto !important;
+    max-height: none !important;
+    display: flex !important;
+    flex-direction: column;
+    overflow: visible !important;
+    padding: 14px;
+  }
+
+  .joeAICommandCenter .joeAIConversation {
+    min-height: 0 !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    overscroll-behavior: auto !important;
+    touch-action: pan-y;
+    padding: 10px;
+  }
+
+  .joeAICommandCenter .joeAIConversation .chat {
+    max-width: 100%;
+  }
+
+  .joeAICommandCenter .joeAIComposer {
+    position: static !important;
+    margin-top: 10px;
+  }
+}
+
+/* Give the same composition a little more breathing room on small tablets. */
+@media (min-width: 520px) and (max-width: 760px) {
+  .joeAICommandCenter .joeAIHero {
+    padding: 24px 22px 18px;
+  }
+
+  .joeAICommandCenter .joeAIHeroCopy > h2,
+  .joeAICommandCenter .joeAIHeroBody {
+    max-width: 470px;
+  }
+
+  .joeAICommandCenter .joeAIHeroStats > div {
+    min-height: 84px !important;
+  }
+}
+
+/* Android tablet landscape: use the available shelf width instead of
+   leaving the Library at desktop's oversized three-card composition. */
+@media (min-width: 1051px) and (max-width: 1500px) and (orientation: landscape) {
+  body.platform-android .posterGrid.libraryPosterGrid {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    justify-content: stretch !important;
+    gap: 14px !important;
+  }
+
+  body.platform-android .posterGrid.libraryPosterGrid > .animeCard {
+    width: 100% !important;
+    min-width: 0 !important;
+    height: auto !important;
+    aspect-ratio: 2 / 3;
+  }
+}
+
+/* Library-only tablet heading polish. Its desktop rule uses weight 1000,
+   very tight tracking, a stroke, and stacked shadows; together those make
+   the word look chunky in Android WebView. Other page titles stay untouched. */
+@media (min-width: 761px) and (max-width: 1500px) {
+  body.platform-android .libraryArchiveHeroLive:not(.favoritesArchiveHero) h1 {
+    display: inline-block !important;
+    width: fit-content !important;
+    max-width: 100%;
+    margin: 0 !important;
+    font-family: Inter, "Segoe UI", system-ui, sans-serif !important;
+    font-size: clamp(3rem, 4.8vw, 4.25rem) !important;
+    font-weight: 800 !important;
+    line-height: 1 !important;
+    letter-spacing: -.02em !important;
+    text-wrap: balance;
+    color: transparent !important;
+    background: var(
+      --library-title-gradient,
+      linear-gradient(100deg, #35efff, #aa72ff 58%, #ff5cc8)
+    ) !important;
+    background-clip: text !important;
+    -webkit-background-clip: text !important;
+    -webkit-text-fill-color: transparent !important;
+    -webkit-text-stroke: 0 transparent !important;
+    text-shadow: none !important;
+    filter:
+      drop-shadow(0 3px 8px rgba(0, 0, 0, .72))
+      drop-shadow(0 0 10px color-mix(in srgb, var(--cyan) 18%, transparent)) !important;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: geometricPrecision;
   }
 }

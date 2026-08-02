@@ -21,7 +21,12 @@ The APK is written to:
 android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-On Windows, run the sync first and use the Gradle wrapper directly:
+Android's `versionName` and monotonically increasing `versionCode` are derived
+from the root `package.json`, so bump the package version before each APK build.
+
+The npm command works on Windows, Linux, and macOS even when an archive has
+removed the executable bit from `android/gradlew`. To invoke Gradle manually on
+Windows, run the sync first and use the Windows wrapper:
 
 ```powershell
 npm run android:sync
@@ -30,6 +35,11 @@ cd android
 ```
 
 The `Android Debug APK` GitHub Actions workflow performs the same build and uploads the APK as a temporary workflow artifact.
+
+> Debug APKs produced by different computers or fresh CI runners may use
+> different signing keys and therefore may not install over one another. Use a
+> single private release keystore before distributing updateable Android betas;
+> otherwise testers may have to uninstall the old APK and lose local app data.
 
 ## Runtime boundaries
 

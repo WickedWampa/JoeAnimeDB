@@ -27,6 +27,7 @@ import { Poster } from '../components/Poster';
 import { sameAnimeIdentity } from '../services/titleIdentity';
 import { classifyAnimeRelease } from '../services/releaseState';
 import { buildDiscoverPlan } from '../services/recommendationEngineV3';
+import { isNativeAndroid } from '../platform/runtime';
 import {
   applyLearnedSignals,
   hasSavedTitleDistinction,
@@ -250,6 +251,7 @@ function identityKeys(item = {}) {
 
 const LIVE_DISCOVER_CACHE_KEY = 'joeanime-live-discover-cache-v1';
 const LIVE_DISCOVER_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const DISCOVER_FINAL_STAGE = 4;
 
 function readLiveDiscoverCacheSnapshot() {
   try {
@@ -941,7 +943,14 @@ function DiscoverPage({
   fetchMoreCatalogTitles,
   refreshLiveDiscover
 }) {
+  const mobileDiscover = useRef(isNativeAndroid()).current;
   const initialLiveCache = useRef(readLiveDiscoverCacheSnapshot()).current;
+  const [renderStage, setRenderStage] = useState(0);
+  const [showDesktopProgress, setShowDesktopProgress] = useState(false);
+  const catalogStageReady = renderStage >= 1;
+  const engineStageReady = renderStage >= 2;
+  const discoverReady = renderStage >= DISCOVER_FINAL_STAGE;
+  const lastCatalogSyncedRef = useRef(null);
   const [catalogBrowser, setCatalogBrowser] = useState(null);
   const [addingKey, setAddingKey] = useState('');
   const [fetchingMore, setFetchingMore] = useState(false);
@@ -963,7 +972,60 @@ function DiscoverPage({
     );
   });
 
+  // Paint the hero and page foundation before creating the catalog engine and
+  // poster shelves. Android gets wider breathing room between stages; desktop
+  // advances quickly but still yields between each group so the first visit
+  // feels immediate. Desktop remains mounted by App.jsx after this finishes.
   useEffect(() => {
+    if (renderStage >= DISCOVER_FINAL_STAGE) {
+      return undefined;
+    }
+
+    let idleHandle = null;
+    const timeoutHandle = window.setTimeout(() => {
+      const advance = () => {
+        setRenderStage((current) =>
+          Math.min(current + 1, DISCOVER_FINAL_STAGE)
+        );
+      };
+
+      if (typeof window.requestIdleCallback === 'function') {
+        idleHandle = window.requestIdleCallback(advance, { timeout: 350 });
+      } else {
+        advance();
+      }
+    }, mobileDiscover
+      ? (renderStage === 0 ? 70 : 140)
+      : (renderStage === 0 ? 24 : 55));
+
+    return () => {
+      window.clearTimeout(timeoutHandle);
+      if (idleHandle !== null && typeof window.cancelIdleCallback === 'function') {
+        window.cancelIdleCallback(idleHandle);
+      }
+    };
+  }, [mobileDiscover, renderStage]);
+
+  // The desktop stages normally finish before a status card would help. Only
+  // reveal it when loading lasts long enough to be perceived; Android keeps
+  // the immediate progress feedback that works well on smaller devices.
+  useEffect(() => {
+    if (mobileDiscover || discoverReady) {
+      setShowDesktopProgress(false);
+      return undefined;
+    }
+
+    const timeoutHandle = window.setTimeout(() => {
+      setShowDesktopProgress(true);
+    }, 260);
+
+    return () => window.clearTimeout(timeoutHandle);
+  }, [discoverReady, mobileDiscover]);
+
+  useEffect(() => {
+    if (!catalogStageReady || lastCatalogSyncedRef.current === catalog) return;
+    lastCatalogSyncedRef.current = catalog;
+
     const tagged = (catalog || []).filter((item) =>
       item?.discoverBucket === 'current' ||
       item?.discoverBucket === 'upcoming'
@@ -980,10 +1042,11 @@ function DiscoverPage({
         current === 'idle' || current === 'cached' ? 'cached' : current
       );
     }
-  }, [catalog]);
+  }, [catalog, catalogStageReady]);
 
   useEffect(() => {
     if (!refreshLiveDiscover) return;
+    if (!discoverReady) return;
     if (liveDiscoverCacheIsFresh()) return;
 
     const lastSync = new Date(
@@ -994,7 +1057,7 @@ function DiscoverPage({
     if (!Number.isFinite(lastSync) || Date.now() - lastSync > oneDay) {
       void refreshLive();
     }
-  }, []);
+  }, [discoverReady, refreshLiveDiscover]);
 
   const libraryLookup = useMemo(() => {
     const kitsuIds = new Set();
@@ -1002,6 +1065,10 @@ function DiscoverPage({
     const allFingerprints = new Set();
     const legacyFingerprints = new Set();
     const legacyTitles = [];
+
+    if (!catalogStageReady) {
+      return { kitsuIds, malIds, allFingerprints, legacyFingerprints, legacyTitles };
+    }
 
     anime.forEach((item) => {
       const kitsuId = item.kitsuId || item.kitsu_id;
@@ -1022,9 +1089,11 @@ function DiscoverPage({
     });
 
     return { kitsuIds, malIds, allFingerprints, legacyFingerprints, legacyTitles };
-  }, [anime]);
+  }, [anime, catalogStageReady]);
 
   const discoverCatalog = useMemo(() => {
+    if (!catalogStageReady) return [];
+
     const validLiveCatalog = (liveCatalog || []).filter(isValidCatalogEntry);
 
     const overlaid = (catalog || [])
@@ -1042,9 +1111,11 @@ function DiscoverPage({
     );
 
     return uniqueCatalog([...overlaid, ...missingLiveRows]);
-  }, [catalog, liveCatalog]);
+  }, [catalog, liveCatalog, catalogStageReady]);
 
   const unseenCatalog = useMemo(() => {
+    if (!catalogStageReady) return [];
+
     const validCatalog = uniqueCatalog(
       (discoverCatalog || []).filter((item) => item && titleOf(item))
     );
@@ -1100,7 +1171,7 @@ function DiscoverPage({
         )
       );
     });
-  }, [discoverCatalog, joeAIState, libraryLookup]);
+  }, [discoverCatalog, joeAIState, libraryLookup, catalogStageReady]);
 
   const airingNow = useMemo(
     () => [...unseenCatalog]
@@ -1126,71 +1197,6 @@ function DiscoverPage({
     [unseenCatalog]
   );
 
-  const highestRated = useMemo(
-    () => [...unseenCatalog]
-      .filter((item) => numericScore(item) > 0)
-      .sort((a, b) => numericScore(b) - numericScore(a))
-      .slice(0, 24),
-    [unseenCatalog]
-  );
-
-  const hiddenGems = useMemo(
-    () => [...unseenCatalog]
-      .filter((item) => {
-        const members = memberCount(item);
-        const popularityRank = Number(item.popularity || 0);
-
-        const hasAudienceData = members > 0 || popularityRank > 0;
-        const genuinelyLessPopular =
-          (members > 0 && members < 80000) ||
-          (members <= 0 && popularityRank >= 1500);
-
-        return (
-          hasAudienceData &&
-          genuinelyLessPopular &&
-          numericScore(item) >= 7.2
-        );
-      })
-      .sort((a, b) => {
-        const scoreDifference = numericScore(b) - numericScore(a);
-        if (scoreDifference !== 0) return scoreDifference;
-
-        return memberCount(a) - memberCount(b);
-      })
-      .slice(0, 24),
-    [unseenCatalog]
-  );
-
-  const joeAIPicks = useMemo(() => {
-    const genreWeights = {};
-    const studioWeights = {};
-
-    anime.forEach((item) => {
-      const personal = Number(item.joeScore ?? item.rating ?? item.finalScore ?? 0);
-      const weight = personal >= 9 ? 5 : personal >= 8 ? 3 : personal > 0 ? 1.5 : 0.5;
-
-      (item.genres || []).forEach((genre) => {
-        genreWeights[genre] = (genreWeights[genre] || 0) + weight;
-      });
-
-      if (item.studio) {
-        studioWeights[item.studio] = (studioWeights[item.studio] || 0) + weight;
-      }
-    });
-
-    return [...unseenCatalog]
-      .map((item) => ({
-        item,
-        value:
-          (item.genres || []).reduce((sum, genre) => sum + (genreWeights[genre] || 0), 0) * 3 +
-          (studioWeights[item.studio] || 0) * 2 +
-          numericScore(item) * 1.5
-      }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 24)
-      .map((entry) => entry.item);
-  }, [anime, unseenCatalog]);
-
   const genres = useMemo(() => {
     const counts = new Map();
     unseenCatalog.forEach((item) => (item.genres || []).forEach((genre) => counts.set(genre, (counts.get(genre) || 0) + 1)));
@@ -1206,19 +1212,38 @@ function DiscoverPage({
     return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
   }, [unseenCatalog]);
 
-  const engineV3 = useMemo(() => buildDiscoverPlan({
-    library: anime,
-    candidates: unseenCatalog,
-    daySeed: daySeed(),
-    joeAIState
-  }), [anime, unseenCatalog, joeAIState]);
+  const engineV3 = useMemo(() => {
+    if (!engineStageReady) return null;
 
-  const dailyPick = engineV3.dailyPick;
-  const primaryAnchor = engineV3.anchor;
-  const topStudioName = engineV3.topStudio;
+    return buildDiscoverPlan({
+      library: anime,
+      candidates: unseenCatalog,
+      daySeed: daySeed(),
+      joeAIState
+    });
+  }, [anime, unseenCatalog, joeAIState, engineStageReady]);
+
+  const dailyPick = engineV3?.dailyPick;
+  const primaryAnchor = engineV3?.anchor;
+  const topStudioName = engineV3?.topStudio;
   const topStudioDisplay = studios.find(([name]) => name.toLowerCase() === topStudioName)?.[0] || topStudioName || 'Studio';
 
   const recommendationPlan = useMemo(() => {
+    if (!engineV3) {
+      return {
+        airingNow,
+        comingSoon,
+        becauseYouLoved: [],
+        joeAIPicks: [],
+        highestRated: [],
+        hiddenGems: [],
+        mindBenders: [],
+        emotionalDamage: [],
+        movieNight: [],
+        studioSpotlight: []
+      };
+    }
+
     const claimed = [];
     const claimUnique = (items = []) => items.filter((item) => {
       const alreadyClaimed = claimed.some((candidate) => (
@@ -1249,7 +1274,7 @@ function DiscoverPage({
       movieNight: claimUnique(engineV3.movieNight),
       studioSpotlight: claimUnique(engineV3.studioSpotlight)
     };
-  }, [engineV3]);
+  }, [airingNow, comingSoon, engineV3]);
 
   async function saveDiscoverFeedback(
     item,
@@ -1500,7 +1525,7 @@ function DiscoverPage({
   }
 
   function surpriseMe(mode = 'safe') {
-    const pool = engineV3.surprisePools?.[mode] || [];
+    const pool = engineV3?.surprisePools?.[mode] || [];
     if (!pool.length) {
       setCatalogMessage('JoeAI does not have enough matching catalog data for that surprise mode yet.');
       return;
@@ -1526,6 +1551,8 @@ function DiscoverPage({
   function browse(type = 'all', value = 'Entire Catalog') {
     setCatalogBrowser({ type, value });
   }
+
+  const stageReady = (stage) => renderStage >= stage;
 
   return (
     <section className="discoverPage">
@@ -1603,11 +1630,26 @@ function DiscoverPage({
         </div>
 
         <div className="discoverHeroStats">
-          <span><strong>{unseenCatalog.length}</strong>Unseen Titles</span>
-          <span><strong>{genres.length}</strong>Genres</span>
-          <span><strong>{studios.length}</strong>Studios</span>
+          <span><strong>{stageReady(1) ? unseenCatalog.length : '…'}</strong>Unseen Titles</span>
+          <span><strong>{stageReady(1) ? genres.length : '…'}</strong>Genres</span>
+          <span><strong>{stageReady(1) ? studios.length : '…'}</strong>Studios</span>
         </div>
       </section>
+
+      {(mobileDiscover || showDesktopProgress) && !stageReady(DISCOVER_FINAL_STAGE) && (
+        <div className="discoverProgressiveLoad" role="status" aria-live="polite">
+          <span className="discoverProgressivePulse" />
+          <div>
+            <strong>
+              {renderStage === 0 && 'Opening Discover…'}
+              {renderStage === 1 && 'Loading current and upcoming anime…'}
+              {renderStage === 2 && 'Building your JoeAI matches…'}
+              {renderStage === 3 && 'Finishing the recommendation shelves…'}
+            </strong>
+            <small>Cached data is being added in stages to keep navigation responsive.</small>
+          </div>
+        </div>
+      )}
 
       {hubMode !== 'recommendations' && (
         <LiveDiscoverBrowser
@@ -1625,6 +1667,7 @@ function DiscoverPage({
       )}
 
       {hubMode === 'recommendations' && (<>
+      {stageReady(1) && (<>
       <Shelf
         icon={<Radio />}
         title="Airing Now"
@@ -1650,8 +1693,9 @@ function DiscoverPage({
         addingKey={addingKey}
         onBrowse={() => browse('all', 'Entire Catalog')}
       />
+      </>)}
 
-      {dailyPick && (
+      {stageReady(2) && dailyPick && (
         <section className="dailyPickHero">
           <div className="dailyPickBackdrop">
             <Poster anime={dailyPick.item} className="dailyPickBackdropPoster" mode="thumb" />
@@ -1730,7 +1774,7 @@ function DiscoverPage({
         </section>
       )}
 
-      {primaryAnchor && recommendationPlan.becauseYouLoved.length > 0 && (
+      {stageReady(2) && primaryAnchor && recommendationPlan.becauseYouLoved.length > 0 && (
         <Shelf
           icon={<Heart />}
           title={`Because You Loved ${titleOf(primaryAnchor)}`}
@@ -1745,7 +1789,7 @@ function DiscoverPage({
         />
       )}
 
-      <Shelf
+      {stageReady(2) && <Shelf
         icon={<Sparkles />}
         title="JoeAI Picks"
         subtitle={anime.length
@@ -1758,9 +1802,9 @@ function DiscoverPage({
         onRecommendationFeedback={saveDiscoverFeedback}
         addingKey={addingKey}
         onBrowse={() => browse('all', 'JoeAI Picks')}
-      />
+      />}
 
-      <Shelf
+      {stageReady(3) && <Shelf
         icon={<Trophy />}
         title="Highest Rated"
         subtitle="Top community-rated anime you have not added yet."
@@ -1771,9 +1815,9 @@ function DiscoverPage({
         onRecommendationFeedback={saveDiscoverFeedback}
         addingKey={addingKey}
         onBrowse={() => browse('all', 'Entire Catalog')}
-      />
+      />}
 
-      <Shelf
+      {stageReady(3) && <Shelf
         icon={<Gem />}
         title="Hidden Gems"
         subtitle="Well-rated titles with a genuinely smaller audience."
@@ -1784,9 +1828,9 @@ function DiscoverPage({
         onRecommendationFeedback={saveDiscoverFeedback}
         addingKey={addingKey}
         onBrowse={() => browse('hidden', 'Hidden Gems')}
-      />
+      />}
 
-      <Shelf
+      {stageReady(3) && <Shelf
         icon={<Brain />}
         title="Mind Melters"
         subtitle="Psychological, mystery, supernatural, and sci-fi picks that make you work for it."
@@ -1797,9 +1841,9 @@ function DiscoverPage({
         onRecommendationFeedback={saveDiscoverFeedback}
         addingKey={addingKey}
         onBrowse={() => browse('genre', 'Psychological')}
-      />
+      />}
 
-      <Shelf
+      {stageReady(4) && <Shelf
         icon={<Flame />}
         title="Prepare for Emotional Damage"
         subtitle="Drama-heavy picks for when apparently feeling okay was getting boring."
@@ -1810,9 +1854,9 @@ function DiscoverPage({
         onRecommendationFeedback={saveDiscoverFeedback}
         addingKey={addingKey}
         onBrowse={() => browse('genre', 'Drama')}
-      />
+      />}
 
-      <Shelf
+      {stageReady(4) && <Shelf
         icon={<Film />}
         title="Movie Night"
         subtitle="Highly rated unseen anime movies from your catalog."
@@ -1823,9 +1867,9 @@ function DiscoverPage({
         onRecommendationFeedback={saveDiscoverFeedback}
         addingKey={addingKey}
         onBrowse={() => browse('all', 'Entire Catalog')}
-      />
+      />}
 
-      {recommendationPlan.studioSpotlight.length > 0 && (
+      {stageReady(4) && recommendationPlan.studioSpotlight.length > 0 && (
         <Shelf
           icon={<Building2 />}
           title={`${topStudioDisplay} Spotlight`}
@@ -1840,7 +1884,7 @@ function DiscoverPage({
         />
       )}
 
-      <section className="discoverCollections compact">
+      {stageReady(4) && <section className="discoverCollections compact">
         <article>
           <div className="discoverCollectionHeader">
             <h2><Building2 /> Browse Studios</h2>
@@ -1870,9 +1914,9 @@ function DiscoverPage({
             ))}
           </div>
         </article>
-      </section>
+      </section>}
 
-      {!unseenCatalog.length && (
+      {stageReady(1) && !unseenCatalog.length && (
         <section className="discoverEmptyState">
           <h2>Discover is waiting for unseen catalog titles.</h2>
           <p>Run Update Database to build the recommendation catalog.</p>

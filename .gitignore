@@ -10,4 +10,11 @@ JoeAnime.db
 dist-desktop/
 
 # Temporary genome files
-.tmp*
+.tmp**.apk
+*.aab
+*.jks
+*.keystore
+*.apk
+*.lnk
+.tmp-genome-library.json
+.idea/

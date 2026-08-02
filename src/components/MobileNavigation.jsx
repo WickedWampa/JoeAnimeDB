@@ -105,7 +105,7 @@ export function MobileNavigation({ view, setView, followingCount = 0 }) {
         <MobileNavButton
           item={{ id: 'more', label: 'More', icon: Menu }}
           active={moreOpen || moreActive}
-          onClick={() => setMoreOpen((open) => !open)}
+          onClick={() => setMoreOpen(true)}
         />
       </nav>
     </>

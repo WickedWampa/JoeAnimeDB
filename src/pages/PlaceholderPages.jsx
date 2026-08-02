@@ -3229,6 +3229,11 @@ export function SettingsPage({
 
     try {
       const summary = await syncMetadata?.();
+      if (summary === false) {
+        setGenomeUpdateStatus('Update canceled.');
+        return;
+      }
+
       if (summary) {
         setLastUpdateSummary(summary);
         try {
