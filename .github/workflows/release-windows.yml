@@ -1,4 +1,4 @@
-name: Release Desktop Builds
+name: Release JoeAnimeDB Builds
 
 on:
   push:
@@ -195,3 +195,78 @@ jobs:
           gh release upload "$RELEASE_TAG" "${assets[@]}" \
             --repo "$GITHUB_REPOSITORY" \
             --clobber
+
+  release-android:
+    name: Release Android APK
+    needs: release-windows
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: npm
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK 36
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Resolve release version
+        shell: bash
+        run: |
+          package_version="$(node -p "require('./package.json').version")"
+          expected_tag="v${package_version}"
+          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref_name }}" != "${expected_tag}" ]]; then
+            echo "Tag ${{ github.ref_name }} does not match package.json version ${package_version}. Expected ${expected_tag}." >&2
+            exit 1
+          fi
+          echo "RELEASE_VERSION=${package_version}" >> "$GITHUB_ENV"
+          echo "RELEASE_TAG=${expected_tag}" >> "$GITHUB_ENV"
+
+      - name: Install dependencies
+        run: npm ci --include=dev --no-audit --no-fund
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x android/gradlew
+
+      - name: Sync Android project
+        run: npm run android:sync
+
+      - name: Build Android APK
+        run: npm run android:debug
+
+      - name: Prepare Android release asset
+        shell: bash
+        run: |
+          source_apk="android/app/build/outputs/apk/debug/app-debug.apk"
+          release_apk="JoeAnimeDB-${RELEASE_VERSION}-Android.apk"
+          if [[ ! -f "$source_apk" ]]; then
+            echo "Android APK was not generated: $source_apk" >&2
+            exit 1
+          fi
+          cp "$source_apk" "$release_apk"
+          echo "ANDROID_RELEASE_APK=$release_apk" >> "$GITHUB_ENV"
+
+      - name: Publish Android release asset
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "$RELEASE_TAG" "$ANDROID_RELEASE_APK" \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber
+
