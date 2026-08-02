@@ -21,7 +21,7 @@
     "release:linux": "npm run build && electron-builder --linux AppImage --x64 --publish always",
     "android:sync": "npm run build && cap sync android",
     "android:open": "cap open android",
-    "android:debug": "npm run android:sync && cd android && ./gradlew assembleDebug",
+    "android:debug": "node scripts/buildAndroidDebug.cjs",
     "android:apk": "npm run android:debug"
   },
   "dependencies": {
