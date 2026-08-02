@@ -20,6 +20,7 @@ import './styles/update-notification.css';
 import React, { useEffect, useMemo, useState } from 'react';
 
 import { Sidebar } from './components/Sidebar';
+import { MobileNavigation } from './components/MobileNavigation';
 import { SearchBar } from './components/SearchBar';
 import { DetailModal } from './components/DetailModal';
 import { FirstTimeOnboarding, OnboardingPageTip } from './components/FirstTimeOnboarding';
@@ -43,6 +44,7 @@ import {
   readOnboardingState,
   updateOnboardingStep
 } from './services/onboardingState';
+import { installAndroidBackHandler } from './platform/runtime';
 
 const UPDATE_THEME_APPEARANCE = {
   neon: { icon: '⚡', label: 'Neon Signal' },
@@ -92,9 +94,62 @@ function UpdateProgressOverlay({ syncText, syncProgress, theme = 'neon' }) {
   );
 }
 
+function DatabaseUpdateConfirm({ open, theme = 'neon', onCancel, onConfirm }) {
+  const appearance = UPDATE_THEME_APPEARANCE[theme] || UPDATE_THEME_APPEARANCE.neon;
+
+  useEffect(() => {
+    if (!open) return undefined;
+
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') onCancel?.();
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [open, onCancel]);
+
+  if (!open) return null;
+
+  return (
+    <div className="updateConfirmOverlay" role="presentation" onClick={onCancel}>
+      <section
+        className="updateConfirmCard"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="database-update-title"
+        aria-describedby="database-update-description"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="updateConfirmGlow" aria-hidden="true" />
+        <p className="updateConfirmEyebrow">
+          <span aria-hidden="true">{appearance.icon}</span> {appearance.label}
+        </p>
+        <h2 id="database-update-title">Update the anime catalog?</h2>
+        <p id="database-update-description">
+          JoeAnimeDB will download public anime metadata and rebuild your recommendation catalog.
+        </p>
+
+        <div className="updateConfirmList" aria-label="Before you start">
+          <span><b aria-hidden="true">📶</b> Wi-Fi recommended. Mobile data may be used.</span>
+          <span><b aria-hidden="true">⏱</b> Usually takes a few minutes.</span>
+          <span className="updateConfirmWide"><b aria-hidden="true">📱</b> Keep JoeAnimeDB open until the progress bar finishes.</span>
+        </div>
+
+        <div className="updateConfirmActions">
+          <button type="button" onClick={onCancel}>Not Now</button>
+          <button type="button" className="primary" onClick={onConfirm} autoFocus>
+            Update Catalog
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function AppUpdateNotice({ status, onOpen, onDismiss }) {
   const state = status?.state || '';
   const version = status?.availableVersion || '';
+  const isAndroidUpdate = status?.platform === 'android';
 
   if (!['available', 'downloading', 'downloaded'].includes(state)) return null;
 
@@ -108,7 +163,9 @@ function AppUpdateNotice({ status, onOpen, onDismiss }) {
     ? 'Restart JoeAnimeDB to finish installing the update.'
     : state === 'downloading'
       ? `${Math.max(0, Math.min(100, Math.round(status?.percent || 0)))}% downloaded`
-      : 'A new desktop release is ready to download.';
+      : isAndroidUpdate
+        ? 'A new Android APK is ready to download.'
+        : 'A new desktop release is ready to download.';
 
   return (
     <aside className={`appUpdateNotice state-${state}`} role="status" aria-live="polite">
@@ -141,6 +198,7 @@ export function App() {
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [appUpdateStatus, setAppUpdateStatus] = useState(null);
   const [dismissedUpdateVersion, setDismissedUpdateVersion] = useState('');
+  const [databaseUpdateRequest, setDatabaseUpdateRequest] = useState(null);
   const [theme, setTheme] = useState(() => {
     try {
       return localStorage.getItem('joeanime-theme') || 'neon';
@@ -174,6 +232,36 @@ export function App() {
   } = library;
 
   useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+
+      // Most pages use the window scroll, but resetting the content element too
+      // keeps navigation correct if a platform shell gives it its own scroller.
+      document.querySelector('.content')?.scrollTo?.({
+        top: 0,
+        left: 0,
+        behavior: 'auto'
+      });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [view]);
+
+  useEffect(() => installAndroidBackHandler(() => {
+    if (selected) {
+      setSelected(null);
+      return true;
+    }
+
+    if (view !== 'dashboard') {
+      setView('dashboard');
+      return true;
+    }
+
+    return false;
+  }), [selected, view]);
+
+  useEffect(() => {
     const updates = window.JoeAnimeDB?.updates;
     if (!updates) return undefined;
 
@@ -202,6 +290,31 @@ export function App() {
       localStorage.setItem('joeanime-theme', nextTheme);
     } catch (error) {
       console.warn('Could not save theme preference:', error);
+    }
+  }
+
+  function requestDatabaseUpdate() {
+    if (syncing || databaseUpdateRequest) return Promise.resolve(false);
+
+    return new Promise((resolve, reject) => {
+      setDatabaseUpdateRequest({ resolve, reject });
+    });
+  }
+
+  function cancelDatabaseUpdate() {
+    databaseUpdateRequest?.resolve(false);
+    setDatabaseUpdateRequest(null);
+  }
+
+  async function confirmDatabaseUpdate() {
+    const request = databaseUpdateRequest;
+    setDatabaseUpdateRequest(null);
+
+    try {
+      const summary = await syncMetadata();
+      request?.resolve(summary);
+    } catch (error) {
+      request?.reject(error);
     }
   }
 
@@ -435,7 +548,13 @@ export function App() {
       <Sidebar
         view={view}
         setView={setView}
-        syncMetadata={syncMetadata}
+        syncMetadata={requestDatabaseUpdate}
+        followingCount={followingCount}
+      />
+
+      <MobileNavigation
+        view={view}
+        setView={setView}
         followingCount={followingCount}
       />
 
@@ -462,7 +581,7 @@ export function App() {
             <div className="viewModes">
               <button className={mode === 'poster' ? 'active' : ''} onClick={() => setMode('poster')}>Poster</button>
               <button className={mode === 'list' ? 'active' : ''} onClick={() => setMode('list')}>List</button>
-              <button onClick={syncMetadata}>Update Database</button>
+              <button onClick={requestDatabaseUpdate}>Update Database</button>
             </div>
           </header>
         )}
@@ -552,7 +671,7 @@ export function App() {
             anime={anime}
             updateData={updateData}
             setSelected={setSelected}
-            syncMetadata={syncMetadata}
+            syncMetadata={requestDatabaseUpdate}
             onBack={() => setView('settings')}
           />
         )}
@@ -560,7 +679,7 @@ export function App() {
           <SettingsPage
             data={data}
             updateAnime={handleUpdateAnime}
-            syncMetadata={syncMetadata}
+            syncMetadata={requestDatabaseUpdate}
             stats={stats}
             theme={theme}
             onThemeChange={handleThemeChange}
@@ -627,6 +746,12 @@ export function App() {
         onStepChange={handleOnboardingStep}
         onComplete={handleFinishOnboarding}
         onSkip={handleSkipOnboarding}
+      />
+      <DatabaseUpdateConfirm
+        open={Boolean(databaseUpdateRequest)}
+        theme={theme}
+        onCancel={cancelDatabaseUpdate}
+        onConfirm={confirmDatabaseUpdate}
       />
       {syncing && <UpdateProgressOverlay syncText={syncText} syncProgress={syncProgress} theme={theme} />}
     </main>

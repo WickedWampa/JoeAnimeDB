@@ -308,6 +308,15 @@
   font-weight: 900;
 }
 
+.updateConfirmList span b {
+  display: inline-block;
+  margin-right: 5px;
+}
+
+.updateConfirmList .updateConfirmWide {
+  grid-column: 1 / -1;
+}
+
 .updateConfirmActions {
   position: relative;
   display: flex;
@@ -342,9 +351,43 @@
   cursor: wait;
 }
 
+.theme-sakura .updateConfirmOverlay {
+  --sync-primary: #ffd1e8;
+  --sync-secondary: #ff7abf;
+  --sync-surface: rgba(34, 12, 27, .97);
+}
+
+.theme-vapor .updateConfirmOverlay {
+  --sync-primary: #7df9ff;
+  --sync-secondary: #b984ff;
+  --sync-surface: rgba(22, 10, 48, .97);
+}
+
+.theme-inferno .updateConfirmOverlay {
+  --sync-primary: #ffb703;
+  --sync-secondary: #ff4d6d;
+  --sync-surface: rgba(35, 9, 5, .97);
+}
+
+.theme-ramen .updateConfirmOverlay {
+  --sync-primary: #ffd166;
+  --sync-secondary: #ff8552;
+  --sync-surface: rgba(31, 20, 9, .97);
+}
+
+.theme-amoled .updateConfirmOverlay {
+  --sync-primary: #42f5ff;
+  --sync-secondary: #ff5cc8;
+  --sync-surface: rgba(0, 0, 0, .985);
+}
+
 @media (max-width: 620px) {
   .updateConfirmList {
     grid-template-columns: 1fr;
+  }
+
+  .updateConfirmList .updateConfirmWide {
+    grid-column: auto;
   }
 
   .updateConfirmActions {

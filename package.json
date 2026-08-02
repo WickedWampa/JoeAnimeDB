@@ -1,6 +1,6 @@
 {
   "name": "joeanime-db-4",
-  "version": "5.0.0-beta.10",
+  "version": "5.0.0-beta.11",
   "private": true,
   "description": "JoeAnimeDB desktop anime library powered by JoeAI",
   "author": "WickedWampa",
@@ -18,9 +18,20 @@
     "pack:portable": "npm run build && electron-builder --win portable",
     "pack:linux": "npm run build && electron-builder --linux AppImage --x64",
     "release:win": "npm run build && electron-builder --win nsis --publish always",
-    "release:linux": "npm run build && electron-builder --linux AppImage --x64 --publish always"
+    "release:linux": "npm run build && electron-builder --linux AppImage --x64 --publish always",
+    "android:sync": "npm run build && cap sync android",
+    "android:open": "cap open android",
+    "android:debug": "npm run android:sync && cd android && ./gradlew assembleDebug",
+    "android:apk": "npm run android:debug"
   },
   "dependencies": {
+    "@capacitor-community/sqlite": "^8.1.0",
+    "@capacitor/android": "^8.5.0",
+    "@capacitor/app": "^8.1.1",
+    "@capacitor/browser": "^8.0.4",
+    "@capacitor/core": "^8.5.0",
+    "@capacitor/filesystem": "^8.1.2",
+    "@capacitor/share": "^8.0.1",
     "@vitejs/plugin-react": "latest",
     "better-sqlite3": "^12.11.1",
     "concurrently": "latest",
@@ -34,6 +45,7 @@
     "wait-on": "latest"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.5.0",
     "electron": "latest",
     "electron-builder": "latest",
     "electron-rebuild": "^3.2.9"

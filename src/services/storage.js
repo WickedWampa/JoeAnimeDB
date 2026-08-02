@@ -1,3 +1,5 @@
+import { saveTextExport } from '../platform/fileExports';
+
 export const STORAGE_KEY = 'joeanime-db-4';
 
 export function loadData(seed) {
@@ -51,14 +53,44 @@ export function buildBackupPayload(data = {}) {
   };
 }
 
-export function exportBackup(data) {
-  const payload = buildBackupPayload(data);
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `JoeAnimeDB-5-backup-${new Date().toISOString().slice(0, 10)}.json`;
-  a.click();
-  URL.revokeObjectURL(a.href);
+function backupSnapshotWeight(snapshot = {}) {
+  const animeCount = Array.isArray(snapshot?.anime) ? snapshot.anime.length : 0;
+  const catalogCount = Array.isArray(snapshot?.catalog) ? snapshot.catalog.length : 0;
+  return (animeCount * 1000) + catalogCount;
+}
+
+async function resolveLiveBackupDatabase(data = {}) {
+  const currentSnapshot = data && typeof data === 'object' ? data : {};
+  const getDatabase = window.JoeAnimeDB?.database?.getDatabase;
+
+  if (typeof getDatabase !== 'function') return currentSnapshot;
+
+  try {
+    const liveSnapshot = await getDatabase();
+    if (!liveSnapshot || !Array.isArray(liveSnapshot.anime)) {
+      return currentSnapshot;
+    }
+
+    // Prefer the snapshot containing the most real records. This protects
+    // against a stale React seed snapshot in Settings without allowing an
+    // unexpectedly empty bridge response to replace valid in-memory data.
+    return backupSnapshotWeight(liveSnapshot) >= backupSnapshotWeight(currentSnapshot)
+      ? liveSnapshot
+      : currentSnapshot;
+  } catch (error) {
+    console.warn('Could not read the live database for backup; using the current app snapshot.', error);
+    return currentSnapshot;
+  }
+}
+
+export async function exportBackup(data) {
+  const database = await resolveLiveBackupDatabase(data);
+  const payload = buildBackupPayload(database);
+  await saveTextExport(
+    `JoeAnimeDB-5-backup-${new Date().toISOString().slice(0, 10)}.json`,
+    JSON.stringify(payload, null, 2),
+    'application/json'
+  );
 
   return payload;
 }
@@ -153,17 +185,7 @@ export function exportDiagnostics({
 }
 
 function downloadJson(filename, value) {
-  const blob = new Blob([JSON.stringify(value, null, 2)], {
-    type: 'application/json;charset=utf-8'
-  });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+  saveTextExport(filename, JSON.stringify(value, null, 2), 'application/json');
 }
 
 export function exportLibraryList(data = {}) {
@@ -398,13 +420,6 @@ export function buildMalXmlExport(data = {}) {
   const unresolved = [];
   const roundedScores = [];
   const animeXml = [];
-  const statusCounts = {
-    Watching: 0,
-    Completed: 0,
-    'On-Hold': 0,
-    Dropped: 0,
-    'Plan to Watch': 0
-  };
 
   sortedAnime(data).forEach((item) => {
     const title = String(item.officialTitle || item.title || 'Untitled anime').trim();
@@ -425,11 +440,27 @@ export function buildMalXmlExport(data = {}) {
       roundedScores.push({ title, from: scoreInfo.from, to: scoreInfo.to });
     }
 
-    const status = malStatus(firstDefined(item.status, item.watchStatus));
-    statusCounts[status] += 1;
     exported.push({ title, malId });
     animeXml.push(malAnimeXml(item, malId, scoreInfo));
   });
+
+  const completed = exported.filter(({ malId }) => {
+    const item = sortedAnime(data).find((row) => malIdFor(row) === malId);
+    return malStatus(firstDefined(item?.status, item?.watchStatus)) === 'Completed';
+  }).length;
+  const watching = exported.filter(({ malId }) => {
+    const item = sortedAnime(data).find((row) => malIdFor(row) === malId);
+    return malStatus(firstDefined(item?.status, item?.watchStatus)) === 'Watching';
+  }).length;
+  const onHold = exported.filter(({ malId }) => {
+    const item = sortedAnime(data).find((row) => malIdFor(row) === malId);
+    return malStatus(firstDefined(item?.status, item?.watchStatus)) === 'On-Hold';
+  }).length;
+  const dropped = exported.filter(({ malId }) => {
+    const item = sortedAnime(data).find((row) => malIdFor(row) === malId);
+    return malStatus(firstDefined(item?.status, item?.watchStatus)) === 'Dropped';
+  }).length;
+  const planned = Math.max(0, exported.length - completed - watching - onHold - dropped);
 
   const xml = [
     '<?xml version="1.0" encoding="UTF-8" ?>',
@@ -439,11 +470,11 @@ export function buildMalXmlExport(data = {}) {
     '    <user_name>JoeAnimeDB User</user_name>',
     '    <user_export_type>1</user_export_type>',
     `    <user_total_anime>${exported.length}</user_total_anime>`,
-    `    <user_total_watching>${statusCounts.Watching}</user_total_watching>`,
-    `    <user_total_completed>${statusCounts.Completed}</user_total_completed>`,
-    `    <user_total_onhold>${statusCounts['On-Hold']}</user_total_onhold>`,
-    `    <user_total_dropped>${statusCounts.Dropped}</user_total_dropped>`,
-    `    <user_total_plantowatch>${statusCounts['Plan to Watch']}</user_total_plantowatch>`,
+    `    <user_total_watching>${watching}</user_total_watching>`,
+    `    <user_total_completed>${completed}</user_total_completed>`,
+    `    <user_total_onhold>${onHold}</user_total_onhold>`,
+    `    <user_total_dropped>${dropped}</user_total_dropped>`,
+    `    <user_total_plantowatch>${planned}</user_total_plantowatch>`,
     '  </myinfo>',
     ...animeXml,
     '</myanimelist>',
@@ -459,21 +490,14 @@ export function exportMalCompatibleXml(data = {}, target = 'mal') {
 
   const destination = String(target).toLowerCase() === 'anilist' ? 'AniList' : 'MyAnimeList';
   const date = new Date().toISOString().slice(0, 10);
-  downloadText(
+  saveTextExport(
     `JoeAnimeDB-${destination}-export-${date}.xml`,
     report.xml,
-    'application/xml;charset=utf-8'
+    'application/xml'
   );
   return report;
 }
 
-function downloadText(filename, text, mimeType = "text/plain;charset=utf-8"){
-  const blob=new Blob([text],{type:mimeType});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement("a");
-  a.href=url;a.download=filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+function downloadText(filename, text){
+  saveTextExport(filename, text, 'text/plain');
 }
