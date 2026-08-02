@@ -1,5 +1,6 @@
 import { App as CapacitorApp } from '@capacitor/app';
 import { createMobileDatabaseAdapter } from './mobileDatabase';
+import { createMobileUpdateManager } from './mobileUpdates';
 import { isNativeAndroid, openExternalUrl } from './runtime';
 
 function markPlatform(platform) {
@@ -20,6 +21,7 @@ export async function initializePlatformBridge() {
 
   markPlatform('android');
   const info = await CapacitorApp.getInfo();
+  const updates = createMobileUpdateManager({ currentVersion: info.version });
 
   window.JoeAnimeDB = {
     version: info.version,
@@ -28,6 +30,7 @@ export async function initializePlatformBridge() {
     mobile: true,
     platform: 'android',
     database: createMobileDatabaseAdapter(),
+    updates,
     app: {
       getInfo: async () => ({
         name: info.name,
@@ -36,7 +39,7 @@ export async function initializePlatformBridge() {
         platform: 'android',
         packaged: true
       }),
-      openExternal: openExternalUrl
+      openExternal: async (url) => ({ ok: await openExternalUrl(url) })
     },
     storage: {
       getInfo: async () => ({
@@ -49,4 +52,6 @@ export async function initializePlatformBridge() {
       })
     }
   };
+
+  updates.start();
 }

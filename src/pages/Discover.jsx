@@ -929,7 +929,7 @@ function CatalogBrowser({
   );
 }
 
-export function Discover({
+function DiscoverPage({
   anime = [],
   catalog = [],
   setSelected,
@@ -1900,3 +1900,17 @@ export function Discover({
     </section>
   );
 }
+
+// Navigation state lives in App, so it changes whenever the user switches
+// pages. Ignore callback identity churn from those parent renders and only
+// rebuild Discover when its actual data changes. Internal state updates (live
+// refreshes, browsing, feedback, etc.) still render normally.
+function discoverDataIsEqual(previous, next) {
+  return (
+    previous.anime === next.anime
+    && previous.catalog === next.catalog
+    && previous.joeAIState === next.joeAIState
+  );
+}
+
+export const Discover = React.memo(DiscoverPage, discoverDataIsEqual);

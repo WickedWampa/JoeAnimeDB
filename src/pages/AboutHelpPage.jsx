@@ -27,7 +27,7 @@ import '../styles/about-help.css';
 const RELEASE_NOTES_URL = 'https://github.com/WickedWampa/JoeAnimeDB/releases';
 const KITSU_URL = 'https://kitsu.io/';
 const WIKIDATA_URL = 'https://www.wikidata.org/';
-const FALLBACK_VERSION = '5.0.0-beta.6';
+const FALLBACK_VERSION = '5.0.0-beta.10';
 
 function displayVersion(value = '') {
   const clean = String(value || '').trim().replace(/^v/i, '');
@@ -39,6 +39,7 @@ export function AboutHelpPage({
   stats,
   onReplayTutorial
 }) {
+  const isAndroid = window.JoeAnimeDB?.platform === 'android';
   const [systemInfo, setSystemInfo] = useState(null);
   const [providerHealth, setProviderHealth] = useState(null);
   const [checkingProviders, setCheckingProviders] = useState(false);
@@ -79,7 +80,7 @@ export function AboutHelpPage({
     if (!updates) {
       setUpdateStatus({
         state: 'unavailable',
-        message: 'Automatic updates are available in supported installed desktop builds.',
+        message: 'Automatic updates are unavailable in this build.',
         percent: 0
       });
       return undefined;
@@ -117,10 +118,11 @@ export function AboutHelpPage({
   );
 
   const buildLabel = useMemo(() => {
+    if (isAndroid) return `Android · build ${systemInfo?.build || window.JoeAnimeDB?.build || 'beta'}`;
     if (systemInfo?.packaged === false) return 'Development build';
     if (systemInfo?.architecture) return `Desktop · ${systemInfo.architecture}`;
     return 'Desktop Beta';
-  }, [systemInfo]);
+  }, [isAndroid, systemInfo]);
 
   async function openExternal(url) {
     try {
@@ -231,7 +233,7 @@ export function AboutHelpPage({
     const handler = actions[action];
 
     if (!handler || updateBusy) {
-      setStatus('Automatic updates are available in supported installed desktop builds.');
+      setStatus('Automatic updates are unavailable in this build.');
       return;
     }
 
@@ -246,7 +248,11 @@ export function AboutHelpPage({
       }
 
       if (action === 'check') setStatus('Update check started.');
-      if (action === 'download') setStatus('Update download started.');
+      if (action === 'download') {
+        setStatus(isAndroid
+          ? 'The APK download was opened. Tap the downloaded APK and approve the Android update.'
+          : 'Update download started.');
+      }
       if (action === 'install') setStatus('Restarting to install the update.');
     } catch (error) {
       setStatus(`Update failed: ${error?.message || String(error)}`);
@@ -273,7 +279,7 @@ export function AboutHelpPage({
     if (updateState === 'available') {
       return (
         <button type="button" onClick={() => runUpdateAction('download')} disabled={updateWorking}>
-          <Download /> Download {updateVersion ? `v${updateVersion}` : 'Update'}
+          <Download /> {isAndroid ? 'Download APK' : `Download ${updateVersion ? `v${updateVersion}` : 'Update'}`}
         </button>
       );
     }
@@ -454,7 +460,7 @@ export function AboutHelpPage({
           <Download />
         </div>
         <div className="aboutUpdateCopy">
-          <p>Desktop App Updates</p>
+          <p>{isAndroid ? 'Android App Updates' : 'Desktop App Updates'}</p>
           <h2>
             {updateState === 'downloaded'
               ? `v${updateVersion || 'Next'} is ready`
@@ -476,8 +482,9 @@ export function AboutHelpPage({
             </div>
           )}
           <small>
-            Update installs replace application files only. Your library and JoeAI data remain
-            in your local data folder.
+            {isAndroid
+              ? 'Android will ask you to approve the APK update. Your local library and JoeAI data remain in private app storage.'
+              : 'Update installs replace application files only. Your library and JoeAI data remain in your local data folder.'}
           </small>
         </div>
         <div className="aboutUpdateActions">

@@ -97,6 +97,7 @@ function UpdateProgressOverlay({ syncText, syncProgress, theme = 'neon' }) {
 function AppUpdateNotice({ status, onOpen, onDismiss }) {
   const state = status?.state || '';
   const version = status?.availableVersion || '';
+  const isAndroidUpdate = status?.platform === 'android';
 
   if (!['available', 'downloading', 'downloaded'].includes(state)) return null;
 
@@ -110,7 +111,9 @@ function AppUpdateNotice({ status, onOpen, onDismiss }) {
     ? 'Restart JoeAnimeDB to finish installing the update.'
     : state === 'downloading'
       ? `${Math.max(0, Math.min(100, Math.round(status?.percent || 0)))}% downloaded`
-      : 'A new desktop release is ready to download.';
+      : isAndroidUpdate
+        ? 'A new Android APK is ready to download.'
+        : 'A new desktop release is ready to download.';
 
   return (
     <aside className={`appUpdateNotice state-${state}`} role="status" aria-live="polite">
@@ -137,6 +140,10 @@ function AppUpdateNotice({ status, onOpen, onDismiss }) {
 
 export function App() {
   const [view, setView] = useState('dashboard');
+  // Discover is expensive to assemble (recommendation shelves, posters, and
+  // live catalog data). Mount it on first use, then keep it alive so switching
+  // away and back does not rebuild the entire page.
+  const [discoverMounted, setDiscoverMounted] = useState(false);
   const [selected, setSelected] = useState(null);
   const [mode, setMode] = useState('poster');
   const [onboardingState, setOnboardingState] = useState(() => readOnboardingState());
@@ -174,6 +181,10 @@ export function App() {
     deleteAnime, fetchMoreCatalogTitles, refreshLiveDiscover,
     restoreBackup, resetDatabase
   } = library;
+
+  useEffect(() => {
+    if (view === 'discover') setDiscoverMounted(true);
+  }, [view]);
 
   useEffect(() => installAndroidBackHandler(() => {
     if (selected) {
@@ -513,19 +524,25 @@ export function App() {
             title={view === 'rankings' ? 'Rankings' : 'Library'}
           />
         )}
-        {view === 'discover' && (
-          <Discover
-            anime={anime}
-            catalog={catalog}
-            setSelected={setSelected}
-            setView={setView}
-            updateAnime={handleUpdateAnime}
-            updateCatalogAnime={updateCatalogAnime}
-            joeAIState={joeAI}
-            onRecommendationFeedback={recordJoeAIFeedback}
-            fetchMoreCatalogTitles={fetchMoreCatalogTitles}
-            refreshLiveDiscover={refreshLiveDiscover}
-          />
+        {(discoverMounted || view === 'discover') && (
+          <div
+            className="discoverKeepAlive"
+            style={{ display: view === 'discover' ? 'contents' : 'none' }}
+            aria-hidden={view !== 'discover'}
+          >
+            <Discover
+              anime={anime}
+              catalog={catalog}
+              setSelected={setSelected}
+              setView={setView}
+              updateAnime={handleUpdateAnime}
+              updateCatalogAnime={updateCatalogAnime}
+              joeAIState={joeAI}
+              onRecommendationFeedback={recordJoeAIFeedback}
+              fetchMoreCatalogTitles={fetchMoreCatalogTitles}
+              refreshLiveDiscover={refreshLiveDiscover}
+            />
+          </div>
         )}
         {view === 'favorites' && (
           <FavoritesPage
