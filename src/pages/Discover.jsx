@@ -28,6 +28,12 @@ import { sameAnimeIdentity } from '../services/titleIdentity';
 import { classifyAnimeRelease } from '../services/releaseState';
 import { buildDiscoverPlan } from '../services/recommendationEngineV3';
 import { isNativeAndroid } from '../platform/runtime';
+import { buildQuickAddEntry } from '../services/quickAdd';
+import {
+  contentSafetyModeLabel,
+  filterContentBySafety,
+  getContentRating
+} from '../services/contentSafety';
 import {
   applyLearnedSignals,
   hasSavedTitleDistinction,
@@ -422,6 +428,8 @@ function DiscoverCard({
   item,
   onOpen,
   onAddWatching,
+  onAddCompleted,
+  onShowAnother,
   onToggleFollow,
   onRecommendationFeedback,
   feedbackSource = 'Discover',
@@ -438,6 +446,7 @@ function DiscoverCard({
     intelligence?.feedbackAction || ''
   );
   const release = classifyAnimeRelease(item);
+  const contentRating = getContentRating(item);
 
   useEffect(() => {
     setFeedbackStatus(intelligence?.feedbackAction || '');
@@ -480,6 +489,9 @@ function DiscoverCard({
           {item.year && <b>{item.year}</b>}
           {item.type && <b>{item.type}</b>}
           {(item.episodeCount || item.episodes) && <b>{item.episodeCount || item.episodes} eps</b>}
+          <b className={`contentRatingBadge rating-${contentRating.rating || 'unknown'}`} title={contentRating.guide || 'No content-rating guide available'}>
+            {contentRating.label}
+          </b>
         </span>
 
         {intelligence && (
@@ -533,7 +545,7 @@ function DiscoverCard({
               onAddWatching?.(item);
             }}
           >
-            {adding ? 'Adding...' : '+ Watching'}
+            {adding ? 'Adding...' : 'Quick Add'}
           </button>
 
           <button
@@ -556,11 +568,24 @@ function DiscoverCard({
             <button type="button" className={feedbackStatus === 'not_for_me' ? 'active negative' : ''} onClick={(event) => sendFeedback(event, 'not_for_me')}>
               👎 Not for Me
             </button>
-            <button type="button" onClick={(event) => sendFeedback(event, 'already_seen')}>
-              ✓ Seen
+            <button
+              type="button"
+              disabled={adding}
+              onClick={(event) => {
+                event.stopPropagation();
+                onAddCompleted?.(item);
+              }}
+            >
+              Already Watched
             </button>
-            <button type="button" className={feedbackStatus === 'maybe_later' ? 'active' : ''} onClick={(event) => sendFeedback(event, 'maybe_later')}>
-              ◷ Later
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onShowAnother?.(item);
+              }}
+            >
+              Show Another
             </button>
 
             {feedbackMenuOpen && (
@@ -598,6 +623,8 @@ function Shelf({
   onOpen,
   onBrowse,
   onAddWatching,
+  onAddCompleted,
+  onShowAnother,
   onToggleFollow,
   onRecommendationFeedback,
   addingKey
@@ -647,6 +674,8 @@ function Shelf({
               item={item}
               onOpen={onOpen}
               onAddWatching={onAddWatching}
+              onAddCompleted={onAddCompleted}
+              onShowAnother={onShowAnother}
               onToggleFollow={onToggleFollow}
               onRecommendationFeedback={onRecommendationFeedback}
               feedbackSource={`Discover shelf: ${title}`}
@@ -772,7 +801,7 @@ function LiveDiscoverBrowser({
               </div>
               <strong>{numericScore(item) ? `★ ${numericScore(item).toFixed(2)}` : 'Unscored'}</strong>
               <div className="discoverLiveListActions">
-                <button type="button" onClick={(event) => { event.stopPropagation(); onAddWatching(item); }}>+ Watching</button>
+                <button type="button" onClick={(event) => { event.stopPropagation(); onAddWatching(item); }}>Quick Add</button>
                 <button type="button" className={item.followed ? 'active' : ''} onClick={(event) => { event.stopPropagation(); onToggleFollow(item); }}>{item.followed ? '🔔 Following' : '🔔 Follow'}</button>
               </div>
             </article>
@@ -933,7 +962,7 @@ function CatalogBrowser({
 
 function DiscoverPage({
   anime = [],
-  catalog = [],
+  catalog: rawCatalog = [],
   setSelected,
   setView,
   updateAnime,
@@ -941,8 +970,13 @@ function DiscoverPage({
   joeAIState = {},
   onRecommendationFeedback,
   fetchMoreCatalogTitles,
-  refreshLiveDiscover
+  refreshLiveDiscover,
+  contentSafetyMode = 'unrestricted'
 }) {
+  const catalog = useMemo(
+    () => filterContentBySafety(rawCatalog, contentSafetyMode),
+    [rawCatalog, contentSafetyMode]
+  );
   const mobileDiscover = useRef(isNativeAndroid()).current;
   const initialLiveCache = useRef(readLiveDiscoverCacheSnapshot()).current;
   const [renderStage, setRenderStage] = useState(0);
@@ -956,6 +990,7 @@ function DiscoverPage({
   const [fetchingMore, setFetchingMore] = useState(false);
   const [refreshingLive, setRefreshingLive] = useState(false);
   const [catalogMessage, setCatalogMessage] = useState('');
+  const [sessionSkippedKeys, setSessionSkippedKeys] = useState([]);
   const [hubMode, setHubMode] = useState('recommendations');
   const [surpriseMenuOpen, setSurpriseMenuOpen] = useState(false);
   const [lastSurpriseKey, setLastSurpriseKey] = useState('');
@@ -1094,7 +1129,8 @@ function DiscoverPage({
   const discoverCatalog = useMemo(() => {
     if (!catalogStageReady) return [];
 
-    const validLiveCatalog = (liveCatalog || []).filter(isValidCatalogEntry);
+    const validLiveCatalog = filterContentBySafety(liveCatalog, contentSafetyMode)
+      .filter(isValidCatalogEntry);
 
     const overlaid = (catalog || [])
       .filter(isValidCatalogEntry)
@@ -1111,7 +1147,7 @@ function DiscoverPage({
     );
 
     return uniqueCatalog([...overlaid, ...missingLiveRows]);
-  }, [catalog, liveCatalog, catalogStageReady]);
+  }, [catalog, liveCatalog, catalogStageReady, contentSafetyMode]);
 
   const unseenCatalog = useMemo(() => {
     if (!catalogStageReady) return [];
@@ -1245,7 +1281,10 @@ function DiscoverPage({
     }
 
     const claimed = [];
+    const skipped = new Set(sessionSkippedKeys);
     const claimUnique = (items = []) => items.filter((item) => {
+      if (skipped.has(cardKey(item))) return false;
+
       const alreadyClaimed = claimed.some((candidate) => (
         cardKey(candidate) === cardKey(item)
         || sameAnimeIdentity(candidate, item)
@@ -1274,7 +1313,7 @@ function DiscoverPage({
       movieNight: claimUnique(engineV3.movieNight),
       studioSpotlight: claimUnique(engineV3.studioSpotlight)
     };
-  }, [airingNow, comingSoon, engineV3]);
+  }, [airingNow, comingSoon, engineV3, sessionSkippedKeys]);
 
   async function saveDiscoverFeedback(
     item,
@@ -1314,8 +1353,6 @@ function DiscoverPage({
       const messages = {
         good_pick: `JoeAI learned that ${titleOf(item)} looks like a good fit.`,
         not_for_me: `${titleOf(item)} was removed from future recommendations.`,
-        already_seen: `${titleOf(item)} was marked as already seen and removed from Discover.`,
-        maybe_later: `${titleOf(item)} was saved as a maybe-later pick.`,
         accepted: `JoeAI learned that you accepted ${titleOf(item)} from Discover.`
       };
       setCatalogMessage(messages[action] || `JoeAI saved your feedback for ${titleOf(item)}.`);
@@ -1348,7 +1385,7 @@ function DiscoverPage({
     setDailyFeedbackMenuOpen(false);
   }
 
-  async function addWatching(item) {
+  async function addToLibrary(item, status = 'Plan to Watch') {
     if (!updateAnime || !item) return;
 
     const key = cardKey(item);
@@ -1359,40 +1396,11 @@ function DiscoverPage({
       const existing = anime.find((libraryItem) => sameAnimeIdentity(libraryItem, item));
 
       if (existing) {
-        await updateAnime({
-          ...existing,
-          officialTitle: existing.officialTitle || item.officialTitle || titleOf(item),
-          malId: existing.malId || existing.mal_id || item.malId || item.mal_id,
-          cover: existing.cover || existing.imageUrl || item.cover || item.imageUrl,
-          imageUrl: existing.imageUrl || existing.cover || item.imageUrl || item.cover,
-          synopsis: existing.synopsis || item.synopsis,
-          studio: existing.studio || item.studio,
-          studios: (existing.studios?.length ? existing.studios : item.studios) || [],
-          genres: (existing.genres?.length ? existing.genres : item.genres) || [],
-          episodeCount: existing.episodeCount || existing.episodes || item.episodeCount || item.episodes,
-          episodes: existing.episodes || existing.episodeCount || item.episodes || item.episodeCount,
-          communityScore: existing.communityScore || existing.malScore || item.communityScore || item.malScore,
-          malScore: existing.malScore || existing.communityScore || item.malScore || item.communityScore,
-          status: 'Watching',
-          kitsuId: existing.kitsuId || existing.kitsu_id || item.kitsuId || item.kitsu_id || '',
-          recommendationAcceptedAt: new Date().toISOString(),
-          recommendationSource: 'Discover',
-          recommendationKey: recommendationKey(item),
-          listUpdatedAt: new Date().toISOString()
-        });
-
-        await saveDiscoverFeedback(
-          item,
-          'accepted',
-          '',
-          'Discover add to Watching',
-          false
-        );
-        setCatalogMessage(`✓ ${existing.title || titleOf(item)} was already in your Library — marked as Watching.`);
+        setCatalogMessage(`${existing.title || titleOf(item)} is already in your Library.`);
         return;
       }
 
-      await updateAnime({
+      await updateAnime(buildQuickAddEntry({
         ...item,
         id: item.kitsuId
           ? `anime-kitsu-${item.kitsuId}`
@@ -1401,31 +1409,46 @@ function DiscoverPage({
             : `anime-${normalizeTitle(titleOf(item))}`,
         title: titleOf(item),
         officialTitle: item.officialTitle || titleOf(item),
-        status: 'Watching',
-        favorite: false,
-        rewatches: 0,
-        finalRank: anime.length + 1,
-        notes: item.notes || 'Added from Discover.',
-        addedFrom: 'Discover',
         recommendationAcceptedAt: new Date().toISOString(),
         recommendationSource: 'Discover',
         recommendationKey: recommendationKey(item)
-      });
+      }, { source: 'Discover', librarySize: anime.length, status }));
 
       await saveDiscoverFeedback(
         item,
         'accepted',
         '',
-        'Discover add to Watching',
+        status === 'Completed' ? 'Discover Already Watched' : 'Discover Quick Add',
         false
       );
-      setCatalogMessage(`✓ Added ${titleOf(item)} as Watching.`);
+      setCatalogMessage(status === 'Completed'
+        ? `${titleOf(item)} was added as Completed and sent to Needs Review.`
+        : `${titleOf(item)} was Quick Added to Needs Review.`);
     } catch (error) {
       console.warn('Discover quick add failed:', titleOf(item), error);
       setCatalogMessage(`Could not add ${titleOf(item)} yet.`);
     } finally {
       setAddingKey('');
     }
+  }
+
+  function addWatching(item) {
+    return addToLibrary(item, 'Plan to Watch');
+  }
+
+  function addCompleted(item) {
+    return addToLibrary(item, 'Completed');
+  }
+
+  function showAnother(item) {
+    if (!item) return;
+    const key = cardKey(item);
+    setSessionSkippedKeys((current) => current.includes(key)
+      ? current
+      : [...current, key]);
+    setCatalogMessage(
+      `${titleOf(item)} was skipped for this session. JoeAI did not treat that as negative feedback.`
+    );
   }
 
   async function toggleFollow(item) {
@@ -1626,6 +1649,9 @@ function DiscoverPage({
             {liveState === 'error' && 'No live or cached Kitsu catalog is available yet.'}
             {liveState === 'idle' && 'Kitsu catalog is ready to refresh.'}
           </div>
+          <div className="discoverContentSafetyState">
+            Content filter: <strong>{contentSafetyModeLabel(contentSafetyMode)}</strong>
+          </div>
           {catalogMessage && <p className="discoverCatalogMessage">{catalogMessage}</p>}
         </div>
 
@@ -1661,6 +1687,8 @@ function DiscoverPage({
           onOpen={setSelected}
           onAddWatching={addWatching}
           onToggleFollow={toggleFollow}
+          onAddCompleted={addCompleted}
+          onShowAnother={showAnother}
           onRecommendationFeedback={saveDiscoverFeedback}
           addingKey={addingKey}
         />
@@ -1676,6 +1704,8 @@ function DiscoverPage({
         onOpen={setSelected}
         onAddWatching={addWatching}
         onToggleFollow={toggleFollow}
+        onAddCompleted={addCompleted}
+        onShowAnother={showAnother}
         onRecommendationFeedback={saveDiscoverFeedback}
         addingKey={addingKey}
         onBrowse={() => browse('all', 'Entire Catalog')}
@@ -1689,6 +1719,8 @@ function DiscoverPage({
         onOpen={setSelected}
         onAddWatching={addWatching}
         onToggleFollow={toggleFollow}
+        onAddCompleted={addCompleted}
+        onShowAnother={showAnother}
         onRecommendationFeedback={saveDiscoverFeedback}
         addingKey={addingKey}
         onBrowse={() => browse('all', 'Entire Catalog')}
@@ -1735,7 +1767,7 @@ function DiscoverPage({
                 onClick={() => addWatching(dailyPick.item)}
                 disabled={addingKey === cardKey(dailyPick.item)}
               >
-                {addingKey === cardKey(dailyPick.item) ? 'Adding...' : '+ Watching'}
+                {addingKey === cardKey(dailyPick.item) ? 'Adding...' : 'Quick Add'}
               </button>
               <button
                 type="button"
@@ -1783,6 +1815,8 @@ function DiscoverPage({
           onOpen={setSelected}
           onAddWatching={addWatching}
           onToggleFollow={toggleFollow}
+          onAddCompleted={addCompleted}
+          onShowAnother={showAnother}
           onRecommendationFeedback={saveDiscoverFeedback}
           addingKey={addingKey}
           onBrowse={() => browse('genre', (primaryAnchor.genres || [])[0] || 'Entire Catalog')}
@@ -1799,6 +1833,8 @@ function DiscoverPage({
         onOpen={setSelected}
         onAddWatching={addWatching}
         onToggleFollow={toggleFollow}
+        onAddCompleted={addCompleted}
+        onShowAnother={showAnother}
         onRecommendationFeedback={saveDiscoverFeedback}
         addingKey={addingKey}
         onBrowse={() => browse('all', 'JoeAI Picks')}
@@ -1812,6 +1848,8 @@ function DiscoverPage({
         onOpen={setSelected}
         onAddWatching={addWatching}
         onToggleFollow={toggleFollow}
+        onAddCompleted={addCompleted}
+        onShowAnother={showAnother}
         onRecommendationFeedback={saveDiscoverFeedback}
         addingKey={addingKey}
         onBrowse={() => browse('all', 'Entire Catalog')}
@@ -1825,6 +1863,8 @@ function DiscoverPage({
         onOpen={setSelected}
         onAddWatching={addWatching}
         onToggleFollow={toggleFollow}
+        onAddCompleted={addCompleted}
+        onShowAnother={showAnother}
         onRecommendationFeedback={saveDiscoverFeedback}
         addingKey={addingKey}
         onBrowse={() => browse('hidden', 'Hidden Gems')}
@@ -1838,6 +1878,8 @@ function DiscoverPage({
         onOpen={setSelected}
         onAddWatching={addWatching}
         onToggleFollow={toggleFollow}
+        onAddCompleted={addCompleted}
+        onShowAnother={showAnother}
         onRecommendationFeedback={saveDiscoverFeedback}
         addingKey={addingKey}
         onBrowse={() => browse('genre', 'Psychological')}
@@ -1851,6 +1893,8 @@ function DiscoverPage({
         onOpen={setSelected}
         onAddWatching={addWatching}
         onToggleFollow={toggleFollow}
+        onAddCompleted={addCompleted}
+        onShowAnother={showAnother}
         onRecommendationFeedback={saveDiscoverFeedback}
         addingKey={addingKey}
         onBrowse={() => browse('genre', 'Drama')}
@@ -1864,6 +1908,8 @@ function DiscoverPage({
         onOpen={setSelected}
         onAddWatching={addWatching}
         onToggleFollow={toggleFollow}
+        onAddCompleted={addCompleted}
+        onShowAnother={showAnother}
         onRecommendationFeedback={saveDiscoverFeedback}
         addingKey={addingKey}
         onBrowse={() => browse('all', 'Entire Catalog')}
@@ -1878,6 +1924,8 @@ function DiscoverPage({
           onOpen={setSelected}
           onAddWatching={addWatching}
           onToggleFollow={toggleFollow}
+          onAddCompleted={addCompleted}
+          onShowAnother={showAnother}
           onRecommendationFeedback={saveDiscoverFeedback}
           addingKey={addingKey}
           onBrowse={() => browse('studio', topStudioDisplay)}
@@ -1954,6 +2002,7 @@ function discoverDataIsEqual(previous, next) {
     previous.anime === next.anime
     && previous.catalog === next.catalog
     && previous.joeAIState === next.joeAIState
+    && previous.contentSafetyMode === next.contentSafetyMode
   );
 }
 

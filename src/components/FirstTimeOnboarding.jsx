@@ -5,6 +5,7 @@ import {
   findDuplicateAnime,
   searchAnimeCandidates
 } from '../services/animeImporter';
+import { CONTENT_SAFETY_MODES } from '../services/contentSafety';
 import '../styles/first-launch-onboarding.css';
 
 const STEPS = [
@@ -174,8 +175,10 @@ export function FirstTimeOnboarding({
   initialStep = 0,
   displayName = '',
   theme = 'neon',
+  contentSafetyMode = 'unrestricted',
   anime = [],
   onThemeChange,
+  onContentSafetyModeChange,
   onSaveDisplayName,
   onUpdateAnime,
   onStepChange,
@@ -417,6 +420,27 @@ export function FirstTimeOnboarding({
                     <small>{theme === option.id ? 'Selected' : 'Preview'}</small>
                   </button>
                 ))}
+              </div>
+              <div className="firstLaunchSafety">
+                <div>
+                  <strong>Recommendation content</strong>
+                  <small>This filters Discover, JoeAI, and Quick Ask. You can change it later in Settings.</small>
+                </div>
+                <div className="firstLaunchSafetyOptions" role="radiogroup" aria-label="Recommendation content safety mode">
+                  {CONTENT_SAFETY_MODES.map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={contentSafetyMode === option.id}
+                      className={contentSafetyMode === option.id ? 'active' : ''}
+                      onClick={() => onContentSafetyModeChange?.(option.id)}
+                    >
+                      <b>{option.label}</b>
+                      <small>{option.description}</small>
+                    </button>
+                  ))}
+                </div>
               </div>
             </>
           )}

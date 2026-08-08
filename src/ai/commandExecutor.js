@@ -1,4 +1,6 @@
-import { importAnimeByTitle, mergeAnimeMetadata, findLocalTitleMatches, searchAnimeCandidates } from '../services/animeImporter';
+import { findDuplicateAnime, importAnimeByTitle, mergeAnimeMetadata, findLocalTitleMatches, searchAnimeCandidates } from '../services/animeImporter';
+import { resolveAnimeTitleCandidates } from '../services/titleResolver';
+import { buildQuickAddEntry } from '../services/quickAdd';
 import { answerLibraryQuestion } from './libraryIntelligence';
 import { maybeSimilarRecommendation } from './similarityEngine';
 import { maybeKnowledgeFirstRecommendation } from './knowledgeFirstRecommender';
@@ -14,12 +16,13 @@ export function makeTextResult(text) {
   return { type: 'text', text };
 }
 
-export function makeBulkResult({ added = [], skipped = [], failed = [] }) {
+export function makeBulkResult({ added = [], skipped = [], review = [], failed = [] }) {
   return {
     type: 'bulkResult',
     title: '🍜 Bulk import complete',
     added,
     skipped,
+    review,
     failed
   };
 }
@@ -45,6 +48,7 @@ export function makeCandidateSelectionResult({ title, status = 'Watching', candi
     source,
     candidates: candidates.slice(0, 12).map((item) => ({
       id: item.id,
+      kitsuId: item.kitsuId,
       malId: item.malId,
       title: item.title,
       officialTitle: item.officialTitle,
@@ -59,6 +63,8 @@ export function makeCandidateSelectionResult({ title, status = 'Watching', candi
       synopsis: item.synopsis,
       trailerUrl: item.trailerUrl,
       japaneseTitle: item.japaneseTitle,
+      englishTitle: item.englishTitle,
+      romajiTitle: item.romajiTitle,
       titleSynonyms: item.titleSynonyms,
       communityScore: item.communityScore,
       malScore: item.malScore,
@@ -75,35 +81,6 @@ export function makeCandidateSelectionResult({ title, status = 'Watching', candi
 
 function normalizeKey(value = '') {
   return String(value).toLowerCase().replace(/[^a-z0-9]+/g, '');
-}
-
-function candidateKeys(candidate = {}) {
-  return [
-    candidate.title,
-    candidate.officialTitle,
-    candidate.japaneseTitle,
-    ...(candidate.titleSynonyms || [])
-  ].filter(Boolean).map(normalizeKey).filter(Boolean);
-}
-
-function shouldAskRemoteCandidateSelection(query, results = []) {
-  if (!results || results.length < 2) return false;
-
-  const queryKey = normalizeKey(query);
-  const top = results[0];
-  const topKeys = candidateKeys(top);
-  const topIsExact = topKeys.includes(queryKey) || top.importLabel === 'Exact Match';
-
-  // If the metadata provider found one obvious exact match, let the import proceed normally.
-  if (topIsExact && Number(top.importConfidence || 0) >= 96) return false;
-
-  // Otherwise, if there are several plausible matches, ask the user instead of guessing.
-  const plausible = results.filter((item) => {
-    const confidence = Number(item.importConfidence || item.matchScore || 0);
-    return confidence >= 60 || ['Exact Match', 'Best Match', 'Sequel', 'Spinoff', 'Related'].includes(item.importLabel);
-  });
-
-  return plausible.length > 1;
 }
 
 function candidateIdentity(item = {}) {
@@ -171,11 +148,7 @@ export async function executeSingleAddCommand({ anime = [], updateAnime, command
 
   if (command.selectedAnime) {
     const selected = command.selectedAnime;
-    const existing = anime.find((item) =>
-      (selected.id && item.id === selected.id) ||
-      (selected.malId && item.malId && String(item.malId) === String(selected.malId)) ||
-      String(item.title || '').toLowerCase() === String(selected.title || '').toLowerCase()
-    );
+    const existing = findDuplicateAnime(anime, selected);
 
     if (existing) {
       const merged = mergeAnimeMetadata(existing, { ...existing, status: command.status || existing.status }, command.status || existing.status);
@@ -183,7 +156,17 @@ export async function executeSingleAddCommand({ anime = [], updateAnime, command
       return makeTextResult(`Updated selected entry: ${existing.title} → ${merged.status}. No duplicate added.`);
     }
 
-    const selectedAnime = {
+    const selectedAnime = command.quickAdd ? buildQuickAddEntry({
+      ...selected,
+      id: selected.id || `anime-${normalizeKey(selected.officialTitle || selected.title || command.title)}`,
+      title: selected.officialTitle || selected.title || command.title,
+      officialTitle: selected.officialTitle || selected.title || command.title,
+      metadataNeedsRefresh: false
+    }, {
+      source: 'JoeAI',
+      librarySize: anime.length,
+      status: command.status || 'Plan to Watch'
+    }) : {
       ...selected,
       id: selected.id || `anime-${normalizeKey(selected.officialTitle || selected.title || command.title)}`,
       title: selected.officialTitle || selected.title || command.title,
@@ -198,7 +181,11 @@ export async function executeSingleAddCommand({ anime = [], updateAnime, command
     };
 
     await updateAnime(selectedAnime);
-    return makeTextResult(`Added ${selectedAnime.officialTitle || selectedAnime.title} as ${selectedAnime.status}.`);
+    return makeTextResult(command.quickAdd
+      ? selectedAnime.status === 'Completed'
+        ? `Added ${selectedAnime.officialTitle || selectedAnime.title} as Completed and sent it to Needs Review.`
+        : `Quick Added ${selectedAnime.officialTitle || selectedAnime.title} to Needs Review.`
+      : `Added ${selectedAnime.officialTitle || selectedAnime.title} as ${selectedAnime.status}.`);
   }
 
   const localMatches = findLocalTitleMatches(anime, command.title);
@@ -238,18 +225,8 @@ export async function executeSingleAddCommand({ anime = [], updateAnime, command
     return makeCandidateSelectionResult({ title: command.title, status: command.status || 'Watching', candidates, source: candidates.some((item) => item.candidateSource === 'remote') ? 'mixed' : 'local' });
   }
 
-  // Safe shorthand: one-word request like "Frieren" can update one obvious local match.
-  // Multi-word requests like "Trigun Stampede" should not silently update "Trigun".
-  const requestedWords = String(command.title || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').split(/\s+/).filter(Boolean);
-  if (requestedWords.length === 1 && shorthandMatches.length === 1 && !relatedMatches.length) {
-    const existing = shorthandMatches[0];
-    const merged = mergeAnimeMetadata(existing, { ...existing, status: command.status || existing.status }, command.status || existing.status);
-    await updateAnime(merged);
-    return makeTextResult(`Updated existing entry: ${existing.title} → ${merged.status}. No duplicate added.`);
-  }
-
   const ambiguousCandidates = [...shorthandMatches, ...relatedMatches];
-  if (ambiguousCandidates.length > 1) {
+  if (ambiguousCandidates.length > 0) {
     const candidates = await buildLocalPlusRemoteCandidates(command.title, ambiguousCandidates);
     return makeCandidateSelectionResult({ title: command.title, status: command.status || 'Watching', candidates, source: candidates.some((item) => item.candidateSource === 'remote') ? 'mixed' : 'local' });
   }
@@ -260,13 +237,24 @@ export async function executeSingleAddCommand({ anime = [], updateAnime, command
     library: anime
   });
 
-  if (!result.duplicate && shouldAskRemoteCandidateSelection(command.title, result.results || [])) {
+  const titleResolution = result.titleResolution || resolveAnimeTitleCandidates({
+    query: command.title,
+    candidates: result.results || []
+  });
+
+  if (titleResolution.decision === 'review') {
     return makeCandidateSelectionResult({
       title: command.title,
       status: command.status || 'Watching',
-      candidates: result.results,
+      candidates: titleResolution.candidates,
       source: 'remote'
     });
+  }
+
+  if (titleResolution.decision === 'none') {
+    return makeTextResult(
+      `I could not verify “${command.title}” against the title provider, so I made no library changes. Try again or use Add Anime to review the match manually.`
+    );
   }
 
   if (result.duplicate) {
@@ -314,6 +302,7 @@ export async function executeBulkAddCommand({ anime = [], updateAnime, command, 
 
   const added = [];
   const skipped = [];
+  const review = [];
   const failed = [];
   let liveLibrary = [...anime];
 
@@ -332,6 +321,26 @@ export async function executeBulkAddCommand({ anime = [], updateAnime, command, 
         status: command.status || 'Watching',
         library: liveLibrary
       });
+
+      const titleResolution = result.titleResolution || resolveAnimeTitleCandidates({
+        query: title,
+        candidates: result.results || []
+      });
+
+      if (result.duplicate && (result.localOnly || result.manualOverride)) {
+        skipped.push(`${title} is already in your library as ${result.duplicate.title}`);
+        continue;
+      }
+
+      if (titleResolution.decision !== 'exact') {
+        const suggestions = titleResolution.candidates
+          .slice(0, 3)
+          .map((item) => item.officialTitle || item.title)
+          .filter(Boolean)
+          .join(', ');
+        review.push(`${title}${suggestions ? `: ${suggestions}` : ': no verified exact match'}`);
+        continue;
+      }
 
       if (result.duplicate) {
         skipped.push(`${title} is already in your library as ${result.duplicate.title}`);
@@ -355,7 +364,7 @@ export async function executeBulkAddCommand({ anime = [], updateAnime, command, 
     await new Promise((resolve) => setTimeout(resolve, 750));
   }
 
-  return makeBulkResult({ added, skipped, failed });
+  return makeBulkResult({ added, skipped, review, failed });
 }
 
 export function answerLibraryStats({ anime = [], catalog = [] }) {

@@ -1,4 +1,5 @@
 import { animeIdentityKeys } from './titleIdentity';
+import { resolveAnimeTitleCandidates } from './titleResolver';
 import { getManualMetadataForAnime, applyMetadataToAnime } from './metadataProvider';
 import { cleanTitle } from './metadata';
 import { fetchKitsuMetadata, searchKitsuAnime } from './kitsuProvider';
@@ -518,12 +519,13 @@ export async function importAnimeByTitle({
   const localDuplicate = findLocalTitleMatch(library, title);
 
   if (localDuplicate && localEntryHasUsableMetadata(localDuplicate)) {
+    const localCandidate = {
+      ...localDuplicate,
+      status
+    };
     return {
       duplicate: localDuplicate,
-      candidate: {
-        ...localDuplicate,
-        status
-      },
+      candidate: localCandidate,
       merged: mergeAnimeMetadata(
         localDuplicate,
         { ...localDuplicate, status },
@@ -537,7 +539,11 @@ export async function importAnimeByTitle({
         improved: false,
         fields: [],
         unresolved: false
-      }
+      },
+      titleResolution: resolveAnimeTitleCandidates({
+        query: title,
+        candidates: [localCandidate]
+      })
     };
   }
 
@@ -576,6 +582,10 @@ export async function importAnimeByTitle({
     }
 
     const duplicate = findDuplicateAnime(library, candidate) || localDuplicate;
+    const titleResolution = resolveAnimeTitleCandidates({
+      query: title,
+      candidates: [candidate]
+    });
 
     return {
       candidate,
@@ -584,7 +594,8 @@ export async function importAnimeByTitle({
         ? mergeAnimeMetadata(duplicate, candidate, status)
         : undefined,
       manualOverride: true,
-      metadataEnrichment
+      metadataEnrichment,
+      titleResolution
     };
   }
 
@@ -606,8 +617,13 @@ export async function importAnimeByTitle({
     );
   }
 
+  const titleResolution = resolveAnimeTitleCandidates({
+    query: title,
+    candidates: results
+  });
+
   let candidate =
-    results[0] || createLocalFallbackAnime(title, status, lookupError);
+    titleResolution.candidate || createLocalFallbackAnime(title, status, lookupError);
 
   const needsKitsuEnrichment = Boolean(
     results.length &&
@@ -732,7 +748,8 @@ export async function importAnimeByTitle({
       results,
       metadataLookupFailed: Boolean(lookupError),
       lookupError,
-      metadataEnrichment
+      metadataEnrichment,
+      titleResolution
     };
   }
 
@@ -760,6 +777,7 @@ export async function importAnimeByTitle({
     results,
     metadataLookupFailed: Boolean(lookupError),
     lookupError,
-    metadataEnrichment
+    metadataEnrichment,
+    titleResolution
   };
 }

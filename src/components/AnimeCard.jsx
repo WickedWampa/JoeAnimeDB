@@ -22,7 +22,9 @@ export function AnimeCard({ anime, setSelected, updateAnime, displayRank, totalC
   const rankTier = rankTierClass(rank, totalCount);
   const isFavorite = Boolean(anime.favorite);
   const rated = hasUserScore(anime);
-  const reviewLabel = anime.metadataNeedsReview
+  const reviewLabel = anime.libraryNeedsReview
+    ? 'Needs Review'
+    : anime.metadataNeedsReview
     ? 'Needs Review'
     : anime.metadataNeedsRefresh
       ? 'Metadata Incomplete'
@@ -68,7 +70,7 @@ export function AnimeCard({ anime, setSelected, updateAnime, displayRank, totalC
       {reviewLabel && (
         <div
           className={`metadataReviewBadge cardReviewBadge ${anime.metadataNeedsReview ? 'identityReview' : ''}`}
-          title={anime.metadataReviewReason || 'Some metadata still needs review'}
+          title={anime.libraryReviewReason || anime.metadataReviewReason || 'Some details still need review'}
         >
           ⚠ {reviewLabel}
         </div>

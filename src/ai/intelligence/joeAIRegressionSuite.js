@@ -9,12 +9,44 @@ import {
 import { enrichRecommendationItems } from '../recommendationCoordinator';
 import { routeJoeAIRecommendation } from '../joeAIRecommendationRouter';
 import { buildDiscoverPlan } from '../../services/recommendationEngineV3';
+import { resolveAnimeTitleCandidates } from '../../services/titleResolver';
 
 function assert(condition, message) {
   if (!condition) throw new Error(`JoeAI regression: ${message}`);
 }
 
 export function runJoeAIRegressionSuite() {
+  const ambiguousOnePiece = resolveAnimeTitleCandidates({
+    query: 'One Piece',
+    candidates: [
+      { title: 'One Piece', year: 1999, type: 'TV', importConfidence: 99 },
+      { title: 'ONE PIECE', year: 2023, type: 'TV', importConfidence: 99 }
+    ]
+  });
+  assert(ambiguousOnePiece.decision === 'review', 'ambiguous exact title was allowed to auto-act');
+
+  const originalOnePiece = resolveAnimeTitleCandidates({
+    query: 'One Piece 1999',
+    candidates: ambiguousOnePiece.candidates
+  });
+  assert(originalOnePiece.decision === 'exact', 'year hint did not resolve an ambiguous title');
+  assert(originalOnePiece.candidate?.year === 1999, 'year hint selected the wrong adaptation');
+
+  const alternateTitle = resolveAnimeTitleCandidates({
+    query: 'Frieren',
+    candidates: [
+      {
+        title: 'Sousou no Frieren',
+        titleSynonyms: ['Frieren'],
+        year: 2023,
+        type: 'TV',
+        importConfidence: 99
+      },
+      { title: 'Frieren Mini Anime', year: 2023, type: 'ONA', importConfidence: 72 }
+    ]
+  });
+  assert(alternateTitle.decision === 'exact', 'exact alternate title was not recognized');
+
   const contextRecommendations = [
     { title: 'Claymore' },
     { title: 'One Piece Fan Letter' },
@@ -241,8 +273,11 @@ export function runJoeAIRegressionSuite() {
   );
 
   return {
-    passed: 21,
+    passed: 24,
     prompts: [
+      'ambiguous exact-title review',
+      'year-qualified title resolution',
+      'alternate-title resolution',
       'tell me why you recommend One Piece Fan Letter',
       'why the second one?',
       'something shorter',

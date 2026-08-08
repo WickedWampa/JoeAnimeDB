@@ -9,6 +9,8 @@ import {
   importAnimeByTitle,
   searchAnimeCandidates
 } from '../services/animeImporter';
+import { resolveAnimeTitleCandidates } from '../services/titleResolver';
+import { buildQuickAddEntry } from '../services/quickAdd';
 import '../styles/library-release-readiness.css';
 
 function parseBulkTitles(value = '') {
@@ -86,6 +88,36 @@ function AddAnimeModal({ allAnime = [], updateAnime, deleteAnime, setSelected, o
       setSelectedResult(result);
       setDuplicate(existing || null);
       setMessage('Ready to add. Metadata can be repaired later if needed.');
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function quickAddResult(result) {
+    if (!result || working) return;
+
+    const existing = findDuplicateAnime(allAnime, result);
+    if (existing) {
+      setMessage(`${existing.title} is already in your library.`);
+      setDuplicate(existing);
+      return;
+    }
+
+    setWorking(true);
+    setMessage(`Quick Adding ${result.title}...`);
+
+    try {
+      const next = buildQuickAddEntry(result, {
+        source: 'Library search',
+        librarySize: allAnime.length
+      });
+      const saved = await updateAnime(next);
+      const added = (saved.anime || []).find((item) => String(item.id) === String(next.id)) || next;
+      setMessage(`${added.title} was added to Needs Review.`);
+      onClose();
+    } catch (error) {
+      console.warn('Quick Add failed:', result.title, error);
+      setMessage('Could not Quick Add this title yet. Try Add & Configure instead.');
     } finally {
       setWorking(false);
     }
@@ -214,7 +246,7 @@ function AddAnimeModal({ allAnime = [], updateAnime, deleteAnime, setSelected, o
           library: liveLibrary
         });
 
-        if (result.duplicate) {
+        if (result.duplicate && (result.localOnly || result.manualOverride)) {
           skipped.push({
             title: rawTitle,
             match: result.duplicate.title,
@@ -231,32 +263,26 @@ function AddAnimeModal({ allAnime = [], updateAnime, deleteAnime, setSelected, o
           continue;
         }
 
-        const best = matches[0] || candidate;
-        const bestConfidence = Number(
-          best.importConfidence ||
-          candidate.importConfidence ||
-          0
-        );
-        const secondConfidence = Number(matches[1]?.importConfidence || 0);
-        const confidenceGap = bestConfidence - secondConfidence;
-        const exactIdentity = String(
-          best.importLabel ||
-          candidate.importLabel ||
-          ''
-        ).toLowerCase() === 'exact match';
-        const strongIdentity = exactIdentity || bestConfidence >= 86;
+        const titleResolution = result.titleResolution || resolveAnimeTitleCandidates({
+          query: rawTitle,
+          candidates: matches
+        });
         const genuinelyAmbiguous = Boolean(
           candidate.metadataNeedsReview ||
-          (
-            matches.length > 1 &&
-            !strongIdentity &&
-            bestConfidence < 78 &&
-            confidenceGap < 8
-          )
+          titleResolution.decision !== 'exact'
         );
 
         if (genuinelyAmbiguous && !result.metadataLookupFailed) {
-          review.push({ title: rawTitle, matches });
+          review.push({ title: rawTitle, matches: titleResolution.candidates });
+          continue;
+        }
+
+        if (result.duplicate) {
+          skipped.push({
+            title: rawTitle,
+            match: result.duplicate.title,
+            reason: 'Already in library'
+          });
           continue;
         }
 
@@ -480,14 +506,13 @@ function AddAnimeModal({ allAnime = [], updateAnime, deleteAnime, setSelected, o
                   const resultDuplicate = findDuplicateAnime(allAnime, result);
 
                   return (
-                    <button
-                      type="button"
+                    <article
                       className={`addAnimeResult ${resultDuplicate ? 'alreadyOwned' : ''}`}
                       key={result.malId || result.title}
-                      onClick={() => chooseResult(result)}
                     >
-                      <Poster anime={result} className="addAnimeResultPoster" />
-                      <span>
+                      <button type="button" className="addAnimeResultMain" onClick={() => chooseResult(result)}>
+                        <Poster anime={result} className="addAnimeResultPoster" />
+                        <span>
                         <span className={`importLabel ${String(result.importLabel || 'Related').replace(/\s+/g, '').toLowerCase()}`}>
                           {result.importConfidence ? `${result.importConfidence}% · ` : ''}{result.importLabel || 'Related'}
                         </span>
@@ -502,8 +527,17 @@ function AddAnimeModal({ allAnime = [], updateAnime, deleteAnime, setSelected, o
                             result.communityScore ? `⭐ ${result.communityScore}` : null
                           ].filter(Boolean).join(' • ')}
                         </small>
-                      </span>
-                    </button>
+                        </span>
+                      </button>
+                      <div className="addAnimeResultActions">
+                        <button type="button" onClick={() => chooseResult(result)} disabled={working}>
+                          Add & Configure
+                        </button>
+                        <button type="button" className="primary" onClick={() => quickAddResult(result)} disabled={working || resultDuplicate}>
+                          {resultDuplicate ? 'Already Added' : 'Quick Add'}
+                        </button>
+                      </div>
+                    </article>
                   );
                 })}
               </div>
@@ -698,15 +732,24 @@ export function LibraryPage({
   emptyMessage
 }) {
   const [addingAnime, setAddingAnime] = useState(false);
+  const [showNeedsReview, setShowNeedsReview] = useState(false);
   const libraryForDupes = useMemo(() => allAnime || anime || [], [allAnime, anime]);
+  const needsReviewCount = useMemo(
+    () => libraryForDupes.filter((item) => item.libraryNeedsReview).length,
+    [libraryForDupes]
+  );
+  const visibleAnime = useMemo(
+    () => showNeedsReview ? anime.filter((item) => item.libraryNeedsReview) : anime,
+    [anime, showNeedsReview]
+  );
 
   // finalRank is legacy persisted data, so it can become stale whenever a score changes.
   // Build the visible ranking from the current Joe scores on every render instead.
   const liveRankMap = useMemo(() => buildLiveRankMap(libraryForDupes), [libraryForDupes]);
 
   const rankedAnime = useMemo(
-    () => sortAnimeByUserScore(anime),
-    [anime]
+    () => sortAnimeByUserScore(visibleAnime),
+    [visibleAnime]
   );
 
   async function handleFavoriteClick(event, item) {
@@ -782,6 +825,19 @@ export function LibraryPage({
         )}
       </section>
 
+      {canAddAnime && needsReviewCount > 0 && (
+        <section className={`libraryReviewQueue ${showNeedsReview ? 'active' : ''}`}>
+          <div>
+            <p className="eyebrow">Quick Add Queue</p>
+            <h2>{needsReviewCount} {needsReviewCount === 1 ? 'title needs' : 'titles need'} review</h2>
+            <p>Finish status, score, notes, rewatches, or version details whenever you are ready.</p>
+          </div>
+          <button type="button" onClick={() => setShowNeedsReview((current) => !current)}>
+            {showNeedsReview ? 'Show All Titles' : `Review Queue (${needsReviewCount})`}
+          </button>
+        </section>
+      )}
+
       {rankedAnime.length === 0 ? (
         <section className={`libraryStateCard ${hasNoResults ? 'noResults' : 'emptyLibrary'}`} role="status">
           <span className="libraryStateIcon" aria-hidden="true">{hasNoResults ? '⌕' : '▤'}</span>
@@ -834,12 +890,12 @@ export function LibraryPage({
                     <Poster anime={item} className="thumb" />
                     <span className="libraryTitleStack">
                       <strong>{item.title}</strong>
-                      {(item.metadataNeedsReview || item.metadataNeedsRefresh) && (
+                      {(item.libraryNeedsReview || item.metadataNeedsReview || item.metadataNeedsRefresh) && (
                         <span
                           className={`metadataReviewBadge ${item.metadataNeedsReview ? 'identityReview' : ''}`}
-                          title={item.metadataReviewReason || 'Some metadata still needs review'}
+                          title={item.libraryReviewReason || item.metadataReviewReason || 'Some details still need review'}
                         >
-                          ⚠ {item.metadataNeedsReview ? 'Needs Review' : 'Metadata Incomplete'}
+                          {item.libraryNeedsReview ? 'Needs Review' : item.metadataNeedsReview ? 'Title Match Review' : 'Metadata Incomplete'}
                         </span>
                       )}
                     </span>

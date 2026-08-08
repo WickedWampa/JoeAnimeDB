@@ -159,6 +159,86 @@
   font-weight: 850;
 }
 
+.addAnimeResult {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+}
+
+.addAnimeResultMain {
+  min-width: 0;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.addAnimeResultActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+}
+
+.addAnimeResultActions button,
+.libraryReviewQueue button,
+.detailLibraryReview button {
+  border: 1px solid color-mix(in srgb, var(--cyan) 46%, var(--line));
+  border-radius: 999px;
+  padding: 9px 13px;
+  background: color-mix(in srgb, var(--cyan) 9%, var(--panel));
+  color: var(--text);
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.addAnimeResultActions .primary {
+  background: color-mix(in srgb, var(--cyan) 24%, var(--panel));
+}
+
+.libraryReviewQueue {
+  margin: 18px 0;
+  padding: 18px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  border: 1px solid color-mix(in srgb, #ffc759 48%, var(--line));
+  border-radius: 20px;
+  background: color-mix(in srgb, #ffc759 8%, var(--panel));
+}
+
+.libraryReviewQueue h2,
+.libraryReviewQueue p {
+  margin: 3px 0;
+}
+
+.libraryReviewQueue.active {
+  box-shadow: 0 0 0 2px color-mix(in srgb, #ffc759 20%, transparent);
+}
+
+.detailLibraryReview {
+  margin: 15px 0;
+  padding: 14px 15px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid color-mix(in srgb, #ffc759 48%, transparent);
+  border-radius: 15px;
+  background: color-mix(in srgb, #ffc759 9%, var(--panel));
+}
+
+.detailLibraryReview p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
 @media (max-width: 620px) {
   .libraryStateCard {
     width: calc(100% - 20px);
@@ -167,5 +247,15 @@
 
   .metadataReviewBadge {
     white-space: normal;
+  }
+
+  .addAnimeResult {
+    grid-template-columns: 1fr;
+  }
+
+  .addAnimeResultActions,
+  .libraryReviewQueue,
+  .detailLibraryReview {
+    flex-wrap: wrap;
   }
 }
