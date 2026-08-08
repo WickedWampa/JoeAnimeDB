@@ -17,6 +17,10 @@ function hasUsefulMetadata(item) {
   );
 }
 
+function needsContentRatingBackfill(item = {}) {
+  return !item.contentRatingCheckedAt;
+}
+
 function richness(item) {
   return [
     item?.cover,
@@ -99,8 +103,14 @@ export function mergeCatalogEntries({ library = [], catalog = [], seed = catalog
 
 export function buildCatalogQueue({ library = [], catalog = [], seed = catalogSeed, limit = 50 } = {}) {
   return mergeCatalogEntries({ library, catalog, seed })
-    .map((item, index) => ({ item, index }))
-    .filter(({ item }) => needsArtworkRepair(item) || !hasUsefulMetadata(item))
+    .map((item, index) => ({
+      item,
+      index,
+      needsCoreRepair: needsArtworkRepair(item) || !hasUsefulMetadata(item),
+      needsContentRating: needsContentRatingBackfill(item)
+    }))
+    .filter(({ needsCoreRepair, needsContentRating }) => needsCoreRepair || needsContentRating)
+    .sort((left, right) => Number(right.needsCoreRepair) - Number(left.needsCoreRepair))
     .slice(0, limit);
 }
 
@@ -134,12 +144,15 @@ export async function updateCatalogMetadata({
 
     try {
       const enriched = await fetchMetadata(item);
+      const contentRatingCheckedAt =
+        enriched.contentRatingCheckedAt || new Date().toISOString();
 
       nextCatalog = nextCatalog.map((candidate) =>
         sameCatalogIdentity(candidate, item)
           ? {
               ...candidate,
               ...enriched,
+              contentRatingCheckedAt,
               title: candidate.title || enriched.officialTitle || enriched.title,
               officialTitle:
                 enriched.officialTitle ||

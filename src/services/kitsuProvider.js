@@ -338,6 +338,11 @@ export function normalizeKitsuAnime(resource = {}, base = {}) {
       ? `https://www.youtube.com/watch?v=${attributes.youtubeVideoId}`
       : base.trailerUrl || '',
     ageRating: attributes.ageRating || base.ageRating || '',
+    ageRatingGuide: attributes.ageRatingGuide || base.ageRatingGuide || '',
+    nsfw: typeof attributes.nsfw === 'boolean'
+      ? attributes.nsfw
+      : Boolean(base.nsfw),
+    contentRatingCheckedAt: new Date().toISOString(),
     airingStatus: attributes.status || base.airingStatus || base.releaseStatus || '',
     status: base.status || attributes.status || 'Watching',
     metadataSource: 'kitsu',

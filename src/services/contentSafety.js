@@ -60,7 +60,7 @@ export function getContentRating(item = {}) {
 
   return {
     rating,
-    label: rating || 'Not rated',
+    label: rating || 'Content rating unknown',
     guide,
     nsfw,
     known: Boolean(rating)
