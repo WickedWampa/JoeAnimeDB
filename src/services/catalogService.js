@@ -139,6 +139,19 @@ export async function updateCatalogContentRatings({
     seed: [],
     limit
   });
+
+  if (!queue.length) {
+    const saved = await repository.getDatabase();
+    return {
+      saved,
+      updated: 0,
+      failed: 0,
+      processed: 0,
+      total: nextCatalog.length,
+      remaining: 0
+    };
+  }
+
   let updated = 0;
   let failed = 0;
   let processed = 0;
