@@ -1,6 +1,12 @@
-import { saveTextExport } from '../platform/fileExports';
+import {
+  saveRollingTextExport,
+  saveTextExport,
+  saveTextExportAs
+} from '../platform/fileExports';
 
 export const STORAGE_KEY = 'joeanime-db-4';
+export const LAST_BACKUP_KEY = 'joeanime-last-backup-v1';
+export const ROLLING_BACKUP_FILENAME = 'JoeAnimeDB-backup.json';
 
 export function loadData(seed) {
   try {
@@ -83,16 +89,66 @@ async function resolveLiveBackupDatabase(data = {}) {
   }
 }
 
+function recordSuccessfulBackup(result, payload, mode) {
+  if (!result?.ok) return null;
+
+  const record = {
+    savedAt: new Date().toISOString(),
+    exportedAt: payload.exportedAt,
+    mode,
+    method: result.method || 'export',
+    filename: result.filename || ROLLING_BACKUP_FILENAME,
+    path: result.path || ''
+  };
+
+  try {
+    localStorage.setItem(LAST_BACKUP_KEY, JSON.stringify(record));
+  } catch {}
+
+  window.dispatchEvent(new CustomEvent('joeanime:backup-saved', { detail: record }));
+  return record;
+}
+
+export function readLastBackupRecord() {
+  try {
+    const saved = localStorage.getItem(LAST_BACKUP_KEY);
+    return saved ? JSON.parse(saved) : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function exportBackup(data) {
   const database = await resolveLiveBackupDatabase(data);
   const payload = buildBackupPayload(database);
-  await saveTextExport(
-    `JoeAnimeDB-5-backup-${new Date().toISOString().slice(0, 10)}.json`,
+  const result = await saveRollingTextExport(
+    ROLLING_BACKUP_FILENAME,
     JSON.stringify(payload, null, 2),
     'application/json'
   );
 
-  return payload;
+  return {
+    payload,
+    result,
+    record: recordSuccessfulBackup(result, payload, 'rolling')
+  };
+}
+
+export async function exportBackupAs(data) {
+  const database = await resolveLiveBackupDatabase(data);
+  const payload = buildBackupPayload(database);
+  const filename = `JoeAnimeDB-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  const result = await saveTextExportAs(
+    filename,
+    JSON.stringify(payload, null, 2),
+    'application/json'
+  );
+
+  return {
+    payload,
+    result,
+    record: recordSuccessfulBackup(result, payload, 'snapshot')
+  };
 }
 
 export function parseBackupText(text = '') {

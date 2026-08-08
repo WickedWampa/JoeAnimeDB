@@ -13,7 +13,7 @@ contextBridge.exposeInMainWorld('JoeAnimeDB', {
     };
   },
   generateGenome: (title) => ipcRenderer.invoke('genome:generate', title),
-  version: '5.0.0-beta.10',
+  version: '5.0.0-beta.6',
   desktop: true,
   app: {
     getInfo: () => ipcRenderer.invoke('app:getInfo'),
@@ -37,6 +37,8 @@ contextBridge.exposeInMainWorld('JoeAnimeDB', {
   },
   storage: {
     getInfo: () => ipcRenderer.invoke('app:getStorageInfo'),
+    saveRollingBackup: (text, filename) => ipcRenderer.invoke('app:saveRollingBackup', text, filename),
+    saveBackupAs: (text, filename) => ipcRenderer.invoke('app:saveBackupAs', text, filename),
     openDataFolder: () => ipcRenderer.invoke('app:openFolder', 'data'),
     openBackupsFolder: () => ipcRenderer.invoke('app:openFolder', 'backups'),
     openLogsFolder: () => ipcRenderer.invoke('app:openFolder', 'logs')

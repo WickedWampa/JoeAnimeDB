@@ -20,6 +20,7 @@ import './styles/update-notification.css';
 import './styles/content-safety.css';
 import './styles/where-to-watch.css';
 import './styles/detail-themed.css';
+import './styles/web-data-safety.css';
 import React, { useEffect, useMemo, useState } from 'react';
 
 import { Sidebar } from './components/Sidebar';
@@ -27,6 +28,7 @@ import { MobileNavigation } from './components/MobileNavigation';
 import { SearchBar } from './components/SearchBar';
 import { DetailModal } from './components/DetailModal';
 import { FirstTimeOnboarding, OnboardingPageTip } from './components/FirstTimeOnboarding';
+import { WebDataSafetyNotice } from './components/WebDataSafetyNotice';
 import { Dashboard } from './pages/Dashboard';
 import { LibraryPage } from './pages/LibraryPage';
 import { FavoritesPage } from './pages/FavoritesPage';
@@ -789,6 +791,19 @@ export function App() {
         onStepChange={handleOnboardingStep}
         onComplete={handleFinishOnboarding}
         onSkip={handleSkipOnboarding}
+      />
+      <WebDataSafetyNotice
+        data={data}
+        hidden={
+          onboardingOpen ||
+          Boolean(selected) ||
+          syncing ||
+          !['completed', 'skipped'].includes(onboardingState?.status)
+        }
+        onOpenSettings={() => {
+          setView('settings');
+          setSelected(null);
+        }}
       />
       <DatabaseUpdateConfirm
         open={Boolean(databaseUpdateRequest)}

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell, ipcMain } = require('electron');
+const { app, BrowserWindow, dialog, shell, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { execFile, spawn } = require('child_process');
@@ -154,6 +154,91 @@ ipcMain.handle('app:getInfo', async () => ({
   platform: process.platform,
   architecture: process.arch
 }));
+
+function safeBackupText(value) {
+  const text = String(value || '');
+  if (!text.trim()) throw new Error('The backup was empty.');
+  if (Buffer.byteLength(text, 'utf8') > 150 * 1024 * 1024) {
+    throw new Error('The backup is too large to save safely.');
+  }
+  return text;
+}
+
+function backupLocationFile() {
+  return path.join(ensureAppFolders().root, 'rolling-backup-location.json');
+}
+
+function readRollingBackupPath() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(backupLocationFile(), 'utf8'));
+    return typeof parsed?.path === 'string' ? parsed.path : '';
+  } catch {
+    return '';
+  }
+}
+
+function rememberRollingBackupPath(filePath) {
+  fs.writeFileSync(
+    backupLocationFile(),
+    JSON.stringify({ path: filePath, updatedAt: new Date().toISOString() }, null, 2),
+    'utf8'
+  );
+}
+
+function writeBackupFile(filePath, text) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, safeBackupText(text), 'utf8');
+  return {
+    ok: true,
+    method: 'desktop-file',
+    path: filePath,
+    filename: path.basename(filePath)
+  };
+}
+
+ipcMain.handle('app:saveRollingBackup', async (event, rawText) => {
+  try {
+    const folders = ensureAppFolders();
+    let filePath = readRollingBackupPath();
+
+    if (!filePath) {
+      const parent = BrowserWindow.fromWebContents(event.sender);
+      const choice = await dialog.showSaveDialog(parent, {
+        title: 'Choose rolling backup location',
+        defaultPath: path.join(folders.backups, 'JoeAnimeDB-backup.json'),
+        filters: [{ name: 'JoeAnimeDB JSON backup', extensions: ['json'] }],
+        properties: ['createDirectory', 'showOverwriteConfirmation']
+      });
+      if (choice.canceled || !choice.filePath) return { ok: false, canceled: true };
+      filePath = choice.filePath;
+      rememberRollingBackupPath(filePath);
+    }
+
+    return writeBackupFile(filePath, rawText);
+  } catch (error) {
+    return { ok: false, error: error?.message || String(error) };
+  }
+});
+
+ipcMain.handle('app:saveBackupAs', async (event, rawText, suggestedName) => {
+  try {
+    const folders = ensureAppFolders();
+    const parent = BrowserWindow.fromWebContents(event.sender);
+    const choice = await dialog.showSaveDialog(parent, {
+      title: 'Save JoeAnimeDB backup as',
+      defaultPath: path.join(
+        folders.backups,
+        path.basename(String(suggestedName || 'JoeAnimeDB-backup.json'))
+      ),
+      filters: [{ name: 'JoeAnimeDB JSON backup', extensions: ['json'] }],
+      properties: ['createDirectory', 'showOverwriteConfirmation']
+    });
+    if (choice.canceled || !choice.filePath) return { ok: false, canceled: true };
+    return writeBackupFile(choice.filePath, rawText);
+  } catch (error) {
+    return { ok: false, error: error?.message || String(error) };
+  }
+});
 
 ipcMain.handle('app:openFolder', async (_event, kind) => {
   const folders = ensureAppFolders();

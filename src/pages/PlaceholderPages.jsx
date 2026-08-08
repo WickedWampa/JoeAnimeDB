@@ -9,6 +9,7 @@ import { AnimeCard } from '../components/AnimeCard';
 import { score, countBy } from '../utils/animeUtils';
 import {
   exportBackup,
+  exportBackupAs,
   exportLibraryList,
   exportRankedLibraryList,
   exportLibraryCsv,
@@ -16,7 +17,8 @@ import {
   exportMalCompatibleXml,
   parseBackupText,
   applyBackupPreferences,
-  exportDiagnostics
+  exportDiagnostics,
+  readLastBackupRecord
 } from '../services/storage';
 import { checkMetadataProviders } from '../services/providerHealth';
 import { createAnimeBrain } from '../engine/animeBrain'; import { fetchMetadata } from '../services/metadata'; import { maybeKnowledgeFirstRecommendation } from '../ai/knowledgeFirstRecommender'; import { parseJoeAIIntent } from '../ai/intentParser'; import { executeJoeAICommand } from '../ai/commandExecutor'; import { routeJoeAIRecommendation, routeJoeAITitleQuestion } from '../ai/joeAIRecommendationRouter';
@@ -41,6 +43,12 @@ import {
   resolveJoeAIFollowUp,
   updateJoeAIConversationContext
 } from '../ai/intelligence/joeAIIntelligence';
+import {
+  CONTENT_SAFETY_MODES,
+  contentSafetyModeLabel,
+  filterContentBySafety,
+  getContentRating
+} from '../services/contentSafety';
 
 function localDaySeed(date = new Date()) {
   return Number(
@@ -194,18 +202,27 @@ export function Universe({ anime, setQuery, setView }) {
 
 export function Assistant({
   anime,
-  catalog = [],
+  catalog: rawCatalog = [],
   updateAnime,
   joeAIState = {},
+  contentSafetyMode = 'unrestricted',
   onRecommendationFeedback,
   onJoeAIPreference,
   onJoeAIConversation,
   initialPrompt = '',
   onPromptConsumed
 }) {
+  const catalog = useMemo(
+    () => filterContentBySafety(rawCatalog, contentSafetyMode),
+    [rawCatalog, contentSafetyMode]
+  );
+  const recommendationAnime = useMemo(
+    () => filterContentBySafety(anime, contentSafetyMode),
+    [anime, contentSafetyMode]
+  );
   const brain = useMemo(
-    () => createAnimeBrain(anime, catalog, { joeAIState }),
-    [anime, catalog, joeAIState]
+    () => createAnimeBrain(recommendationAnime, catalog, { joeAIState }),
+    [recommendationAnime, catalog, joeAIState]
   );
   const [log, setLog] = useState([
     {
@@ -623,20 +640,6 @@ export function Assistant({
           >
             👎 Not for Me
           </button>
-          <button
-            type="button"
-            className={status === 'already_seen' ? 'active' : ''}
-            onClick={() => saveRecommendationFeedback(item, 'already_seen', 'Already watched outside JoeAnimeDB')}
-          >
-            👁 Already Seen
-          </button>
-          <button
-            type="button"
-            className={status === 'maybe_later' ? 'active' : ''}
-            onClick={() => saveRecommendationFeedback(item, 'maybe_later')}
-          >
-            ⏳ Later
-          </button>
         </div>
 
         {menuOpen && (
@@ -673,7 +676,8 @@ export function Assistant({
           kind: 'singleAdd',
           title: input.title,
           status: input.status || 'Watching',
-          selectedAnime: input.selectedAnime
+          selectedAnime: input.selectedAnime,
+          quickAdd: Boolean(input.quickAdd)
         },
         anime,
         catalog,
@@ -849,7 +853,7 @@ export function Assistant({
     if (intent.kind === 'recommendation') {
       const result = coordinateJoeAIRecommendation({
         text: routedText,
-        anime,
+        anime: recommendationAnime,
         catalog,
         brain,
         joeAIState: activeJoeAIState
@@ -882,7 +886,7 @@ export function Assistant({
       return;
     }
 
-    const smartAnswer = routeJoeAIRecommendation(routedText, anime, catalog);
+    const smartAnswer = routeJoeAIRecommendation(routedText, recommendationAnime, catalog);
     if (smartAnswer) {
       appendBotResult(smartAnswer, routedText);
       return;
@@ -899,6 +903,7 @@ export function Assistant({
     const id = 'anime-' + animeId(item);
     const isAdding = addingId === id;
     const receipt = item.confidenceReceipt || {};
+    const contentRating = getContentRating(item);
 
     return (
       <article className="joeaiRecCard" key={item.title + '-' + index}>
@@ -916,6 +921,9 @@ export function Assistant({
             {item.year && <span>{item.year}</span>}
             {item.episodes && <span>{item.episodes} eps</span>}
             {item.studio && <span>{item.studio}</span>}
+            <span className={`contentRatingBadge rating-${contentRating.rating || 'unknown'}`} title={contentRating.guide || 'No content-rating guide available'}>
+              {contentRating.label}
+            </span>
             {!item.metadataReady && <span>metadata pending</span>}
           </div>
 
@@ -941,11 +949,14 @@ export function Assistant({
           )}
 
           <div className="joeaiRecActions">
-            <button type="button" onClick={() => addAnimeToLibrary({ title: item.title, status: 'Watching', selectedAnime: item })} disabled={isAdding || !updateAnime}>
-              {isAdding ? 'Adding...' : '+ Add to Library'}
+            <button type="button" onClick={() => addAnimeToLibrary({ title: item.title, selectedAnime: item, quickAdd: true })} disabled={isAdding || !updateAnime}>
+              {isAdding ? 'Adding...' : 'Quick Add'}
             </button>
-            <button type="button" onClick={() => addAnimeToLibrary({ title: item.title, status: 'Completed', selectedAnime: item })} disabled={isAdding || !updateAnime}>
-              Mark Completed
+            <button type="button" onClick={() => addAnimeToLibrary({ title: item.title, status: 'Completed', selectedAnime: item, quickAdd: true })} disabled={isAdding || !updateAnime}>
+              Already Watched
+            </button>
+            <button type="button" onClick={() => runPrompt(`recommend something else instead of ${item.officialTitle || item.title}`)}>
+              Show Another
             </button>
           </div>
           {renderRecommendationFeedback(item, id)}
@@ -1047,6 +1058,7 @@ export function Assistant({
           <div className="joeaiBulkStats">
             <span>Added: {message.added?.length || 0}</span>
             <span>Already in Library: {message.skipped?.length || 0}</span>
+            <span>Needs Review: {message.review?.length || 0}</span>
             <span>Failed: {message.failed?.length || 0}</span>
           </div>
         </div>
@@ -1069,6 +1081,18 @@ export function Assistant({
             {message.skipped.map((title) => (
               <div className="joeaiBulkRow skipped" key={title}>
                 <span>↪</span>
+                <strong>{title}</strong>
+              </div>
+            ))}
+          </section>
+        )}
+
+        {message.review?.length > 0 && (
+          <section className="joeaiBulkSection">
+            <h3>Needs Review</h3>
+            {message.review.map((title) => (
+              <div className="joeaiBulkRow skipped" key={title}>
+                <span>?</span>
                 <strong>{title}</strong>
               </div>
             ))}
@@ -1387,6 +1411,7 @@ export function Assistant({
     };
     const facts = relationshipFacts(item);
     const bullets = reasoningBullets(item, sourceTitle);
+    const contentRating = getContentRating(item);
 
     return (
       <article className={`joeaiRecCard joeaiPremiumRecCard ${isExpanded ? 'isExpanded' : ''}`} key={id}>
@@ -1411,6 +1436,9 @@ export function Assistant({
             {item.episodes && <span>{item.episodes} eps</span>}
             {item.studio && <span>{item.studio}</span>}
             {item.communityScore && <span>MAL {item.communityScore}</span>}
+            <span className={`contentRatingBadge rating-${contentRating.rating || 'unknown'}`} title={contentRating.guide || 'No content-rating guide available'}>
+              {contentRating.label}
+            </span>
           </div>
 
           <div className="joeaiPremiumInsight">
@@ -1498,11 +1526,33 @@ export function Assistant({
             <button
               type="button"
               className="primary"
-              onClick={() => addAnimeToLibrary({ title: name, status: 'Watching', selectedAnime: item })}
+              onClick={() => addAnimeToLibrary({ title: name, selectedAnime: item, quickAdd: true })}
               disabled={isAdding || !updateAnime}
             >
-              {isAdding ? 'Saving...' : item.owned ? '📚 Update Library Entry' : '+ Add to Library'}
+              {isAdding ? 'Saving...' : item.owned ? 'Update Library Entry' : 'Quick Add'}
             </button>
+            {!item.owned && (
+              <button
+                type="button"
+                onClick={() => addAnimeToLibrary({
+                  title: name,
+                  status: 'Completed',
+                  selectedAnime: item,
+                  quickAdd: true
+                })}
+                disabled={isAdding || !updateAnime}
+              >
+                Already Watched
+              </button>
+            )}
+            {!item.owned && (
+              <button
+                type="button"
+                onClick={() => runPrompt(`recommend something else instead of ${name}`)}
+              >
+                Show Another
+              </button>
+            )}
           </div>
           {renderRecommendationFeedback(item, id)}
         </div>
@@ -1809,15 +1859,30 @@ export function Assistant({
                   </button>
                   <button
                     type="button"
-                    onClick={() => runPrompt(`add ${joeAIPick.item.title} as watching`)}
+                    onClick={() => addAnimeToLibrary({
+                      title: joeAIPick.item.title,
+                      selectedAnime: joeAIPick.item,
+                      quickAdd: true
+                    })}
                   >
-                    + Watching
+                    Quick Add
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => addAnimeToLibrary({
+                      title: joeAIPick.item.title,
+                      status: 'Completed',
+                      selectedAnime: joeAIPick.item,
+                      quickAdd: true
+                    })}
+                  >
+                    Already Watched
                   </button>
                   <button
                     type="button"
                     onClick={() => runPrompt(`recommend something else instead of ${joeAIPick.item.title}`)}
                   >
-                    Another Pick
+                    Show Another
                   </button>
                 </div>
                 {renderRecommendationFeedback(
@@ -2402,7 +2467,9 @@ export function SettingsPage({
   syncText = '',
   syncProgress = null,
   onOpenIntegrity,
-  onOpenMetadataHealth
+  onOpenMetadataHealth,
+  contentSafetyMode = 'unrestricted',
+  onContentSafetyModeChange
 }) {
   const [genomeUpdateStatus, setGenomeUpdateStatus] = React.useState('');
   const [metadataRepairStatus, setMetadataRepairStatus] = React.useState('');
@@ -2417,6 +2484,7 @@ export function SettingsPage({
   const [providerHealth, setProviderHealth] = React.useState(null);
   const [checkingProviders, setCheckingProviders] = React.useState(false);
   const [displayNameDraft, setDisplayNameDraft] = React.useState(displayName);
+  const [lastBackup, setLastBackup] = React.useState(() => readLastBackupRecord());
   const [lastUpdateSummary, setLastUpdateSummary] = React.useState(() => {
     try {
       const saved = localStorage.getItem('joeanime-last-update-summary-v1');
@@ -2472,6 +2540,12 @@ export function SettingsPage({
   React.useEffect(() => {
     setDisplayNameDraft(displayName);
   }, [displayName]);
+
+  React.useEffect(() => {
+    const handleBackupSaved = (event) => setLastBackup(event.detail || readLastBackupRecord());
+    window.addEventListener('joeanime:backup-saved', handleBackupSaved);
+    return () => window.removeEventListener('joeanime:backup-saved', handleBackupSaved);
+  }, []);
 
   React.useEffect(() => {
     let active = true;
@@ -2950,6 +3024,48 @@ export function SettingsPage({
       setSystemStatus(`Display name changed to ${nextName}.`);
     } catch (error) {
       setSystemStatus(`Could not save display name: ${error?.message || String(error)}`);
+    }
+  }
+
+  async function handleRollingBackup() {
+    setSystemStatus('Preparing the rolling backup...');
+    try {
+      const outcome = await exportBackup(data);
+      if (outcome?.result?.canceled) {
+        setSystemStatus('Backup cancelled. Your library was not changed.');
+        return;
+      }
+      if (!outcome?.result?.ok) {
+        throw new Error(outcome?.result?.error || 'The backup could not be saved.');
+      }
+
+      setLastBackup(outcome.record);
+      setSystemStatus(
+        outcome.result.method === 'download-fallback'
+          ? 'Backup downloaded. This browser cannot overwrite the same file automatically, so replace the older copy yourself.'
+          : 'Rolling backup updated successfully.'
+      );
+    } catch (error) {
+      setSystemStatus(`Backup failed: ${error?.message || String(error)}`);
+    }
+  }
+
+  async function handleBackupAs() {
+    setSystemStatus('Preparing a backup snapshot...');
+    try {
+      const outcome = await exportBackupAs(data);
+      if (outcome?.result?.canceled) {
+        setSystemStatus('Backup snapshot cancelled.');
+        return;
+      }
+      if (!outcome?.result?.ok) {
+        throw new Error(outcome?.result?.error || 'The backup snapshot could not be saved.');
+      }
+
+      setLastBackup(outcome.record);
+      setSystemStatus('Backup snapshot saved successfully.');
+    } catch (error) {
+      setSystemStatus(`Backup failed: ${error?.message || String(error)}`);
     }
   }
 
@@ -3502,6 +3618,37 @@ export function SettingsPage({
         </div>
       </section>
 
+      <section className="settingsContentSafetyCard">
+        <header>
+          <div>
+            <p className="settingsWorkshopEyebrow">Content Safety</p>
+            <h2>Recommendation Rating Limit</h2>
+            <p>Applies to Discover, JoeAI, and Quick Ask recommendations on every platform.</p>
+          </div>
+          <strong>{contentSafetyModeLabel(contentSafetyMode)} active</strong>
+        </header>
+
+        <div className="settingsContentSafetyGrid" role="radiogroup" aria-label="Recommendation content safety mode">
+          {CONTENT_SAFETY_MODES.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              role="radio"
+              aria-checked={contentSafetyMode === option.id}
+              className={contentSafetyMode === option.id ? 'active' : ''}
+              onClick={() => onContentSafetyModeChange?.(option.id)}
+            >
+              <b>{option.label}</b>
+              <small>{option.description}</small>
+              {contentSafetyMode === option.id && <em>Selected</em>}
+            </button>
+          ))}
+        </div>
+        <p className="settingsContentSafetyNote">
+          Kid-safe hides titles whose rating is unknown. The other modes allow unknown ratings but still follow their stated limits.
+        </p>
+      </section>
+
       <section className="settingsProfileCard">
         <div>
           <p className="settingsWorkshopEyebrow">Profile</p>
@@ -3682,11 +3829,38 @@ export function SettingsPage({
             Back up the full database or export clean lists that are easy to share.
           </p>
 
+          {document.documentElement.dataset.platform === 'web' && (
+            <aside className="settingsWebDataSafety">
+              <strong>Your web library lives in this browser</strong>
+              <p>
+                Clearing site data, resetting the browser, or using a different browser can remove it.
+                Keep using joeanimedb.com and update your backup regularly.
+              </p>
+              <small>To restore: choose Restore Full Backup below and select JoeAnimeDB-backup.json.</small>
+            </aside>
+          )}
+
+          <div className="settingsBackupStatus" aria-live="polite">
+            <span>Last backup</span>
+            <strong>
+              {lastBackup?.savedAt
+                ? new Date(lastBackup.savedAt).toLocaleString()
+                : 'No backup recorded on this device'}
+            </strong>
+            {lastBackup?.filename && <small>{lastBackup.filename}</small>}
+          </div>
+
           <div className="settingsWorkshopActions">
-            <button type="button" onClick={() => exportBackup(data)}>
+            <button type="button" className="settingsPrimaryBackup" onClick={handleRollingBackup}>
               <span>📦</span>
-              <strong>Export Full Backup</strong>
-              <small>Complete JoeAnimeDB JSON backup</small>
+              <strong>Update Rolling Backup</strong>
+              <small>Updates JoeAnimeDB-backup.json when supported</small>
+            </button>
+
+            <button type="button" onClick={handleBackupAs}>
+              <span>＋</span>
+              <strong>Save Backup As...</strong>
+              <small>Create a separate dated snapshot</small>
             </button>
 
             <input
