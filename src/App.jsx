@@ -17,6 +17,8 @@ import './styles/library-cleanup.css';
 import './styles/library-integrity.css';
 import './styles/settings-art.css';
 import './styles/update-notification.css';
+import './styles/content-safety.css';
+import './styles/where-to-watch.css';
 import React, { useEffect, useMemo, useState } from 'react';
 
 import { Sidebar } from './components/Sidebar';
@@ -45,6 +47,7 @@ import {
   updateOnboardingStep
 } from './services/onboardingState';
 import { installAndroidBackHandler } from './platform/runtime';
+import { normalizeContentSafetyMode } from './services/contentSafety';
 
 const UPDATE_THEME_APPEARANCE = {
   neon: { icon: '⚡', label: 'Neon Signal' },
@@ -206,6 +209,15 @@ export function App() {
       return 'neon';
     }
   });
+  const [contentSafetyMode, setContentSafetyMode] = useState(() => {
+    try {
+      return normalizeContentSafetyMode(
+        localStorage.getItem('joeanime-content-safety-mode-v1') || 'unrestricted'
+      );
+    } catch {
+      return 'unrestricted';
+    }
+  });
 
   const library = useAnimeLibrary();
   const {
@@ -230,6 +242,28 @@ export function App() {
     deleteAnime, fetchMoreCatalogTitles, refreshLiveDiscover,
     restoreBackup, resetDatabase
   } = library;
+
+  useEffect(() => {
+    const savedMode = data?.settings?.contentSafetyMode;
+    if (savedMode) setContentSafetyMode(normalizeContentSafetyMode(savedMode));
+  }, [data?.settings?.contentSafetyMode]);
+
+  async function handleContentSafetyModeChange(nextMode) {
+    const normalizedMode = normalizeContentSafetyMode(nextMode);
+    setContentSafetyMode(normalizedMode);
+
+    try {
+      localStorage.setItem('joeanime-content-safety-mode-v1', normalizedMode);
+    } catch {}
+
+    return updateData((current) => ({
+      ...(current || {}),
+      settings: {
+        ...(current?.settings || {}),
+        contentSafetyMode: normalizedMode
+      }
+    }));
+  }
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -458,6 +492,7 @@ export function App() {
       'joeanime-joeai-feedback-v1',
       'joeanime-joeai-preferences-v1',
       'joeanime-joeai-conversation-v1',
+      'joeanime-content-safety-mode-v1',
       'joeai.memory.profile.v1',
       'joeai.memory.journal.v1',
       'joeai.memory.events.v1'
@@ -467,6 +502,7 @@ export function App() {
       } catch {}
     });
     clearOnboardingState();
+    setContentSafetyMode('unrestricted');
     const restartedOnboarding = beginOnboarding();
     setOnboardingState(restartedOnboarding);
     setOnboardingOpen(true);
@@ -622,6 +658,7 @@ export function App() {
             onRecommendationFeedback={recordJoeAIFeedback}
             fetchMoreCatalogTitles={fetchMoreCatalogTitles}
             refreshLiveDiscover={refreshLiveDiscover}
+            contentSafetyMode={contentSafetyMode}
           />
         )}
         {view === 'favorites' && (
@@ -645,6 +682,7 @@ export function App() {
             onRecommendationFeedback={recordJoeAIFeedback}
             onJoeAIPreference={setJoeAIPreference}
             onJoeAIConversation={setJoeAIConversationContext}
+            contentSafetyMode={contentSafetyMode}
           />
         )}
         {view === 'following' && (
@@ -698,6 +736,8 @@ export function App() {
             syncProgress={syncProgress}
             onOpenIntegrity={() => setView('library-integrity')}
             onOpenMetadataHealth={() => setView('analytics')}
+            contentSafetyMode={contentSafetyMode}
+            onContentSafetyModeChange={handleContentSafetyModeChange}
           />
         )}
         {view === 'about' && (
@@ -742,6 +782,8 @@ export function App() {
         anime={anime}
         onThemeChange={handleThemeChange}
         onSaveDisplayName={handleSaveDisplayName}
+        contentSafetyMode={contentSafetyMode}
+        onContentSafetyModeChange={handleContentSafetyModeChange}
         onUpdateAnime={handleUpdateAnime}
         onStepChange={handleOnboardingStep}
         onComplete={handleFinishOnboarding}

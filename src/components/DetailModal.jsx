@@ -5,6 +5,16 @@ import { fetchKitsuMetadata } from '../services/kitsuProvider';
 import { enrichMissingMetadata } from '../services/wikidataRepair';
 import { mergeAnimeMetadata } from '../services/animeImporter';
 import { preservePersonalAnimeData } from '../services/personalAnimeData';
+import { clearLibraryReview } from '../services/quickAdd';
+import {
+  WATCHMODE_REGIONS,
+  confirmWatchmodeMatch,
+  fetchWhereToWatch,
+  forgetWatchmodeMatch,
+  getSavedWatchRegion,
+  saveWatchRegion
+} from '../services/watchmodeService';
+import { openExternalUrl } from '../platform/runtime';
 import '../styles/detail-metadata-repair.css';
 import '../styles/library-release-readiness.css';
 
@@ -57,6 +67,8 @@ export function DetailModal({
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteMessage, setDeleteMessage] = useState('');
+  const [watchRegion, setWatchRegion] = useState(() => getSavedWatchRegion());
+  const [watchState, setWatchState] = useState({ status: 'loading', providers: [], candidates: [] });
   const isCatalogTitle = String(anime.id || '').startsWith('catalog-') || Boolean(anime.catalogSource);
   const currentScore = Number(scoreDraft || 0);
   const currentStatus = anime.status || '';
@@ -73,6 +85,64 @@ export function DetailModal({
     setConfirmingDelete(false);
     setDeleteMessage('');
   }, [anime.id, anime.joeScore]);
+
+  useEffect(() => {
+    let active = true;
+    setWatchState({ status: 'loading', providers: [], candidates: [] });
+
+    fetchWhereToWatch(anime, { region: watchRegion })
+      .then((result) => {
+        if (active) setWatchState(result);
+      })
+      .catch((error) => {
+        if (active) {
+          setWatchState({
+            status: 'error',
+            providers: [],
+            candidates: [],
+            error: String(error?.message || error || 'Where to Watch is unavailable.')
+          });
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [anime.id, anime.title, anime.year, anime.type, watchRegion]);
+
+  function changeWatchRegion(event) {
+    const nextRegion = event.target.value;
+    saveWatchRegion(nextRegion);
+    setWatchRegion(nextRegion);
+  }
+
+  async function chooseWatchmodeCandidate(candidate) {
+    setWatchState((current) => ({ ...current, status: 'loading' }));
+    try {
+      const result = await confirmWatchmodeMatch(anime, candidate.id, { region: watchRegion });
+      setWatchState(result);
+    } catch (error) {
+      setWatchState({
+        status: 'error',
+        providers: [],
+        candidates: [],
+        error: String(error?.message || error || 'Where to Watch is unavailable.')
+      });
+    }
+  }
+
+  function changeWatchmodeMatch() {
+    forgetWatchmodeMatch(anime);
+    setWatchState({ status: 'loading', providers: [], candidates: [] });
+    fetchWhereToWatch(anime, { region: watchRegion, forceReview: true })
+      .then(setWatchState)
+      .catch((error) => setWatchState({
+        status: 'error',
+        providers: [],
+        candidates: [],
+        error: String(error?.message || error || 'Where to Watch is unavailable.')
+      }));
+  }
 
   useEffect(() => {
     function handleKeyDown(event) {
@@ -445,6 +515,18 @@ export function DetailModal({
             </section>
           )}
 
+          {anime.libraryNeedsReview && (
+            <section className="detailLibraryReview" role="status">
+              <div>
+                <strong>Quick Add needs review</strong>
+                <p>{anime.libraryReviewReason || 'Review the personal details below, then mark this entry reviewed.'}</p>
+              </div>
+              <button type="button" onClick={() => updateAnime?.(clearLibraryReview(anime))} disabled={!updateAnime}>
+                Mark Reviewed
+              </button>
+            </section>
+          )}
+
           {!isCatalogTitle && <section className="scoreEditor">
             <div>
               <span className="controlLabel">My Score</span>
@@ -510,6 +592,58 @@ export function DetailModal({
           </section>}
 
           <div className="tags">{(anime.genres || []).map((g) => <span key={g}>{g}</span>)}</div>
+          <section className="whereToWatch" aria-labelledby="where-to-watch-title">
+            <div className="whereToWatchHeader">
+              <h2 id="where-to-watch-title">Where to Watch</h2>
+              <label className="watchRegionControl">
+                <span>Streaming region</span>
+                <select value={watchRegion} onChange={changeWatchRegion} aria-label="Streaming region">
+                  {WATCHMODE_REGIONS.map((region) => (
+                    <option key={region.code} value={region.code}>{region.label}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            {watchState.status === 'loading' && <p role="status">Checking subscription services...</p>}
+
+            {watchState.status === 'needs_review' && (
+              <div className="watchmodeReview" role="status">
+                <p>Confirm the correct title before JoeAnimeDB looks up streaming services.</p>
+                <div className="watchmodeCandidates">
+                  {(watchState.candidates || []).map((candidate) => (
+                    <button type="button" key={candidate.id} onClick={() => chooseWatchmodeCandidate(candidate)}>
+                      {candidate.name}
+                      <small>{[candidate.year, candidate.type].filter(Boolean).join(' · ') || 'Details unavailable'}</small>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {watchState.status === 'not_found' && <p>No confident Watchmode title match was found.</p>}
+            {watchState.status === 'error' && <p role="alert">{watchState.error}</p>}
+
+            {watchState.status === 'ready' && (
+              <>
+                {(watchState.providers || []).length ? (
+                  <div className="whereToWatchProviders">
+                    {watchState.providers.map((provider) => (
+                      <button type="button" key={`${provider.name}-${provider.url}`} onClick={() => openExternalUrl(provider.url)}>
+                        Watch on {provider.name}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p>No subscription streaming options were found in this region.</p>
+                )}
+                <p className="watchmodeMatchMeta">
+                  Matched to {watchState.match?.name || anime.title}
+                  <button type="button" onClick={changeWatchmodeMatch}>Change match</button>
+                </p>
+              </>
+            )}
+          </section>
           <section className="synopsisBlock">
             <h2>Synopsis</h2>
             <p>{anime.synopsis}</p>

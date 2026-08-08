@@ -1,0 +1,109 @@
+.whereToWatch {
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid color-mix(in srgb, var(--accent, #22d3ee) 46%, transparent);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--panel, #07101b) 92%, transparent);
+}
+
+.whereToWatchHeader,
+.whereToWatchStatus,
+.whereToWatchProviders,
+.watchmodeCandidates {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+}
+
+.whereToWatchHeader {
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.watchRegionControl {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.whereToWatchHeader h2,
+.whereToWatch p {
+  margin: 0;
+}
+
+.whereToWatch select,
+.whereToWatch button {
+  border: 1px solid color-mix(in srgb, var(--accent, #22d3ee) 55%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--panel, #07101b) 84%, black);
+  color: inherit;
+  padding: 0.65rem 0.9rem;
+}
+
+.whereToWatch button {
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.whereToWatch button:hover,
+.whereToWatch button:focus-visible {
+  border-color: var(--accent, #22d3ee);
+  transform: translateY(-1px);
+}
+
+.whereToWatch button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+  transform: none;
+}
+
+.whereToWatchProviders {
+  margin-top: 0.8rem;
+}
+
+.whereToWatchProviders button {
+  background: linear-gradient(135deg, var(--accent, #22d3ee), var(--accent-2, #ec4899));
+  color: #06101a;
+  border: 0;
+}
+
+.watchmodeReview {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.watchmodeCandidates button {
+  border-radius: 14px;
+  text-align: left;
+}
+
+.watchmodeCandidates small {
+  display: block;
+  margin-top: 0.2rem;
+  opacity: 0.75;
+}
+
+.watchmodeMatchMeta {
+  margin-top: 0.75rem;
+  font-size: 0.78rem;
+  opacity: 0.65;
+}
+
+.watchmodeMatchMeta button {
+  margin-left: 0.6rem;
+  padding: 0.35rem 0.65rem;
+  font-size: inherit;
+}
+
+@media (max-width: 640px) {
+  .whereToWatchHeader {
+    align-items: stretch;
+  }
+
+  .whereToWatchHeader select,
+  .whereToWatchProviders button,
+  .watchmodeCandidates button {
+    width: 100%;
+  }
+}

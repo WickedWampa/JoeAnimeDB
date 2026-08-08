@@ -12,6 +12,12 @@ export async function openExternalUrl(url) {
     throw new Error('Only secure web links can be opened.');
   }
 
+  if (window.JoeAnimeDB?.app?.openExternal) {
+    const result = await window.JoeAnimeDB.app.openExternal(target);
+    if (result?.ok === false) throw new Error(result.error || 'Could not open this link.');
+    return true;
+  }
+
   if (isNativeAndroid()) {
     await Browser.open({ url: target });
     return true;
