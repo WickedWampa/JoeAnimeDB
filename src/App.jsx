@@ -19,6 +19,7 @@ import './styles/settings-art.css';
 import './styles/update-notification.css';
 import './styles/content-safety.css';
 import './styles/where-to-watch.css';
+import './styles/detail-themed.css';
 import React, { useEffect, useMemo, useState } from 'react';
 
 import { Sidebar } from './components/Sidebar';
