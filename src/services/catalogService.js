@@ -1,6 +1,10 @@
 import catalogSeed from '../data/animeCatalogSeed.json';
 import { fetchMetadata, needsArtworkRepair, sleep } from './metadata';
-import { fetchKitsuCatalogPage, fetchKitsuLiveDiscoverFeeds } from './kitsuProvider';
+import {
+  fetchKitsuCatalogPage,
+  fetchKitsuContentRating,
+  fetchKitsuLiveDiscoverFeeds
+} from './kitsuProvider';
 
 export function titleKey(title = '') {
   return String(title)
@@ -103,15 +107,99 @@ export function mergeCatalogEntries({ library = [], catalog = [], seed = catalog
 
 export function buildCatalogQueue({ library = [], catalog = [], seed = catalogSeed, limit = 50 } = {}) {
   return mergeCatalogEntries({ library, catalog, seed })
-    .map((item, index) => ({
-      item,
-      index,
-      needsCoreRepair: needsArtworkRepair(item) || !hasUsefulMetadata(item),
-      needsContentRating: needsContentRatingBackfill(item)
-    }))
-    .filter(({ needsCoreRepair, needsContentRating }) => needsCoreRepair || needsContentRating)
-    .sort((left, right) => Number(right.needsCoreRepair) - Number(left.needsCoreRepair))
+    .map((item, index) => ({ item, index }))
+    .filter(({ item }) => needsArtworkRepair(item) || !hasUsefulMetadata(item))
     .slice(0, limit);
+}
+
+export function buildCatalogContentRatingQueue({
+  library = [],
+  catalog = [],
+  seed = catalogSeed,
+  limit = 200
+} = {}) {
+  return mergeCatalogEntries({ library, catalog, seed })
+    .map((item, index) => ({ item, index }))
+    .filter(({ item }) => needsContentRatingBackfill(item))
+    .slice(0, limit);
+}
+
+export async function updateCatalogContentRatings({
+  library = [],
+  catalog = [],
+  repository,
+  onProgress,
+  limit = 200,
+  batchSize = 4
+} = {}) {
+  let nextCatalog = mergeCatalogEntries({ library, catalog, seed: catalogSeed });
+  const queue = buildCatalogContentRatingQueue({
+    library,
+    catalog: nextCatalog,
+    seed: [],
+    limit
+  });
+  let updated = 0;
+  let failed = 0;
+  let processed = 0;
+  const safeBatchSize = Math.max(1, Math.min(6, Number(batchSize || 4)));
+
+  for (let offset = 0; offset < queue.length; offset += safeBatchSize) {
+    const batch = queue.slice(offset, offset + safeBatchSize);
+    const results = await Promise.allSettled(
+      batch.map(({ item }) => fetchKitsuContentRating(item))
+    );
+
+    results.forEach((result, resultIndex) => {
+      const { item } = batch[resultIndex];
+      processed += 1;
+
+      if (result.status === 'fulfilled') {
+        const rating = result.value;
+        nextCatalog = nextCatalog.map((candidate) =>
+          sameCatalogIdentity(candidate, item)
+            ? {
+                ...candidate,
+                ...rating,
+                id: candidate.id || item.id,
+                title: candidate.title || item.title
+              }
+            : candidate
+        );
+        updated += 1;
+      } else {
+        failed += 1;
+        console.warn('Catalog content-rating lookup failed:', item.title, result.reason);
+      }
+
+      onProgress?.({
+        index: processed,
+        total: queue.length,
+        title: item.title,
+        updated,
+        failed
+      });
+    });
+
+    if (offset + safeBatchSize < queue.length) await sleep(150);
+  }
+
+  const saved = await repository.importCatalog(nextCatalog);
+  const remaining = buildCatalogContentRatingQueue({
+    library: saved.anime || library,
+    catalog: saved.catalog || nextCatalog,
+    seed: [],
+    limit: Number.MAX_SAFE_INTEGER
+  }).length;
+
+  return {
+    saved,
+    updated,
+    failed,
+    processed,
+    total: nextCatalog.length,
+    remaining
+  };
 }
 
 export async function updateCatalogMetadata({

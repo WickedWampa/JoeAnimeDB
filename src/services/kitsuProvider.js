@@ -511,6 +511,40 @@ export async function fetchKitsuMetadata(item = {}) {
   };
 }
 
+export async function fetchKitsuContentRating(item = {}) {
+  const wantedTitle = item.officialTitle || item.title || '';
+  let match = null;
+
+  if (item.kitsuId) {
+    try {
+      const payload = await fetchKitsu(`/anime/${encodeURIComponent(item.kitsuId)}`);
+      if (payload?.data) match = normalizeKitsuAnime(payload.data);
+    } catch (error) {
+      console.warn('[Kitsu Content Rating] direct ID lookup failed; trying title search:', item.kitsuId, error);
+    }
+  }
+
+  if (!match) {
+    const results = await searchKitsuAnime(wantedTitle, { limit: 8 });
+    match = bestKitsuMatch(results, {
+      ...item,
+      title: wantedTitle
+    });
+  }
+
+  if (!match) {
+    throw new Error(`Kitsu returned no confident title match for ${wantedTitle}`);
+  }
+
+  return {
+    kitsuId: match.kitsuId || item.kitsuId || '',
+    ageRating: match.ageRating || '',
+    ageRatingGuide: match.ageRatingGuide || '',
+    nsfw: Boolean(match.nsfw),
+    contentRatingCheckedAt: match.contentRatingCheckedAt || new Date().toISOString()
+  };
+}
+
 
 export async function fetchKitsuFollowingSnapshot(item = {}) {
   const wantedTitle = item.title || item.officialTitle || '';

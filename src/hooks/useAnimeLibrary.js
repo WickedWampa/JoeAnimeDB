@@ -5,7 +5,12 @@ import { hasManualMetadataOverride } from '../services/metadataProvider';
 import { fetchKitsuMetadata } from '../services/kitsuProvider';
 import { animeRepository } from '../repositories/animeRepository';
 import { sameAnimeIdentity } from '../services/titleIdentity';
-import { updateCatalogMetadata, fetchMoreCatalogTitles as fetchMoreCatalogPage, fetchLiveDiscoverCatalog } from '../services/catalogService';
+import {
+  updateCatalogContentRatings,
+  updateCatalogMetadata,
+  fetchMoreCatalogTitles as fetchMoreCatalogPage,
+  fetchLiveDiscoverCatalog
+} from '../services/catalogService';
 import seedData from '../data/animeSeed.json';
 import { createNewUserDemoDatabase } from '../services/newUserMode';
 import { auditGenomeCoverage } from '../ai/genome/runtime/autoGenomeRuntime';
@@ -810,6 +815,28 @@ export function useAnimeLibrary() {
       });
     }
 
+    const contentRatingResult = await updateCatalogContentRatings({
+      library: catalogResult.saved.anime || latest.anime || nextAnime,
+      catalog: catalogResult.saved.catalog || latest.catalog || catalog,
+      repository: animeRepository,
+      limit: 200,
+      onProgress: ({ index, total, title }) => {
+        setCatalogProgress({
+          processed: index,
+          total,
+          title
+        });
+
+        setSyncText(`Checking catalog content ratings ${index}/${total}: ${title}`);
+      }
+    });
+
+    catalogResult = {
+      ...catalogResult,
+      saved: contentRatingResult.saved,
+      contentRatings: contentRatingResult
+    };
+
     let savedData = catalogResult.saved;
 
     let genomeSummary = {
@@ -960,7 +987,10 @@ export function useAnimeLibrary() {
       catalog: {
         updated: Number(catalogResult.updated || 0),
         total: Number(catalogResult.total || 0),
-        deferred: Boolean(catalogResult.deferred)
+        deferred: Boolean(catalogResult.deferred),
+        contentRatingsUpdated: Number(catalogResult.contentRatings?.updated || 0),
+        contentRatingsFailed: Number(catalogResult.contentRatings?.failed || 0),
+        contentRatingsRemaining: Number(catalogResult.contentRatings?.remaining || 0)
       },
       genome: genomeSummary
     };
