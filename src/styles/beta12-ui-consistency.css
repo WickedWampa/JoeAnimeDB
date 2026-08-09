@@ -1,0 +1,460 @@
+/* Beta 12 UI consistency layer
+   Preserves the themed artwork and effects while standardizing hierarchy. */
+
+:root {
+  --ui-font-body: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --ui-font-display: var(--ui-font-body);
+  --ui-text-meta: 0.75rem;
+  --ui-text-small: 0.8125rem;
+  --ui-text-body: 0.9375rem;
+  --ui-text-card-title: clamp(1.125rem, 1.6vw, 1.375rem);
+  --ui-text-section: clamp(1.375rem, 2.2vw, 1.75rem);
+  --ui-text-page: clamp(2.75rem, 6vw, 5.5rem);
+  --ui-space-1: 0.375rem;
+  --ui-space-2: 0.625rem;
+  --ui-space-3: 0.875rem;
+  --ui-space-4: 1.125rem;
+  --ui-space-5: 1.5rem;
+  --ui-space-6: 2rem;
+  --ui-radius-control: 0.875rem;
+  --ui-radius-card: 1.125rem;
+  --ui-radius-panel: 1.5rem;
+  --ui-control-height: 2.75rem;
+}
+
+body,
+button,
+input,
+select,
+textarea {
+  font-family: var(--ui-font-body);
+}
+
+/* Shared control rhythm. Component colors and gradients remain theme-owned. */
+:where(.homeV3, .libraryHeader, .libraryStateCard, .libraryReviewQueue, .detailModal) button,
+:where(.detailModal, .libraryHeader) select {
+  min-height: var(--ui-control-height);
+  border-radius: var(--ui-radius-control);
+  padding-inline: var(--ui-space-4);
+  font-size: var(--ui-text-small);
+  font-weight: 850;
+  line-height: 1.15;
+}
+
+:where(.homeV3, .libraryStateCard, .libraryReviewQueue, .detailModal) button:focus-visible,
+:where(.detailModal, .libraryHeader) select:focus-visible,
+.detailModal textarea:focus-visible {
+  outline: 2px solid var(--cyan, #37eaff);
+  outline-offset: 3px;
+}
+
+/* Home */
+.homeV3 {
+  gap: var(--ui-space-4);
+}
+
+.homeV3Hero h1 {
+  font-family: var(--ui-font-display);
+  font-size: var(--ui-text-page);
+  line-height: 0.9;
+}
+
+.homeV3Lead,
+.homeV3Panel p,
+.homeV3Prompt,
+.homeV3SeedCard {
+  font-size: var(--ui-text-body);
+}
+
+.homeV3Eyebrow,
+.homeV3ThoughtCopy > span,
+.homeV3Panel .eyebrow {
+  font-size: var(--ui-text-meta);
+}
+
+.homeV3Panel {
+  border-radius: var(--ui-radius-panel);
+  padding: var(--ui-space-5);
+}
+
+.homeV3PanelHeader {
+  gap: var(--ui-space-3);
+  margin-bottom: var(--ui-space-4);
+}
+
+.homeV3PanelHeader h2 {
+  font-family: var(--ui-font-display);
+  font-size: var(--ui-text-card-title);
+  line-height: 1.15;
+}
+
+.homeV3HeroActions button,
+.homeV3PanelHeader button,
+.homeV3SeedActions button,
+.homeV3EmptyState button {
+  min-height: var(--ui-control-height);
+  padding: 0 var(--ui-space-4);
+}
+
+.homeV3EmptyState {
+  min-height: 156px;
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: var(--ui-space-2);
+  padding: var(--ui-space-4);
+  border: 1px dashed color-mix(in srgb, var(--home-accent) 36%, var(--home-line));
+  border-radius: var(--ui-radius-card);
+  background:
+    radial-gradient(circle at 0 0, color-mix(in srgb, var(--home-accent) 12%, transparent), transparent 48%),
+    color-mix(in srgb, var(--home-card-strong) 68%, transparent);
+}
+
+.homeV3EmptyState strong {
+  color: var(--text);
+  font-size: var(--ui-text-card-title);
+  line-height: 1.15;
+}
+
+.homeV3EmptyState p {
+  max-width: 44rem;
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.homeV3EmptyState button {
+  margin-top: var(--ui-space-1);
+  border: 1px solid color-mix(in srgb, var(--home-accent) 54%, var(--home-line));
+  background: color-mix(in srgb, var(--home-accent) 12%, var(--home-card-strong));
+  color: var(--text);
+  cursor: pointer;
+}
+
+/* Library */
+.libraryArchiveHeroLive h1 {
+  font-family: var(--ui-font-display);
+  line-height: 0.92;
+}
+
+.libraryArchiveHeroLive .eyebrow,
+.libraryStateCard .eyebrow,
+.libraryReviewQueue .eyebrow {
+  font-size: var(--ui-text-meta);
+}
+
+.libraryArchiveLiveTagline,
+.libraryStateCard > p:not(.eyebrow),
+.libraryReviewQueue > div > p:not(.eyebrow) {
+  font-size: var(--ui-text-body);
+}
+
+.libraryArchiveLiveStats small,
+.libraryPosterGrid .cardInfo p,
+.libraryPosterGrid .metaPills {
+  font-size: var(--ui-text-meta);
+}
+
+.libraryPosterGrid .cardInfo h3,
+.libraryTitleStack strong {
+  font-family: var(--ui-font-display);
+  font-size: 1rem;
+  line-height: 1.2;
+}
+
+.libraryStateCard {
+  border-radius: var(--ui-radius-panel);
+}
+
+.libraryStateCard h2,
+.libraryReviewQueue h2 {
+  font-family: var(--ui-font-display);
+  font-size: var(--ui-text-section);
+  line-height: 1.15;
+}
+
+.libraryStateActions button,
+.libraryReviewQueue button,
+.libraryArchiveLiveAdd {
+  min-height: var(--ui-control-height);
+  padding: 0 var(--ui-space-4);
+}
+
+/* Anime Detail */
+.detailModal.upgradedModal {
+  width: min(1120px, calc(100% - 28px));
+  grid-template-columns: minmax(240px, 290px) minmax(0, 1fr);
+  gap: var(--ui-space-6);
+  border-radius: var(--ui-radius-panel);
+  padding: var(--ui-space-5);
+}
+
+.detailModal h1 {
+  padding-right: 3.25rem;
+  font-family: var(--ui-font-display);
+  font-size: clamp(2.5rem, 5vw, 4rem);
+  line-height: 0.98;
+  letter-spacing: -0.04em;
+}
+
+.detailModal .muted,
+.detailModal p,
+.detailModal textarea,
+.detailModal select {
+  font-size: var(--ui-text-body);
+  line-height: 1.55;
+}
+
+.detailNavigation {
+  gap: var(--ui-space-2);
+  margin-bottom: var(--ui-space-3);
+}
+
+.detailNavigationPosition .eyebrow,
+.detailModal .controlLabel,
+.detailStats span,
+.watchRegionControl span {
+  font-size: var(--ui-text-meta);
+}
+
+.detailModal .detailNavigationButton,
+.detailModal .close,
+.detailModal .stepper button {
+  width: var(--ui-control-height);
+  min-width: var(--ui-control-height);
+  height: var(--ui-control-height);
+  padding: 0;
+}
+
+.detailModal .detailArtRail {
+  gap: var(--ui-space-3);
+}
+
+.detailModal .detailStats {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--ui-space-2);
+  margin-block: var(--ui-space-4);
+}
+
+.detailModal .detailStats div,
+.detailModal .scoreEditor,
+.detailModal .glowPanel,
+.detailModal .whereToWatch {
+  border-radius: var(--ui-radius-card);
+}
+
+.detailModal .detailStats div {
+  min-width: 0;
+  padding: var(--ui-space-3);
+}
+
+.detailModal .detailStats strong {
+  font-size: clamp(1.35rem, 2.5vw, 1.75rem);
+  line-height: 1;
+}
+
+.detailModal .scoreEditor,
+.detailModal .glowPanel,
+.detailModal .whereToWatch,
+.detailModal .synopsisBlock {
+  margin-block: var(--ui-space-4);
+  padding: var(--ui-space-4);
+}
+
+.detailModal .whereToWatchHeader h2,
+.detailModal .synopsisBlock h2 {
+  margin-block: 0 var(--ui-space-2);
+  font-family: var(--ui-font-display);
+  font-size: var(--ui-text-card-title);
+  line-height: 1.2;
+}
+
+.detailModal .polishedNotes textarea {
+  min-height: 8rem;
+  resize: vertical;
+}
+
+.detailModal .tags {
+  gap: var(--ui-space-2);
+  margin-block: var(--ui-space-4);
+}
+
+.detailModal .tags span {
+  padding: 0.4rem 0.7rem;
+  font-size: var(--ui-text-meta);
+}
+
+@media (max-width: 1180px) {
+  .homeV3Hero {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    padding-bottom: var(--ui-space-5);
+  }
+
+  .homeV3HeroCopy {
+    width: min(680px, 78%);
+    min-height: 360px;
+    padding-bottom: var(--ui-space-5);
+  }
+
+  .homeV3HeroStats {
+    position: relative;
+    left: auto;
+    right: auto;
+    bottom: auto;
+    width: min(680px, calc(100% - 56px));
+    max-width: none;
+    margin: auto 28px 0;
+  }
+
+  .detailModal.upgradedModal {
+    grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
+    gap: var(--ui-space-5);
+  }
+}
+
+@media (max-width: 900px) {
+  .detailModal.upgradedModal {
+    grid-template-columns: 1fr;
+  }
+
+  .detailModal .detailArtRail {
+    width: min(100%, 360px);
+    max-width: none;
+    margin-inline: auto;
+  }
+
+  .detailModal .detailPoster {
+    margin-inline: auto;
+  }
+
+  .libraryArchiveLiveCopy {
+    width: min(72%, 680px);
+  }
+}
+
+@media (max-width: 780px) {
+  .homeV3Hero {
+    min-height: 0;
+  }
+
+  .homeV3HeroCopy {
+    width: 100%;
+    min-height: 330px;
+    padding: var(--ui-space-5);
+  }
+
+  .homeV3HeroStats {
+    width: calc(100% - 40px);
+    margin-inline: 20px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .homeV3Panel {
+    padding: var(--ui-space-4);
+  }
+
+  .libraryArchiveLiveCopy {
+    width: 100%;
+    padding: var(--ui-space-5);
+  }
+
+  .libraryArchiveLiveStats {
+    gap: var(--ui-space-4);
+  }
+
+  .libraryArchiveLiveAdd {
+    margin: var(--ui-space-5);
+  }
+}
+
+@media (max-width: 600px) {
+  :root {
+    --ui-text-body: 0.9375rem;
+    --ui-text-page: clamp(2.5rem, 13vw, 3.5rem);
+    --ui-space-5: 1.25rem;
+    --ui-space-6: 1.5rem;
+  }
+
+  .homeV3HeroStats {
+    width: calc(100% - 28px);
+    margin-inline: 14px;
+    gap: var(--ui-space-2);
+  }
+
+  .homeV3StatPill {
+    padding: var(--ui-space-3);
+  }
+
+  .homeV3StatPill strong {
+    font-size: 1.125rem;
+  }
+
+  .homeV3PanelHeader {
+    align-items: flex-start;
+  }
+
+  .libraryArchiveHeroLive {
+    min-height: 380px;
+  }
+
+  .libraryArchiveLiveStats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .libraryStateCard {
+    padding: var(--ui-space-5);
+  }
+
+  .detailModal.upgradedModal {
+    width: 100%;
+    padding-inline: 14px;
+  }
+
+  .detailModal h1 {
+    padding-right: 0;
+    font-size: clamp(2.125rem, 11vw, 3rem);
+  }
+
+  .detailModal .detailStats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .detailModal .glowPanel {
+    grid-template-columns: 1fr;
+  }
+
+  .detailModal .whereToWatchHeader,
+  .detailLibraryReview,
+  .removeConfirmBox,
+  .removeConfirmActions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .detailModal .whereToWatchHeader select,
+  .detailModal .whereToWatchProviders button,
+  .detailModal .heroFavorite,
+  .detailModal .repairMetadataButton,
+  .detailModal .trailer,
+  .detailModal .removeAnimeButton,
+  .detailModal .removeConfirmActions button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 390px) {
+  .homeV3StatPill {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "icon"
+      "value"
+      "label";
+    justify-items: center;
+    text-align: center;
+  }
+}
+

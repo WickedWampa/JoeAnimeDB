@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { APP_VERSION } from '../appVersion';
 import '../styles/joeanime-splash.css';
 import joeAnimeSplashHero from '../assets/joeanime-splash-hero.png';
 import joeAIHologramBrain from '../assets/joeai-hologram-brain.png';
@@ -3508,7 +3509,7 @@ export function SettingsPage({
     { id: 'ramen', label: 'Ramen', description: 'Cozy amber warmth' },
     { id: 'amoled', label: 'AMOLED', description: 'True-black contrast' }
   ];
-  const appVersion = systemInfo?.version || window.JoeAnimeDB?.version || data?.version || '5.0';
+  const appVersion = systemInfo?.version || window.JoeAnimeDB?.version || APP_VERSION;
   const lastUpdateTime = lastUpdateSummary?.completedAt
     ? new Date(lastUpdateSummary.completedAt).toLocaleString()
     : 'Not run yet';

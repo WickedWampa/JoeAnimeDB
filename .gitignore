@@ -9,8 +9,8 @@ JoeAnime.db
 # Electron builds
 dist-desktop/
 
-# Temporary genome files
-.tmp**.apk
+# Temporary and generated local files
+.tmp*
 *.aab
 *.jks
 *.keystore

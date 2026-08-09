@@ -120,7 +120,7 @@ function cleanKnownTitleQueryForGenome(value = '') {
   return String(value || '')
     .trim()
     .replace(/[?!.,]+$/g, '')
-    .replace(/^\s*(please\s+)?(recommend|tell me about|what is|what's|whats|who is|should i watch|why should i watch|is|about)\s+/i, '')
+    .replace(/^\s*(please\s+)?(why do i (?:like|love)|why am i drawn to|explain why i like|recommend|tell me about|what is|what's|whats|who is|should i watch|why should i watch|is|about)\s+/i, '')
     .replace(/^\s*(anime|show|series)\s+/i, '')
     .replace(/\s+(anime|show|series)\s*$/i, '')
     .trim();
@@ -152,7 +152,8 @@ function isGenericRecommendationDescription(value = '') {
     'anime', 'show', 'shows', 'movie', 'movies', 'film', 'films',
     'dark', 'darker', 'gritty', 'violent', 'brutal', 'gory', 'scary', 'creepy',
     'funny', 'comedy', 'romance', 'romantic', 'isekai', 'action', 'adventure',
-    'fantasy', 'horror', 'sports', 'mecha', 'sci', 'fi', 'science', 'fiction',
+    'fantasy', 'horror', 'thriller', 'psychological', 'sports', 'mecha',
+    'sci', 'fi', 'science', 'fiction',
     'emotional', 'sad', 'tearjerker', 'heartbreaking', 'cozy', 'comforting',
     'wholesome', 'short', 'underrated', 'hidden', 'gem', 'gems', 'classic',
     'masterpiece'
@@ -196,6 +197,17 @@ export function parseJoeAIIntent(input = '') {
   // into a recommendation request.
   const libraryCommand = parseLibraryCommand(raw, status);
   if (libraryCommand) return libraryCommand;
+
+  // An exact curated title is more specific than a broad taste phrase.
+  // This keeps "why do I like Space Dandy?" on the title Genome path while
+  // "why do I like long adventures?" remains a personal taste question.
+  if (isExactGenomeTitleQuery(raw)) {
+    return {
+      kind: 'question',
+      text: raw,
+      knownTitle: cleanKnownTitleQueryForGenome(raw)
+    };
+  }
 
   // Broad taste questions must be analyzed as personal patterns before any
   // title/recommendation lookup sees words such as "adventures" as a show name.

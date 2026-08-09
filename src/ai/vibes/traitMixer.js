@@ -51,18 +51,29 @@ export function hasTraitMix(question = '') {
 function scoreVibes(cardVibes = {}, target = {}) {
   let score = 0;
   const reasons = [];
+  const ratios = [];
 
   for (const [vibe, desired] of Object.entries(target)) {
-    const actual = cardVibes[vibe] || 0;
+    const actual = Number(cardVibes[vibe] || 0);
     if (actual > 0) {
-      score += Math.min(actual, desired);
+      const ratio = Math.min(1, actual / Math.max(1, desired));
+      ratios.push(ratio);
+      score += Math.min(actual, desired) + ratio * 4;
       reasons.push(`${vibe} ${actual}/10`);
     } else {
-      score -= 2;
+      ratios.push(0);
+      score -= 7;
     }
   }
 
-  return { score, reasons };
+  const coverage = ratios.filter((ratio) => ratio > 0).length / Math.max(1, ratios.length);
+  const balance = ratios.length ? Math.min(...ratios) : 0;
+
+  // Mixed prompts should favor titles that satisfy every requested dimension,
+  // not titles that wildly over-index on only one of them.
+  score += coverage * 8 + balance * 10;
+
+  return { score, reasons, coverage, balance };
 }
 
 function title(card = {}) {
@@ -84,9 +95,26 @@ export function maybeTraitMixerRecommendation(question = '', { limit = 8 } = {})
   if (!keys.length) return null;
 
   const scored = getVibeRegistry()
-    .map(({ card, vibes }) => ({ card, vibes, ...scoreVibes(vibes, target) }))
+    .map(({ card, vibes }) => {
+      const match = scoreVibes(vibes, target);
+      const tierBonus = {
+        gold: 4,
+        core25: 3,
+        enhanced: 2,
+        core100: 1,
+        modules: 1,
+        generated: 0
+      }[card.registryTier] || 0;
+      const confidenceBonus = Math.max(0, Math.min(2, Number(card.confidence || 0) * 2));
+      return { card, vibes, ...match, score: match.score + tierBonus + confidenceBonus };
+    })
     .filter((entry) => entry.score > 0)
-    .sort((a, b) => b.score - a.score)
+    .sort((a, b) => (
+      b.score - a.score
+      || b.coverage - a.coverage
+      || b.balance - a.balance
+      || title(a.card).localeCompare(title(b.card))
+    ))
     .slice(0, limit);
 
   if (!scored.length) return null;

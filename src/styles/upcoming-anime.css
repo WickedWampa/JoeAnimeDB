@@ -66,6 +66,7 @@
 .upcomingCard { overflow: hidden; border: 1px solid var(--border); border-radius: 18px; background: var(--panel); box-shadow: 0 12px 30px rgba(0,0,0,.22); }
 .upcomingPoster { position: relative; display: block; width: 100%; aspect-ratio: 2 / 3; padding: 0; border: 0; background: #080b14; cursor: pointer; overflow: hidden; }
 .upcomingPoster .poster { position: absolute; inset: 0; width: 100%; height: 100%; }
+.upcomingPoster .poster::after { display: none; }
 .upcomingPoster img { width: 100%; height: 100%; object-fit: cover; }
 .upcomingCardBody { padding: 14px; }
 .upcomingDate { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--accent); font-size: .72rem; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }

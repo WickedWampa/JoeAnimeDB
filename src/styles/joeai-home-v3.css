@@ -1193,3 +1193,309 @@
 .homeV3WelcomeCard input:focus { border-color: var(--accent, #32e7ff); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, #32e7ff) 18%, transparent); }
 .homeV3WelcomeActions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
 .homeV3WelcomeActions button { padding: 12px 18px; border-radius: 13px; }
+
+/* ===== Beta 12 UI refinement: calmer hierarchy, shared spacing, cleaner surfaces ===== */
+.homeV3 {
+  --home-line-refined: color-mix(in srgb, var(--line) 74%, rgba(255, 255, 255, .08));
+  --home-surface-refined: color-mix(in srgb, var(--panel) 88%, #02060d 12%);
+  gap: 20px;
+  width: min(100%, 1440px);
+  max-width: 1440px;
+}
+
+.homeV3Hero {
+  min-height: 468px;
+  border-color: var(--home-line-refined);
+  border-radius: 22px;
+  background:
+    linear-gradient(90deg, rgba(2, 7, 13, .86) 0%, rgba(2, 7, 13, .62) 35%, rgba(2, 7, 13, .16) 68%, rgba(2, 7, 13, .03) 100%),
+    var(--home-hero-image) center right / cover no-repeat,
+    var(--home-card);
+  box-shadow: 0 18px 54px rgba(0, 0, 0, .3), inset 0 1px 0 rgba(255, 255, 255, .035);
+}
+
+.homeV3Hero::before { opacity: .22; }
+.homeV3HeroFx { opacity: .58; }
+.homeV3HeroShade::before { opacity: .34; }
+.homeV3HeroShade::after { opacity: .1; }
+
+.homeV3HeroCopy {
+  width: min(600px, 58%);
+  padding: 44px 44px 128px;
+}
+
+.homeV3Eyebrow {
+  margin-bottom: 9px;
+  font-size: 12px;
+  letter-spacing: .14em;
+}
+
+.homeV3Hero h1 {
+  max-width: 760px;
+  margin-bottom: 14px;
+  font-size: clamp(52px, 6vw, 82px);
+  line-height: .92;
+  letter-spacing: -.048em;
+}
+
+.homeV3Lead {
+  max-width: 520px;
+  color: color-mix(in srgb, var(--text) 90%, var(--muted) 10%);
+  font-size: 18px;
+  font-weight: 720;
+  line-height: 1.4;
+}
+
+.homeV3HeroBody {
+  max-width: 560px;
+  margin: 10px 0 0;
+  color: color-mix(in srgb, var(--text) 74%, var(--muted) 26%);
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.homeV3HeroActions {
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.homeV3HeroActions button,
+.homeV3SeedActions button {
+  min-height: 42px;
+  border-radius: 12px;
+  padding: 10px 16px;
+  box-shadow: none;
+}
+
+.homeV3HeroActions .primary,
+.homeV3SeedActions .primary {
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--home-accent-2) 18%, transparent);
+}
+
+.homeV3HeroActions button:hover,
+.homeV3SeedActions button:hover {
+  box-shadow: none;
+}
+
+.homeV3HeroStats {
+  left: 44px;
+  right: auto;
+  bottom: 28px;
+  width: min(760px, calc(100% - 88px));
+  max-width: 760px;
+  grid-template-columns: repeat(4, minmax(112px, 1fr));
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--home-line-refined);
+  border-radius: 16px;
+  background: rgba(3, 9, 17, .74);
+}
+
+.homeV3StatPill {
+  min-height: 64px;
+  border: 0;
+  border-right: 1px solid color-mix(in srgb, var(--line) 54%, transparent);
+  border-radius: 0;
+  background: transparent;
+  padding: 12px 16px;
+  backdrop-filter: none;
+}
+
+.homeV3StatPill:last-child { border-right: 0; }
+.homeV3StatIcon { font-size: 18px; filter: none; }
+.homeV3StatPill strong { font-size: 20px; }
+.homeV3StatPill small { font-size: 11px; letter-spacing: .01em; }
+
+.homeV3Grid { gap: 18px; }
+
+.homeV3Panel {
+  border-color: var(--home-line-refined);
+  border-radius: 18px;
+  background: linear-gradient(180deg, var(--home-surface-refined), color-mix(in srgb, var(--home-surface-refined) 86%, #01040a 14%));
+  padding: 20px;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, .18), inset 0 1px 0 rgba(255, 255, 255, .025);
+}
+
+.homeV3Panel::after { display: none; }
+.homeV3Panel:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--home-accent) 28%, var(--home-line-refined));
+  box-shadow: 0 16px 38px rgba(0, 0, 0, .22), inset 0 1px 0 rgba(255, 255, 255, .035);
+}
+
+.homeV3PanelHeader {
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.homeV3PanelHeader h2 {
+  gap: 10px;
+  font-size: 19px;
+  letter-spacing: -.015em;
+}
+
+.homeV3PanelHeader h2 span {
+  width: 25px;
+  height: 25px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--home-accent) 9%, transparent);
+  color: var(--home-accent);
+  filter: none;
+  font-size: 15px;
+}
+
+.homeV3PanelHeader button {
+  min-height: 32px;
+  border-color: transparent;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--home-accent) 7%, transparent);
+  padding: 7px 10px;
+  color: color-mix(in srgb, var(--home-accent) 82%, var(--text) 18%);
+  font-size: 11px;
+  box-shadow: none;
+}
+
+.homeV3PanelHeader button:hover {
+  border-color: color-mix(in srgb, var(--home-accent) 24%, transparent);
+  background: color-mix(in srgb, var(--home-accent) 12%, transparent);
+  box-shadow: none;
+}
+
+.homeV3ThoughtInner { min-height: 146px; }
+.homeV3ThoughtCopy h3 { font-size: clamp(20px, 1.8vw, 26px); }
+.homeV3ThoughtCopy p { line-height: 1.5; }
+.homeV3ThoughtCopy small { opacity: .76; }
+.homeV3BrainPulse { width: 92px; height: 92px; box-shadow: none; }
+.homeV3BrainPulse::after { width: 92px; height: 92px; opacity: .5; }
+
+.homeV3PromptList,
+.homeV3SignalRows,
+.homeV3StudioRows,
+.homeV3MiniList { gap: 8px; }
+
+.homeV3Prompt,
+.homeV3SignalRow,
+.homeV3StudioRow,
+.homeV3MiniAnime,
+.homeV3Anchor {
+  border-color: color-mix(in srgb, var(--line) 44%, rgba(255, 255, 255, .055));
+  border-radius: 11px;
+  background: rgba(2, 8, 15, .46);
+  box-shadow: none;
+}
+
+.homeV3Prompt:hover,
+.homeV3SignalRow:hover,
+.homeV3StudioRow:hover,
+.homeV3MiniAnime:hover,
+.homeV3Anchor:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--home-accent) 30%, transparent);
+  background: color-mix(in srgb, var(--home-accent) 5%, rgba(2, 8, 15, .62));
+  box-shadow: none;
+}
+
+.homeV3Prompt { padding: 11px 13px; font-weight: 800; }
+.homeV3Prompt b { font-size: 17px; }
+.homeV3SignalRow,
+.homeV3StudioRow { padding: 10px 12px; }
+.homeV3SignalRow span,
+.homeV3StudioRow span { font-weight: 800; }
+.homeV3SignalBar { height: 6px; }
+
+.homeV3AnchorGrid { gap: 8px; }
+.homeV3Anchor { border-radius: 12px; }
+.homeV3Poster { border-radius: 9px; }
+.homeV3Poster.large { border-radius: 12px; box-shadow: 0 12px 26px rgba(0, 0, 0, .26); }
+.homeV3SeedTags span { border-color: transparent; background: color-mix(in srgb, var(--muted) 10%, transparent); }
+
+.homeV3EmptyState {
+  min-height: 132px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 18px;
+  border: 1px dashed color-mix(in srgb, var(--line) 52%, transparent);
+  border-radius: 13px;
+  background: rgba(1, 6, 12, .26);
+}
+
+.homeV3AnchorGrid > .homeV3EmptyState { grid-column: 1 / -1; }
+.homeV3EmptyState strong { color: var(--text); font-size: 15px; }
+.homeV3EmptyState p { margin: 6px 0 14px; color: var(--muted); font-size: 13px; line-height: 1.45; }
+.homeV3EmptyState button {
+  min-height: 34px;
+  border: 1px solid color-mix(in srgb, var(--home-accent) 24%, transparent);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--home-accent) 9%, transparent);
+  color: var(--home-accent);
+  padding: 7px 11px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.homeV3LearningGrid { gap: 0; }
+.homeV3LearningGrid div { padding: 5px 16px; }
+.homeV3LearningGrid div:first-child { padding-left: 0; }
+.homeV3LearningGrid span { font-size: 19px; }
+
+@media (max-width: 1180px) {
+  .homeV3Hero { min-height: 0; }
+  .homeV3HeroCopy { width: min(660px, 76%); padding: 38px 38px 24px; }
+  .homeV3HeroStats {
+    position: relative;
+    left: auto;
+    right: auto;
+    bottom: auto;
+    width: min(520px, calc(100% - 76px));
+    max-width: 520px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin: 0 38px 34px;
+  }
+  .homeV3StatPill { border-right: 0; border-bottom: 1px solid color-mix(in srgb, var(--line) 54%, transparent); }
+  .homeV3StatPill:nth-child(odd) { border-right: 1px solid color-mix(in srgb, var(--line) 54%, transparent); }
+  .homeV3StatPill:nth-last-child(-n + 2) { border-bottom: 0; }
+}
+
+@media (max-width: 780px) {
+  .homeV3 { gap: 14px; padding-bottom: 24px; }
+  .homeV3Hero {
+    min-height: 0;
+    border-radius: 18px;
+    background:
+      linear-gradient(180deg, rgba(2, 7, 13, .92) 0%, rgba(2, 7, 13, .74) 54%, rgba(2, 7, 13, .34) 100%),
+      var(--home-hero-image) center bottom / cover no-repeat,
+      var(--home-card);
+  }
+  .homeV3HeroCopy { width: 100%; padding: 27px 24px 20px; }
+  .homeV3Hero h1 { font-size: clamp(44px, 13vw, 58px); }
+  .homeV3Lead { font-size: 16px; }
+  .homeV3HeroBody { font-size: 14px; }
+  .homeV3HeroStats {
+    width: auto;
+    margin: 0 20px 22px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .homeV3Grid { gap: 14px; }
+  .homeV3Panel { border-radius: 16px; padding: 16px; }
+  .homeV3Panel:hover { transform: none; }
+  .homeV3ThoughtInner { min-height: 0; }
+  .homeV3LearningGrid div { padding: 8px 12px; }
+  .homeV3LearningGrid div:nth-child(odd) { padding-left: 0; }
+}
+
+@media (max-width: 520px) {
+  .homeV3HeroActions { display: grid; grid-template-columns: 1fr 1fr; }
+  .homeV3HeroActions button { width: 100%; }
+  .homeV3HeroStats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .homeV3StatPill { min-height: 58px; padding: 10px 12px; }
+  .homeV3StatPill strong { font-size: 18px; }
+  .homeV3AnchorGrid { grid-template-columns: 1fr; }
+  .homeV3LearningGrid { grid-template-columns: 1fr; }
+  .homeV3LearningGrid div,
+  .homeV3LearningGrid div:nth-child(odd) { padding: 10px 0; border-right: 0; border-bottom: 1px solid color-mix(in srgb, var(--line) 44%, transparent); }
+  .homeV3LearningGrid div:last-child { border-bottom: 0; }
+}

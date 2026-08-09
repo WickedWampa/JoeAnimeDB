@@ -837,3 +837,50 @@
     text-rendering: geometricPrecision;
   }
 }
+
+/* JoeAI composer: phones and tablets need a writing surface, not a desktop
+   toolbar squeezed into a narrow viewport. Keep this late in the mobile
+   stylesheet so it wins over the command-center and legacy assistant rules. */
+@media (max-width: 1024px) {
+  .joeAICommandCenter .assistant-input.joeAIComposer {
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0 !important;
+    flex: none !important;
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-rows: auto auto !important;
+    align-items: stretch !important;
+    align-self: stretch !important;
+    gap: 10px !important;
+    padding: 10px !important;
+    box-sizing: border-box;
+  }
+
+  .joeAICommandCenter .assistant-input.joeAIComposer textarea {
+    display: block !important;
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0 !important;
+    min-height: 88px !important;
+    height: auto;
+    margin: 0 !important;
+    padding: 12px 14px !important;
+    box-sizing: border-box;
+    resize: vertical;
+  }
+
+  .joeAICommandCenter .assistant-input.joeAIComposer button {
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0 !important;
+    min-height: 48px;
+    margin: 0 !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .joeAICommandCenter .assistant-input.joeAIComposer textarea {
+    min-height: 104px !important;
+  }
+}

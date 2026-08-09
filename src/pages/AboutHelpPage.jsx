@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { APP_VERSION } from '../appVersion';
 import {
   BadgeInfo,
   BookOpenText,
@@ -6,6 +7,7 @@ import {
   CheckCircle2,
   CircleHelp,
   Clipboard,
+  Coffee,
   Database,
   Download,
   ExternalLink,
@@ -25,9 +27,10 @@ import { exportDiagnostics } from '../services/storage';
 import '../styles/about-help.css';
 
 const RELEASE_NOTES_URL = 'https://github.com/WickedWampa/JoeAnimeDB/releases';
+const SUPPORT_URL = 'https://buymeacoffee.com/wickedwampa';
 const KITSU_URL = 'https://kitsu.io/';
 const WIKIDATA_URL = 'https://www.wikidata.org/';
-const FALLBACK_VERSION = '5.0.0-beta.10';
+const FALLBACK_VERSION = APP_VERSION;
 
 function displayVersion(value = '') {
   const clean = String(value || '').trim().replace(/^v/i, '');
@@ -113,7 +116,6 @@ export function AboutHelpPage({
   const version = displayVersion(
     systemInfo?.version ||
     window.JoeAnimeDB?.version ||
-    data?.version ||
     FALLBACK_VERSION
   );
 
@@ -505,6 +507,19 @@ export function AboutHelpPage({
         </div>
         <button type="button" onClick={() => openExternal(RELEASE_NOTES_URL)}>
           View Release Notes <ExternalLink />
+        </button>
+      </section>
+
+      <section className="aboutSupportPanel">
+        <div>
+          <Coffee />
+          <span>
+            <strong>Enjoying JoeAnimeDB?</strong>
+            <small>Support development, hosting, and future releases with a one-time coffee.</small>
+          </span>
+        </div>
+        <button type="button" onClick={() => openExternal(SUPPORT_URL)}>
+          Buy me a coffee <ExternalLink />
         </button>
       </section>
 

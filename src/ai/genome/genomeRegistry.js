@@ -8,33 +8,41 @@ import * as pack1 from './gold/goldStandardGenomeCardsPack2';
 import * as pack2 from './gold/goldStandardGenomeCardsPack3';
 import * as pack3 from './gold/goldStandardGenomeCardsPack4';
 import * as pack4 from './gold/goldStandardGenomeCardsPack5';
-import * as pack5 from './core25/core25ExpertGenomePack';
-import * as pack6 from './enhanced/battle/pack2BattleShonen';
-import * as pack7 from './enhanced/classics/pack9ClassicsFoundations';
-import * as pack8 from './enhanced/comedy/pack8ComedySlice';
-import * as pack9 from './enhanced/fantasy/pack1FantasyIsekai';
-import * as pack10 from './enhanced/modern/pack10ModernEssentials';
-import * as pack11 from './enhanced/psychological/pack7PsychologicalMindGames';
-import * as pack12 from './enhanced/romance/pack6RomanceGrowth';
-import * as pack13 from './enhanced/scifi/pack4ScifiMecha';
-import * as pack14 from './enhanced/seinen/pack3SeinenDark';
-import * as pack15 from './enhanced/sports/pack5SportsMastery';
-import * as pack16 from './core100/core100GenomePack';
-import * as pack17 from './generated/generatedGenomeCards';
-import * as pack18 from '../modules/comedy/index';
-import * as pack19 from '../modules/horror/index';
-import * as pack20 from '../modules/romance/index';
+import * as pack5 from './gold/goldStandardGenomeCardsPack6';
+import * as pack6 from './gold/goldStandardGenomeCardsPack7';
+import * as pack7 from './gold/goldStandardGenomeCardsPack8';
+import * as pack8 from './core25/core25ExpertGenomePack';
+import * as pack9 from './enhanced/battle/pack2BattleShonen';
+import * as pack10 from './enhanced/classics/pack9ClassicsFoundations';
+import * as pack11 from './enhanced/comedy/pack8ComedySlice';
+import * as pack12 from './enhanced/fantasy/pack1FantasyIsekai';
+import * as pack13 from './enhanced/modern/pack10ModernEssentials';
+import * as pack14 from './enhanced/psychological/pack7PsychologicalMindGames';
+import * as pack15 from './enhanced/romance/pack6RomanceGrowth';
+import * as pack16 from './enhanced/scifi/pack4ScifiMecha';
+import * as pack17 from './enhanced/seinen/pack3SeinenDark';
+import * as pack18 from './enhanced/sports/pack5SportsMastery';
+import * as pack19 from './core100/core100GenomePack';
+import * as pack20 from './generated/generatedGenomeCards';
+import * as pack21 from '../modules/comedy/index';
+import * as pack22 from '../modules/horror/index';
+import * as pack23 from '../modules/romance/index';
 import { buildAliasIndex, cardMatchesTitle, canonicalAnimeId, normalizeAnimeTitle } from '../titleAliases';
 
-export const GENOME_REGISTRY_VERSION = '0.2.1';
+export const GENOME_REGISTRY_VERSION = '0.3.0';
+export const GENOME_REGISTRY_PRECEDENCE = Object.freeze(["gold","core25","enhanced","core100","generated","modules"]);
 
-function normalizePack(value, source) {
+function normalizePack(value, source, tier) {
   if (!value) return [];
 
   if (Array.isArray(value)) {
     return value
       .filter((card) => card && card.id && (card.titles || card.title || card.signature || card.domain))
-      .map((card) => ({ ...card, registrySource: card.registrySource || source }));
+      .map((card) => ({
+        ...card,
+        registrySource: card.registrySource || source,
+        registryTier: card.registryTier || tier,
+      }));
   }
 
   if (value.cards && Array.isArray(value.cards)) {
@@ -43,6 +51,7 @@ function normalizePack(value, source) {
       moduleId: value.id,
       moduleName: value.name,
       registrySource: card.registrySource || source,
+      registryTier: card.registryTier || tier,
       joeNote: value.joeNotes?.[card.id] || card.joeNote,
     }));
   }
@@ -51,28 +60,31 @@ function normalizePack(value, source) {
 }
 
 const RAW_GENOME_REGISTRY = [
-  ...normalizePack(pack0.GOLD_STANDARD_GENOME_CARDS, 'src/ai/genome/gold/goldStandardGenomeCards.js#GOLD_STANDARD_GENOME_CARDS'),
-  ...normalizePack(pack1.GOLD_STANDARD_GENOME_CARDS_PACK_2, 'src/ai/genome/gold/goldStandardGenomeCardsPack2.js#GOLD_STANDARD_GENOME_CARDS_PACK_2'),
-  ...normalizePack(pack2.GOLD_STANDARD_GENOME_CARDS_PACK_3, 'src/ai/genome/gold/goldStandardGenomeCardsPack3.js#GOLD_STANDARD_GENOME_CARDS_PACK_3'),
-  ...normalizePack(pack3.GOLD_STANDARD_GENOME_CARDS_PACK_4, 'src/ai/genome/gold/goldStandardGenomeCardsPack4.js#GOLD_STANDARD_GENOME_CARDS_PACK_4'),
-  ...normalizePack(pack4.GOLD_STANDARD_GENOME_CARDS_PACK_5, 'src/ai/genome/gold/goldStandardGenomeCardsPack5.js#GOLD_STANDARD_GENOME_CARDS_PACK_5'),
-  ...normalizePack(pack4.goldStandardGenomeCardsPack5, 'src/ai/genome/gold/goldStandardGenomeCardsPack5.js#goldStandardGenomeCardsPack5'),
-  ...normalizePack(pack5.CORE25_EXPERT_GENOME_CARDS, 'src/ai/genome/core25/core25ExpertGenomePack.js#CORE25_EXPERT_GENOME_CARDS'),
-  ...normalizePack(pack6.ENHANCED_BATTLE_PACK_2, 'src/ai/genome/enhanced/battle/pack2BattleShonen.js#ENHANCED_BATTLE_PACK_2'),
-  ...normalizePack(pack7.ENHANCED_CLASSICS_PACK_9, 'src/ai/genome/enhanced/classics/pack9ClassicsFoundations.js#ENHANCED_CLASSICS_PACK_9'),
-  ...normalizePack(pack8.ENHANCED_COMEDY_PACK_8, 'src/ai/genome/enhanced/comedy/pack8ComedySlice.js#ENHANCED_COMEDY_PACK_8'),
-  ...normalizePack(pack9.ENHANCED_FANTASY_PACK_1, 'src/ai/genome/enhanced/fantasy/pack1FantasyIsekai.js#ENHANCED_FANTASY_PACK_1'),
-  ...normalizePack(pack10.ENHANCED_MODERN_PACK_10, 'src/ai/genome/enhanced/modern/pack10ModernEssentials.js#ENHANCED_MODERN_PACK_10'),
-  ...normalizePack(pack11.ENHANCED_PSYCHOLOGICAL_PACK_7, 'src/ai/genome/enhanced/psychological/pack7PsychologicalMindGames.js#ENHANCED_PSYCHOLOGICAL_PACK_7'),
-  ...normalizePack(pack12.ENHANCED_ROMANCE_PACK_6, 'src/ai/genome/enhanced/romance/pack6RomanceGrowth.js#ENHANCED_ROMANCE_PACK_6'),
-  ...normalizePack(pack13.ENHANCED_SCIFI_PACK_4, 'src/ai/genome/enhanced/scifi/pack4ScifiMecha.js#ENHANCED_SCIFI_PACK_4'),
-  ...normalizePack(pack14.ENHANCED_SEINEN_PACK_3, 'src/ai/genome/enhanced/seinen/pack3SeinenDark.js#ENHANCED_SEINEN_PACK_3'),
-  ...normalizePack(pack15.ENHANCED_SPORTS_PACK_5, 'src/ai/genome/enhanced/sports/pack5SportsMastery.js#ENHANCED_SPORTS_PACK_5'),
-  ...normalizePack(pack16.CORE100_GENOME_CARDS, 'src/ai/genome/core100/core100GenomePack.js#CORE100_GENOME_CARDS'),
-  ...normalizePack(pack17.GENERATED_GENOME_CARDS, 'src/ai/genome/generated/generatedGenomeCards.js#GENERATED_GENOME_CARDS'),
-  ...normalizePack(pack18.COMEDY_MODULE, 'src/ai/modules/comedy/index.js#COMEDY_MODULE'),
-  ...normalizePack(pack19.HORROR_MODULE, 'src/ai/modules/horror/index.js#HORROR_MODULE'),
-  ...normalizePack(pack20.ROMANCE_MODULE, 'src/ai/modules/romance/index.js#ROMANCE_MODULE'),
+  ...normalizePack(pack0.GOLD_STANDARD_GENOME_CARDS, 'src/ai/genome/gold/goldStandardGenomeCards.js#GOLD_STANDARD_GENOME_CARDS', 'gold'),
+  ...normalizePack(pack1.GOLD_STANDARD_GENOME_CARDS_PACK_2, 'src/ai/genome/gold/goldStandardGenomeCardsPack2.js#GOLD_STANDARD_GENOME_CARDS_PACK_2', 'gold'),
+  ...normalizePack(pack2.GOLD_STANDARD_GENOME_CARDS_PACK_3, 'src/ai/genome/gold/goldStandardGenomeCardsPack3.js#GOLD_STANDARD_GENOME_CARDS_PACK_3', 'gold'),
+  ...normalizePack(pack3.GOLD_STANDARD_GENOME_CARDS_PACK_4, 'src/ai/genome/gold/goldStandardGenomeCardsPack4.js#GOLD_STANDARD_GENOME_CARDS_PACK_4', 'gold'),
+  ...normalizePack(pack4.GOLD_STANDARD_GENOME_CARDS_PACK_5, 'src/ai/genome/gold/goldStandardGenomeCardsPack5.js#GOLD_STANDARD_GENOME_CARDS_PACK_5', 'gold'),
+  ...normalizePack(pack4.goldStandardGenomeCardsPack5, 'src/ai/genome/gold/goldStandardGenomeCardsPack5.js#goldStandardGenomeCardsPack5', 'gold'),
+  ...normalizePack(pack5.GOLD_STANDARD_GENOME_CARDS_PACK_6, 'src/ai/genome/gold/goldStandardGenomeCardsPack6.js#GOLD_STANDARD_GENOME_CARDS_PACK_6', 'gold'),
+  ...normalizePack(pack6.GOLD_STANDARD_GENOME_CARDS_PACK_7, 'src/ai/genome/gold/goldStandardGenomeCardsPack7.js#GOLD_STANDARD_GENOME_CARDS_PACK_7', 'gold'),
+  ...normalizePack(pack7.GOLD_STANDARD_GENOME_CARDS_PACK_8, 'src/ai/genome/gold/goldStandardGenomeCardsPack8.js#GOLD_STANDARD_GENOME_CARDS_PACK_8', 'gold'),
+  ...normalizePack(pack8.CORE25_EXPERT_GENOME_CARDS, 'src/ai/genome/core25/core25ExpertGenomePack.js#CORE25_EXPERT_GENOME_CARDS', 'core25'),
+  ...normalizePack(pack9.ENHANCED_BATTLE_PACK_2, 'src/ai/genome/enhanced/battle/pack2BattleShonen.js#ENHANCED_BATTLE_PACK_2', 'enhanced'),
+  ...normalizePack(pack10.ENHANCED_CLASSICS_PACK_9, 'src/ai/genome/enhanced/classics/pack9ClassicsFoundations.js#ENHANCED_CLASSICS_PACK_9', 'enhanced'),
+  ...normalizePack(pack11.ENHANCED_COMEDY_PACK_8, 'src/ai/genome/enhanced/comedy/pack8ComedySlice.js#ENHANCED_COMEDY_PACK_8', 'enhanced'),
+  ...normalizePack(pack12.ENHANCED_FANTASY_PACK_1, 'src/ai/genome/enhanced/fantasy/pack1FantasyIsekai.js#ENHANCED_FANTASY_PACK_1', 'enhanced'),
+  ...normalizePack(pack13.ENHANCED_MODERN_PACK_10, 'src/ai/genome/enhanced/modern/pack10ModernEssentials.js#ENHANCED_MODERN_PACK_10', 'enhanced'),
+  ...normalizePack(pack14.ENHANCED_PSYCHOLOGICAL_PACK_7, 'src/ai/genome/enhanced/psychological/pack7PsychologicalMindGames.js#ENHANCED_PSYCHOLOGICAL_PACK_7', 'enhanced'),
+  ...normalizePack(pack15.ENHANCED_ROMANCE_PACK_6, 'src/ai/genome/enhanced/romance/pack6RomanceGrowth.js#ENHANCED_ROMANCE_PACK_6', 'enhanced'),
+  ...normalizePack(pack16.ENHANCED_SCIFI_PACK_4, 'src/ai/genome/enhanced/scifi/pack4ScifiMecha.js#ENHANCED_SCIFI_PACK_4', 'enhanced'),
+  ...normalizePack(pack17.ENHANCED_SEINEN_PACK_3, 'src/ai/genome/enhanced/seinen/pack3SeinenDark.js#ENHANCED_SEINEN_PACK_3', 'enhanced'),
+  ...normalizePack(pack18.ENHANCED_SPORTS_PACK_5, 'src/ai/genome/enhanced/sports/pack5SportsMastery.js#ENHANCED_SPORTS_PACK_5', 'enhanced'),
+  ...normalizePack(pack19.CORE100_GENOME_CARDS, 'src/ai/genome/core100/core100GenomePack.js#CORE100_GENOME_CARDS', 'core100'),
+  ...normalizePack(pack20.GENERATED_GENOME_CARDS, 'src/ai/genome/generated/generatedGenomeCards.js#GENERATED_GENOME_CARDS', 'generated'),
+  ...normalizePack(pack21.COMEDY_MODULE, 'src/ai/modules/comedy/index.js#COMEDY_MODULE', 'modules'),
+  ...normalizePack(pack22.HORROR_MODULE, 'src/ai/modules/horror/index.js#HORROR_MODULE', 'modules'),
+  ...normalizePack(pack23.ROMANCE_MODULE, 'src/ai/modules/romance/index.js#ROMANCE_MODULE', 'modules'),
 ];
 
 const seen = new Set();
@@ -134,10 +146,18 @@ export function findGenomeCardFromRegistry(animeOrTitle = '') {
 }
 
 export function getGenomeRegistryStats() {
+  const activeByTier = ACTIVE_GENOME_REGISTRY.reduce((counts, card) => {
+    const tier = card.registryTier || 'unknown';
+    counts[tier] = (counts[tier] || 0) + 1;
+    return counts;
+  }, {});
+
   return {
     version: GENOME_REGISTRY_VERSION,
+    precedence: [...GENOME_REGISTRY_PRECEDENCE],
     totalRaw: RAW_GENOME_REGISTRY.length,
     totalActive: ACTIVE_GENOME_REGISTRY.length,
+    activeByTier,
     duplicatesRemoved: duplicateIds.length,
     duplicateIds,
   };

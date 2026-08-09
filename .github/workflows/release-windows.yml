@@ -47,6 +47,9 @@ jobs:
             throw "electron-builder was not installed."
           }
 
+      - name: Run release gate
+        run: npm run test:release
+
       - name: Build Windows update
         shell: pwsh
         run: |
@@ -164,6 +167,9 @@ jobs:
       - name: Install dependencies
         run: npm ci --include=dev --no-audit --no-fund
 
+      - name: Run release gate
+        run: npm run test:release
+
       - name: Build Linux AppImage
         run: |
           npm run build
@@ -240,6 +246,9 @@ jobs:
       - name: Install dependencies
         run: npm ci --include=dev --no-audit --no-fund
 
+      - name: Run release gate
+        run: npm run test:release
+
       - name: Make Gradle wrapper executable
         run: chmod +x android/gradlew
 
@@ -269,4 +278,3 @@ jobs:
           gh release upload "$RELEASE_TAG" "$ANDROID_RELEASE_APK" \
             --repo "$GITHUB_REPOSITORY" \
             --clobber
-

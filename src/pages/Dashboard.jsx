@@ -65,6 +65,20 @@ function Panel({ className = '', icon, title, action, onAction, children }) {
   );
 }
 
+function HomeEmptyState({ title, body, action, onAction }) {
+  return (
+    <div className="homeV3EmptyState">
+      <strong>{title}</strong>
+      <p>{body}</p>
+      {action && (
+        <button type="button" onClick={onAction}>
+          {action}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function SignalRow({ label, value, max, onClick }) {
   return (
     <button
@@ -362,7 +376,14 @@ export function Dashboard({
           <div className="homeV3SignalRows">
             {topSignalRows.length ? topSignalRows.map(([name, count]) => (
               <SignalRow key={name} label={name} value={count} max={topMax} onClick={() => onOpenFilter?.("genre", name)} />
-            )) : <p className="homeV3Empty">Add more anime to build your Anime DNA.</p>}
+            )) : (
+              <HomeEmptyState
+                title="Your DNA is waiting"
+                body="Add or import a few titles so JoeAI can begin finding your strongest taste signals."
+                action="Add Anime"
+                onAction={() => setView?.('library')}
+              />
+            )}
           </div>
         </Panel>
 
@@ -371,7 +392,14 @@ export function Dashboard({
             {(anchors.length ? anchors : favorites.slice(0, 4)).map((item) => (
               <AnchorCard key={item.id || item.title} anime={item} setSelected={setSelected} />
             ))}
-            {!anchors.length && !favorites.length && <p className="homeV3Empty">Mark favorites or rewatches to teach JoeAI your comfort core.</p>}
+            {!anchors.length && !favorites.length && (
+              <HomeEmptyState
+                title="No comfort anchors yet"
+                body="Favorite or rewatch a title to teach JoeAI which worlds you keep returning to."
+                action="Open Library"
+                onAction={() => setView?.('library')}
+              />
+            )}
           </div>
         </Panel>
 
@@ -390,7 +418,14 @@ export function Dashboard({
                 <strong>{count}</strong>
                 <i style={{ '--studio-width': `${pct(count, studioMax)}%` }} />
               </button>
-            )) : <p className="homeV3Empty">Studio patterns will appear after metadata sync.</p>}
+            )) : (
+              <HomeEmptyState
+                title="No studio pattern yet"
+                body="Studio trends will appear as your library grows and its metadata is completed."
+                action="Open Library"
+                onAction={() => setView?.('library')}
+              />
+            )}
           </div>
         </Panel>
 
@@ -411,7 +446,14 @@ export function Dashboard({
                 <button type="button" className="primary" onClick={() => setSelected?.(tonight)}>Open</button>
               </div>
             </div>
-          ) : <p className="homeV3Empty">Add a few titles and JoeAI will pick something for tonight.</p>}
+          ) : (
+            <HomeEmptyState
+              title="JoeAI needs a few signals"
+              body="Add some anime and ratings, then JoeAI can choose a meaningful recommendation for tonight."
+              action="Add Anime"
+              onAction={() => setView?.('library')}
+            />
+          )}
         </Panel>
 
         <Panel className="homeV3Continue" icon="▶" title="Continue Watching" action="Library" onAction={() => setView?.('library')}>

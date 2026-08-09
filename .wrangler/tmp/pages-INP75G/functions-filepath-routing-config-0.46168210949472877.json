@@ -1,0 +1,21 @@
+{
+  "routes": [
+    {
+      "routePath": "/api/watchmode",
+      "mountPath": "/api",
+      "method": "GET",
+      "module": [
+        "api/watchmode.js:onRequestGet"
+      ]
+    },
+    {
+      "routePath": "/api/watchmode",
+      "mountPath": "/api",
+      "method": "OPTIONS",
+      "module": [
+        "api/watchmode.js:onRequestOptions"
+      ]
+    }
+  ],
+  "baseURL": "/"
+}

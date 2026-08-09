@@ -32,7 +32,20 @@ const isDev = !app.isPackaged;
  * The clean first-run seed still ensures new installs start empty.
  */
 function getAppFolders() {
-  const root = app.getPath('userData');
+  const configuredRoot = String(process.env.JOEANIMEDB_USER_DATA || '').trim();
+  const normalRoot = app.getPath('userData');
+  const legacyDesktopRoot = path.join(app.getPath('appData'), 'joeanime-db-4');
+  const legacyDatabase = path.join(legacyDesktopRoot, 'JoeAnime.db');
+
+  // Electron can select a different userData directory in development than
+  // the installed app used. Reuse the established desktop library when it is
+  // present so `npm run dev` opens real data instead of an empty seed. An
+  // explicit environment override remains available for unusual setups.
+  const root = configuredRoot
+    ? path.resolve(configuredRoot)
+    : isDev && fs.existsSync(legacyDatabase)
+      ? legacyDesktopRoot
+      : normalRoot;
 
   return {
     root,
@@ -100,7 +113,11 @@ const updateManager = createUpdateManager({
 function registerDatabaseHandlers() {
   ipcMain.handle('db:init', async (_event, seedDatabase) => {
     const folders = ensureAppFolders();
-    return database.initDatabase(folders.data, seedDatabase);
+    const loaded = await database.initDatabase(folders.data, seedDatabase);
+    console.log(
+      `[JoeAnimeDB] Loaded ${loaded.anime?.length || 0} library titles from ${loaded.path}`
+    );
+    return loaded;
   });
   ipcMain.handle('db:getDatabase', async () => database.getDatabase());
   ipcMain.handle('db:getAll', async () => database.getAll());
@@ -447,7 +464,27 @@ function createWindow() {
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      // Keep the narrow contextBridge API, but run the CommonJS preload in
+      // Electron's normal preload context. Recent Electron releases can
+      // otherwise sandbox development preloads differently and leave the
+      // renderer looking like the web build with an empty IndexedDB library.
+      sandbox: false
+    }
+  });
+
+  win.webContents.on('did-finish-load', async () => {
+    try {
+      const bridge = await win.webContents.executeJavaScript(`({
+        desktop: window.JoeAnimeDB?.desktop === true,
+        database: Boolean(window.JoeAnimeDB?.database)
+      })`);
+      console.log(
+        `[JoeAnimeDB] Desktop bridge: ${bridge.desktop ? 'ready' : 'missing'}; ` +
+        `SQLite API: ${bridge.database ? 'ready' : 'missing'}`
+      );
+    } catch (error) {
+      console.error('[JoeAnimeDB] Could not verify the desktop bridge.', error);
     }
   });
 

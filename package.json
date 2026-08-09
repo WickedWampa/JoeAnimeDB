@@ -8,7 +8,8 @@
   "desktopName": "JoeAnimeDB.desktop",
   "main": "electron/main.cjs",
   "scripts": {
-    "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "dev": "node scripts/startDesktopDev.cjs",
+    "dev:inner": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
     "web": "vite",
     "desktop": "electron .",
     "build": "vite build",
@@ -23,7 +24,9 @@
     "android:open": "cap open android",
     "android:debug": "npm run android:sync && cd android && ./gradlew assembleDebug",
     "android:apk": "npm run android:debug",
-    "test:reliability": "node scripts/testJoeAIRouting.mjs && node scripts/testNewUserReliability.mjs"
+    "test:reliability": "node scripts/testJoeAIRouting.mjs && node scripts/testNewUserReliability.mjs",
+    "test:release": "npm run test:reliability && node scripts/testReleaseGate.mjs",
+    "test:release:live": "npm run test:reliability && node scripts/testReleaseGate.mjs --live"
   },
   "dependencies": {
     "@capacitor-community/sqlite": "^8.1.0",

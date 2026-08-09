@@ -7,13 +7,38 @@ import {
   buildLibraryGenomeProfile,
   scoreGenomeFit
 } from '../ai/intelligence/genomeRecommendationSignals';
+import { animeIdentityKeys } from './titleIdentity';
 
 const clean = (value = '') => String(value).trim();
 const lower = (value = '') => clean(value).toLowerCase();
 const scoreOf = (item = {}) => Number(item.joeScore ?? item.rating ?? item.finalScore ?? 0) || 0;
 const communityScore = (item = {}) => Number(item.communityScore ?? item.malScore ?? item.score ?? 0) || 0;
 const membersOf = (item = {}) => Number(item.members ?? item.memberCount ?? item.popularityMembers ?? 0) || 0;
-const titleOf = (item = {}) => item.officialTitle || item.title || 'Unknown title';
+const titleOf = (item = {}) => item?.officialTitle || item?.title || item?.canonicalTitle || item?.name || 'Unknown title';
+
+function usableAnimeItem(item) {
+  return Boolean(
+    item
+    && typeof item === 'object'
+    && (item.officialTitle || item.title || item.canonicalTitle || item.name)
+  );
+}
+
+function identityKeys(item = {}) {
+  const keys = animeIdentityKeys(item);
+  const rawId = item?.id;
+  if (rawId !== undefined && rawId !== null && String(rawId).trim()) {
+    keys.add(`id:${String(rawId).trim().toLowerCase()}`);
+  }
+  return keys;
+}
+
+function overlapsIdentity(keys = new Set(), known = new Set()) {
+  for (const key of keys) {
+    if (known.has(key)) return true;
+  }
+  return false;
+}
 
 function values(item = {}, fields = []) {
   return fields.flatMap((field) => {
@@ -95,7 +120,7 @@ export function buildTasteProfile(library = []) {
   let weightedScoreTotal = 0;
   let weightedScoreMass = 0;
 
-  library.forEach((item) => {
+  (Array.isArray(library) ? library : []).filter(usableAnimeItem).forEach((item) => {
     const weight = signalWeight(item);
     tagsOf(item).forEach((tag) => addWeight(genres, lower(tag), weight));
     studiosOf(item).forEach((studio) => addWeight(studios, lower(studio), weight));
@@ -242,12 +267,28 @@ function enrichDiscoverItem(entry = {}) {
 }
 
 export function buildDiscoverPlan({ library = [], candidates = [], daySeed = 0, joeAIState = {} } = {}) {
-  const profile = buildTasteProfile(library);
-  const genomeProfile = buildLibraryGenomeProfile(library);
-  const ranked = candidates
+  const safeLibrary = (Array.isArray(library) ? library : []).filter(usableAnimeItem);
+  const safeCandidates = (Array.isArray(candidates) ? candidates : []).filter(usableAnimeItem);
+  const libraryKeys = new Set(safeLibrary.flatMap((item) => [...identityKeys(item)]));
+  const profile = buildTasteProfile(safeLibrary);
+  const genomeProfile = buildLibraryGenomeProfile(safeLibrary);
+  const scored = safeCandidates
+    .filter((item) => !overlapsIdentity(identityKeys(item), libraryKeys))
     .map((item) => scoreCandidate(item, profile, { joeAIState, genomeProfile }))
     .filter((entry) => !entry.excluded)
     .sort((a, b) => b.score - a.score);
+  const ranked = [];
+  const rankedKeys = new Set();
+
+  // Catalog feeds occasionally return the same title under different provider
+  // IDs. Keep the highest-scoring row and merge all of its identity keys so a
+  // duplicate cannot leak into another shelf later.
+  for (const entry of scored) {
+    const keys = identityKeys(entry.item);
+    if (overlapsIdentity(keys, rankedKeys)) continue;
+    keys.forEach((key) => rankedKeys.add(key));
+    ranked.push(entry);
+  }
   const appearanceCounts = new Map();
 
   const take = (predicate, limit = 12, options = {}) => {
@@ -265,10 +306,10 @@ export function buildDiscoverPlan({ library = [], candidates = [], daySeed = 0, 
       if (excludedIds.has(key)) continue;
       if (shelfIds.has(key)) continue;
       if ((appearanceCounts.get(key) || 0) >= maxAppearances) continue;
-      if (!options.allowFranchiseRepeat && shelfFranchises.has(family)) continue;
+      if (family && !options.allowFranchiseRepeat && shelfFranchises.has(family)) continue;
 
       shelfIds.add(key);
-      shelfFranchises.add(family);
+      if (family) shelfFranchises.add(family);
       appearanceCounts.set(key, (appearanceCounts.get(key) || 0) + 1);
       result.push(enrichDiscoverItem(entry));
       if (result.length >= limit) break;

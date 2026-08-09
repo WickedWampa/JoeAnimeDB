@@ -166,13 +166,22 @@ export function useAnimeLibrary() {
 
     async function load() {
       try {
-        if (localStorage.getItem('joeanime-new-user-mode') === 'true') {
+        const requestedNewUserMode = localStorage.getItem('joeanime-new-user-mode') === 'true';
+
+        // New User Mode is a browser/mobile preview state. A stale copy of the
+        // flag must never hide an existing desktop SQLite library after an
+        // installer update.
+        if (requestedNewUserMode && !window.JoeAnimeDB?.desktop) {
           if (alive) setData(createNewUserDemoDatabase());
           return;
         }
 
         const loaded = await animeRepository.getDatabase();
         if (alive) {
+          if (requestedNewUserMode && window.JoeAnimeDB?.desktop) {
+            localStorage.removeItem('joeanime-new-user-mode');
+            setNewUserMode(false);
+          }
           setData(loaded);
           startContentRatingBackfill(loaded);
         }

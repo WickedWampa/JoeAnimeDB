@@ -1,4 +1,5 @@
 import { App as CapacitorApp } from '@capacitor/app';
+import { APP_VERSION } from '../appVersion';
 import { createMobileDatabaseAdapter } from './mobileDatabase';
 import { createMobileUpdateManager } from './mobileUpdates';
 import { isNativeAndroid, openExternalUrl } from './runtime';
@@ -16,6 +17,13 @@ export async function initializePlatformBridge() {
 
   if (!isNativeAndroid()) {
     markPlatform('web');
+    window.JoeAnimeDB = {
+      ...(window.JoeAnimeDB || {}),
+      version: APP_VERSION,
+      desktop: false,
+      mobile: false,
+      platform: 'web'
+    };
     return;
   }
 

@@ -1,0 +1,96 @@
+// Gold Standard JoeAI Genome Cards - Pack 8
+// Completes the first 100-card Gold milestone with two flagship audience anchors.
+
+function goldCard({
+  id,
+  titles,
+  aliases = [],
+  domain,
+  signature,
+  coreFantasy,
+  pillars,
+  motivations,
+  themes,
+  emotions,
+  atmosphere,
+  vibes,
+  pacing,
+  complexity = 7,
+  followUps,
+  avoid
+}) {
+  return {
+    id,
+    titles,
+    aliases,
+    quality: 'gold',
+    generationQuality: 'curated',
+    confidence: 0.98,
+    generated: false,
+    needsReview: false,
+    domain,
+    subdomain: 'gold standard audience-fantasy profile',
+    signature,
+    description: signature,
+    coreFantasy,
+    fantasyPillars: pillars,
+    emotionalJourney: emotions.slice(0, 6),
+    rewardLoop: pillars.slice(0, 6),
+    dopamineSources: [...pillars.slice(0, 3), ...motivations.slice(0, 3)],
+    viewerType: motivations.map((motivation) => `${motivation} viewer`).slice(0, 4),
+    viewerMotivations: motivations,
+    whyPick: motivations,
+    bestFor: `Viewers looking for ${motivations.slice(0, 3).join(', ')}.`,
+    themes,
+    emotionalProfile: emotions,
+    atmosphere,
+    vibes,
+    pacing,
+    complexity,
+    whyFansLove: [signature, ...pillars.slice(0, 4)],
+    whoShouldWatch: `Watch when you want ${motivations.slice(0, 4).join(', ')}.`,
+    whoShouldAvoid: avoid,
+    idealFollowUps: followUps,
+    nearbyPicks: followUps,
+    joeNote: `Gold anchor for ${domain}. Weight the experience profile over surface genre overlap.`
+  };
+}
+
+export const GOLD_STANDARD_GENOME_CARDS_PACK_8 = [
+  goldCard({
+    id: 'sword-art-online',
+    titles: ['Sword Art Online'],
+    aliases: ['SAO'],
+    domain: 'virtual-world survival adventure',
+    signature: 'A high-stakes virtual-world saga where immersive game systems, lethal consequences, romance, and heroic competence turn digital escape into a fight for a shared future.',
+    coreFantasy: 'Master a beautiful virtual world, survive impossible game rules, and protect the person beside you when online bonds become completely real.',
+    pillars: ['VR world immersion', 'survival stakes', 'rapid power mastery', 'central romance', 'boss-raid spectacle', 'new digital worlds'],
+    motivations: ['game-world immersion', 'capable hero fantasy', 'romantic partnership', 'adventure progression'],
+    themes: ['identity online', 'love', 'survival', 'technology', 'trauma', 'human connection'],
+    emotions: ['exciting', 'romantic', 'tense', 'melancholic', 'heroic', 'hopeful'],
+    atmosphere: ['floating fantasy castles', 'virtual forests', 'raid chambers', 'futuristic cities', 'digital battlefields'],
+    vibes: { action: 9, adventure: 9, romance: 8, fantasy: 8, technology: 9 },
+    pacing: 'fast survival progression that expands into new worlds and technology-driven conflicts',
+    complexity: 7,
+    followUps: ['log-horizon', 'shangri-la-frontier', 'accel-world', 'danmachi', 'solo-leveling'],
+    avoid: 'Skip if an extremely capable lead, prominent romance, uneven arc tone, or game-system exposition frustrates you.'
+  }),
+  goldCard({
+    id: 'fairy-tail',
+    titles: ['Fairy Tail'],
+    aliases: ['Fairy Tail (TV)'],
+    domain: 'guild-family magical adventure',
+    signature: 'A long-form magical adventure powered by guild loyalty, exuberant comedy, elemental battles, and the conviction that chosen family can overcome any impossible enemy.',
+    coreFantasy: 'Join a chaotic guild that becomes your family, take dangerous magical jobs, and discover that friendship is a literal source of strength.',
+    pillars: ['found-family guild', 'elemental magic', 'team battles', 'recurring rivals', 'emotional backstories', 'celebratory comedy'],
+    motivations: ['found-family warmth', 'magic battle spectacle', 'long-form companionship', 'optimistic adventure'],
+    themes: ['friendship', 'belonging', 'loyalty', 'redemption', 'courage', 'chosen family'],
+    emotions: ['joyful', 'hype', 'warm', 'melodramatic', 'triumphant', 'nostalgic'],
+    atmosphere: ['lively guild halls', 'fantasy towns', 'magic tournaments', 'ruined kingdoms', 'festival streets'],
+    vibes: { action: 9, fantasy: 9, comedy: 8, wholesome: 8, emotional: 8 },
+    pacing: 'episodic guild jobs that build into long team conflicts and emotional reunion arcs',
+    complexity: 6,
+    followUps: ['black-clover', 'one-piece', 'magi-the-labyrinth-of-magic', 'edens-zero', 'rave-master'],
+    avoid: 'Skip if friendship-powered victories, fan service, repeated fake-outs, or long battle-shonen pacing are hard limits.'
+  })
+];

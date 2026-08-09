@@ -2,7 +2,8 @@ import {
   saveRollingTextExport,
   saveTextExport,
   saveTextExportAs
-} from '../platform/fileExports';
+} from '../platform/fileExports.js';
+import { APP_VERSION } from '../appVersion.js';
 
 export const STORAGE_KEY = 'joeanime-db-4';
 export const LAST_BACKUP_KEY = 'joeanime-last-backup-v1';
@@ -53,7 +54,7 @@ export function buildBackupPayload(data = {}) {
     format: 'JoeAnimeDB Full Backup',
     schemaVersion: 2,
     exportedAt: new Date().toISOString(),
-    appVersion: window.JoeAnimeDB?.version || data?.version || '5.0',
+    appVersion: window.JoeAnimeDB?.version || APP_VERSION,
     database: data,
     preferences: backupPreferences()
   };
@@ -213,7 +214,7 @@ export function exportDiagnostics({
     format: 'JoeAnimeDB Diagnostics',
     generatedAt: new Date().toISOString(),
     app: {
-      version: window.JoeAnimeDB?.version || data.version || '5.0',
+      version: window.JoeAnimeDB?.version || APP_VERSION,
       desktop: Boolean(window.JoeAnimeDB?.desktop),
       databaseEngine: data.engine || stats.databaseEngine || 'Local',
       userAgent: navigator.userAgent

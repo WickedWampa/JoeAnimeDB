@@ -319,6 +319,42 @@
   padding: 17px 20px;
   background: linear-gradient(100deg, color-mix(in srgb, var(--about-hot) 8%, var(--panel)), var(--panel));
 }
+.aboutSupportPanel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  border: 1px solid color-mix(in srgb, #ffb347 42%, var(--line));
+  border-radius: 18px;
+  padding: 17px 20px;
+  background:
+    radial-gradient(circle at 8% 50%, color-mix(in srgb, #ffb347 12%, transparent), transparent 28%),
+    var(--panel);
+}
+.aboutSupportPanel > div { display: flex; align-items: center; gap: 12px; }
+.aboutSupportPanel > div > svg { color: #ffb347; }
+.aboutSupportPanel strong,
+.aboutSupportPanel small { display: block; }
+.aboutSupportPanel small { margin-top: 3px; color: var(--muted); }
+.aboutSupportPanel button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, #ffb347 62%, var(--line));
+  border-radius: 11px;
+  padding: 10px 14px;
+  background: color-mix(in srgb, #ffb347 14%, var(--panel));
+  color: var(--text);
+  font-weight: 900;
+  cursor: pointer;
+}
+.aboutSupportPanel button:hover {
+  border-color: #ffb347;
+  background: color-mix(in srgb, #ffb347 22%, var(--panel));
+}
+.aboutSupportPanel button svg { width: 15px; }
 .aboutReleaseNotes > div { display: flex; align-items: center; gap: 12px; }
 .aboutReleaseNotes > div > svg { color: var(--about-hot); }
 .aboutReleaseNotes strong,
@@ -349,4 +385,6 @@
   .aboutUpdateIcon { width: 48px; height: 48px; }
   .aboutUpdateActions { grid-column: auto; grid-template-columns: 1fr; min-width: 0; }
   .aboutReleaseNotes { align-items: stretch; flex-direction: column; }
+  .aboutSupportPanel { align-items: stretch; flex-direction: column; }
+  .aboutSupportPanel button { width: 100%; }
 }

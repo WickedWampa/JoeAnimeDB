@@ -1,6 +1,6 @@
 import { Directory, Encoding, Filesystem } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
-import { isNativeAndroid } from './runtime';
+import { isNativeAndroid } from './runtime.js';
 
 const FILE_HANDLE_DB = 'joeanime-file-handles-v1';
 const FILE_HANDLE_STORE = 'handles';

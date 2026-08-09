@@ -2,7 +2,7 @@ import { maybeKnowledgeFirstRecommendation } from './knowledgeFirstRecommender';
 import { maybeGenomeIntentRecommendation } from './joeAIIntentEngine';
 import { ACTIVE_GENOME_REGISTRY, findGenomeCardFromRegistry, findGenomeCardByTitle } from './genome/genomeRegistry';
 import { getAnimeStudios, getAnimeTasteSignals, productionSearchText } from '../utils/metadataAdapters';
-import { parseTitleIdentity, titleAliases as metadataTitleAliases } from '../services/titleIdentity';
+import { animeIdentityKeys, parseTitleIdentity, titleAliases as metadataTitleAliases } from '../services/titleIdentity';
 
 function norm(value = '') {
   return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
@@ -49,10 +49,34 @@ function itemTitleNames(item = {}) {
     .filter((entry) => entry.normalized);
 }
 
+function usableAnimeItem(item) {
+  return Boolean(
+    item
+    && typeof item === 'object'
+    && (item.title || item.officialTitle || item.canonicalTitle || item.name)
+  );
+}
+
+function itemIdentityKeys(item = {}) {
+  const keys = animeIdentityKeys(item);
+  const rawId = item?.id;
+  if (rawId !== undefined && rawId !== null && String(rawId).trim()) {
+    keys.add(`id:${String(rawId).trim().toLowerCase()}`);
+  }
+  return keys;
+}
+
+function sharesIdentity(keys = new Set(), known = new Set()) {
+  for (const key of keys) {
+    if (known.has(key)) return true;
+  }
+  return false;
+}
+
 function exactLibraryTitleMatch(query = '', anime = [], catalog = []) {
   const normalized = norm(query);
   const canonical = parseTitleIdentity(query);
-  const pool = [...(anime || []), ...(catalog || [])];
+  const pool = [...(anime || []), ...(catalog || [])].filter(usableAnimeItem);
 
   const matches = pool.filter((item) =>
     itemTitleNames(item).some((entry) =>
@@ -74,7 +98,7 @@ function franchiseTitleMatches(query = '', anime = [], catalog = []) {
   const wantedNormalized = norm(query);
   if (!wanted.base) return [];
 
-  const pool = [...(anime || []), ...(catalog || [])];
+  const pool = [...(anime || []), ...(catalog || [])].filter(usableAnimeItem);
   const seen = new Set();
 
   return pool.filter((item) => {
@@ -145,10 +169,6 @@ function cardsFromIds(ids = []) {
   return ids
     .map((id) => findGenomeCardByTitle(id))
     .filter(Boolean);
-}
-
-function itemKey(item = {}) {
-  return String(item.malId || item.id || item.title || '').toLowerCase();
 }
 
 function textBlob(item = {}) {
@@ -300,12 +320,18 @@ function moodBlurb(item = {}, intent = {}) {
 }
 
 function formatMoodRecommendationCards(intent, anime = [], catalog = []) {
-  const ownedKeys = new Set(anime.map(itemKey));
-  const pool = [...anime, ...catalog]
-    .filter((item, index, arr) => {
-      const key = itemKey(item);
-      return key && arr.findIndex((other) => itemKey(other) === key) === index;
-    });
+  const safeAnime = (Array.isArray(anime) ? anime : []).filter(usableAnimeItem);
+  const safeCatalog = (Array.isArray(catalog) ? catalog : []).filter(usableAnimeItem);
+  const ownedKeys = new Set(safeAnime.flatMap((item) => [...itemIdentityKeys(item)]));
+  const pool = [];
+  const poolKeys = new Set();
+
+  for (const item of [...safeAnime, ...safeCatalog]) {
+    const keys = itemIdentityKeys(item);
+    if (sharesIdentity(keys, poolKeys)) continue;
+    keys.forEach((key) => poolKeys.add(key));
+    pool.push(item);
+  }
 
   const scored = pool
     .filter((item) => intent.format !== 'movie' || /\b(movie|film)\b/i.test(String(item.type || '')))
@@ -314,7 +340,7 @@ function formatMoodRecommendationCards(intent, anime = [], catalog = []) {
       return (intent.keywords || []).some((keyword) => textBlob(item).includes(norm(keyword)));
     })
     .map((item) => {
-      const owned = ownedKeys.has(itemKey(item));
+      const owned = sharesIdentity(itemIdentityKeys(item), ownedKeys);
       const rawScore = scoreMoodItem(item, intent, owned);
       const match = Math.max(60, Math.min(98, Math.round(rawScore + 45)));
       const tags = (intent.keywords || [])
@@ -354,36 +380,53 @@ function formatMoodRecommendationCards(intent, anime = [], catalog = []) {
 function scoreRelatedCards(sourceCard) {
   const preferred = cardsFromIds(sourceCard.idealFollowUps || sourceCard.successors || []);
 
-  const sourceText = norm([
-    sourceCard.domain,
-    sourceCard.subdomain,
-    ...(sourceCard.viewerMotivations || []),
-    ...(sourceCard.themes || []),
-    ...(sourceCard.atmosphere || []),
-    ...(sourceCard.emotionalProfile || [])
-  ].join(' '));
+  const tierWeight = {
+    gold: 8,
+    core25: 6,
+    enhanced: 4,
+    core100: 3,
+    modules: 2,
+    generated: 0
+  };
+
+  const asList = (value) => Array.isArray(value) ? value : value ? [value] : [];
+
+  const overlapScore = (sourceValues = [], targetValues = [], weight = 1) => {
+    const source = new Set(asList(sourceValues).filter(Boolean).map(norm));
+    return asList(targetValues).filter(Boolean).reduce((score, value) => (
+      score + (source.has(norm(value)) ? weight : 0)
+    ), 0);
+  };
+
+  const sourceVibes = sourceCard.vibes || {};
 
   const fallback = ACTIVE_GENOME_REGISTRY
     .filter((card) => card.id !== sourceCard.id)
     .map((card) => {
-      const cardText = norm([
-        card.domain,
-        card.subdomain,
-        ...(card.viewerMotivations || []),
-        ...(card.themes || []),
-        ...(card.atmosphere || []),
-        ...(card.emotionalProfile || [])
-      ].join(' '));
+      let score = tierWeight[card.registryTier] || 0;
+      score += overlapScore(sourceCard.viewerMotivations, card.viewerMotivations, 7);
+      score += overlapScore(sourceCard.fantasyPillars, card.fantasyPillars, 6);
+      score += overlapScore(sourceCard.themes, card.themes, 5);
+      score += overlapScore(sourceCard.emotionalProfile, card.emotionalProfile, 4);
+      score += overlapScore(sourceCard.atmosphere, card.atmosphere, 3);
+      if (norm(sourceCard.domain) === norm(card.domain)) score += 8;
+      if (norm(sourceCard.subdomain) === norm(card.subdomain)) score += 4;
 
-      let score = 0;
-      for (const token of sourceText.split(' ').filter((x) => x.length > 4)) {
-        if (cardText.includes(token)) score += 1;
+      const vibeKeys = new Set([...Object.keys(sourceVibes), ...Object.keys(card.vibes || {})]);
+      for (const vibe of vibeKeys) {
+        const sourceValue = Number(sourceVibes[vibe] || 0);
+        const targetValue = Number(card.vibes?.[vibe] || 0);
+        if (sourceValue >= 6 && targetValue >= 6) {
+          score += Math.max(0, 4 - Math.abs(sourceValue - targetValue) * 0.5);
+        }
       }
+
+      score += Math.max(0, Math.min(3, Number(card.confidence || 0) * 3));
 
       return { card, score };
     })
-    .filter((entry) => entry.score > 1)
-    .sort((a, b) => b.score - a.score)
+    .filter((entry) => entry.score >= 8)
+    .sort((a, b) => b.score - a.score || title(a.card).localeCompare(title(b.card)))
     .map((entry) => entry.card);
 
   const seen = new Set();
