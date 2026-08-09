@@ -57,6 +57,23 @@
   background: color-mix(in srgb, var(--cyan) 7%, transparent);
 }
 
+.webDataPersistenceStatus {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--pink) 32%, var(--line));
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--pink) 7%, transparent);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.webDataPersistenceStatus.isProtected {
+  border-color: color-mix(in srgb, var(--cyan) 38%, var(--line));
+  background: color-mix(in srgb, var(--cyan) 8%, transparent);
+  color: var(--text);
+}
+
 .webDataSafetyActions {
   display: flex;
   flex-wrap: wrap;

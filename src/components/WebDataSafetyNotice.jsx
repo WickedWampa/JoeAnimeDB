@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { exportBackup } from '../services/storage';
+import { requestWebPersistentStorage } from '../platform/webDatabase';
 
 const ACKNOWLEDGMENT_KEY = 'joeanime-web-data-safety-ack-v1';
 
@@ -15,6 +16,20 @@ export function WebDataSafetyNotice({ data, hidden = false, onOpenSettings }) {
   const [acknowledged, setAcknowledged] = useState(hasAcknowledged);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const [persistence, setPersistence] = useState(null);
+
+  useEffect(() => {
+    if (document.documentElement.dataset.platform !== 'web') return;
+
+    let active = true;
+    requestWebPersistentStorage().then((result) => {
+      if (active) setPersistence(result);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   if (
     hidden ||
@@ -65,10 +80,18 @@ export function WebDataSafetyNotice({ data, hidden = false, onOpenSettings }) {
           browser, or switching browsers can erase the local copy.
         </p>
         <ul>
+          <li>Your library uses the browser's larger <strong>IndexedDB</strong> storage.</li>
           <li>Keep using <strong>joeanimedb.com</strong>; browser storage belongs to one exact site.</li>
           <li>Update <strong>JoeAnimeDB-backup.json</strong> regularly.</li>
           <li>Restore it later from Settings, Library, Restore Full Backup.</li>
         </ul>
+        {persistence?.supported && (
+          <p className={`webDataPersistenceStatus ${persistence.persisted ? 'isProtected' : ''}`}>
+            {persistence.persisted
+              ? 'Protected browser storage is enabled for this device.'
+              : 'Standard browser storage is active. Keep a separate backup in case site data is cleared.'}
+          </p>
+        )}
         {message && <p className="webDataSafetyMessage" aria-live="polite">{message}</p>}
         <div className="webDataSafetyActions">
           <button type="button" className="primary" onClick={saveBackup} disabled={saving}>

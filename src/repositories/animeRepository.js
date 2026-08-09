@@ -1,6 +1,12 @@
 import seedData from '../data/animeSeed.json';
 import catalogSeed from '../data/animeCatalogSeed.json';
 import { STORAGE_KEY } from '../services/storage';
+import {
+  deleteWebDatabase,
+  readWebDatabase,
+  supportsWebDatabase,
+  writeWebDatabase
+} from '../platform/webDatabase';
 import { normalizeAnimeStudioFields } from '../utils/metadataAdapters';
 import { sameAnimeIdentity } from '../services/titleIdentity';
 
@@ -83,6 +89,62 @@ function readLegacyLocalStorage() {
   }
 }
 
+async function readBrowserDatabase() {
+  if (supportsWebDatabase()) {
+    try {
+      const saved = await readWebDatabase();
+      if (saved && typeof saved === 'object') return saved;
+
+      // Existing web users are migrated once, without changing their library.
+      const legacy = readLegacyLocalStorage();
+      if (legacy && typeof legacy === 'object') {
+        await writeWebDatabase(legacy);
+        try {
+          localStorage.removeItem(STORAGE_KEY);
+        } catch {}
+        return legacy;
+      }
+
+      return null;
+    } catch (error) {
+      console.warn('IndexedDB read failed; falling back to localStorage.', error);
+    }
+  }
+
+  return readLegacyLocalStorage();
+}
+
+async function writeBrowserDatabase(snapshot) {
+  if (supportsWebDatabase()) {
+    try {
+      await writeWebDatabase(snapshot);
+      try {
+        localStorage.removeItem(STORAGE_KEY);
+      } catch {}
+      return snapshot;
+    } catch (error) {
+      console.warn('IndexedDB write failed; falling back to localStorage.', error);
+    }
+  }
+
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+  return snapshot;
+}
+
+async function clearBrowserDatabase() {
+  if (supportsWebDatabase()) {
+    try {
+      await deleteWebDatabase();
+    } catch (error) {
+      console.warn('IndexedDB reset failed.', error);
+    }
+  }
+
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {}
+}
+
 function hasElectronDatabase() {
   return Boolean(window.JoeAnimeDB?.database);
 }
@@ -128,7 +190,11 @@ function normalizeDatabase(database) {
 }
 
 export const animeRepository = {
-  engine: hasElectronDatabase() ? 'SQLite' : 'localStorage',
+  engine: hasElectronDatabase()
+    ? 'SQLite'
+    : supportsWebDatabase()
+      ? 'IndexedDB'
+      : 'localStorage',
 
   async getDatabase() {
     if (hasElectronDatabase()) {
@@ -139,8 +205,8 @@ export const animeRepository = {
       return normalizeDatabase(database);
     }
 
-    const legacy = readLegacyLocalStorage();
-    return normalizeDatabase(legacy || { ...seedData, catalog: catalogSeed });
+    const saved = await readBrowserDatabase();
+    return normalizeDatabase(saved || { ...seedData, catalog: catalogSeed });
   },
 
   async saveDatabase(data) {
@@ -148,7 +214,7 @@ export const animeRepository = {
       return normalizeDatabase(await window.JoeAnimeDB.database.replaceAll(data.anime || []));
     }
 
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    await writeBrowserDatabase(data);
     return normalizeDatabase(data);
   },
 
@@ -273,7 +339,7 @@ export const animeRepository = {
 
     const current = await this.getDatabase();
     const next = { ...current, anime };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    await writeBrowserDatabase(next);
     return normalizeDatabase(next);
   },
 
@@ -343,7 +409,7 @@ export const animeRepository = {
       : [...currentAnime, updatedAnime];
 
     const next = { ...current, anime };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    await writeBrowserDatabase(next);
     return normalizeDatabase(next);
   },
 
@@ -374,7 +440,7 @@ export const animeRepository = {
       : [...(current.catalog || []), updatedAnime];
 
     const next = { ...current, catalog };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    await writeBrowserDatabase(next);
     return normalizeDatabase(next);
   },
 
@@ -385,7 +451,7 @@ export const animeRepository = {
 
     const current = await this.getDatabase();
     const next = { ...current, catalog: catalog || [] };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    await writeBrowserDatabase(next);
     return normalizeDatabase(next);
   },
 
@@ -405,7 +471,7 @@ export const animeRepository = {
       );
     }
 
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+    await writeBrowserDatabase(snapshot);
     localStorage.setItem(
       JOEAI_FEEDBACK_KEY,
       JSON.stringify(snapshot.joeAI.feedback || [])
@@ -426,7 +492,7 @@ export const animeRepository = {
       return normalizeDatabase(await window.JoeAnimeDB.database.reset({ ...seedData, catalog: catalogSeed }));
     }
 
-    localStorage.removeItem(STORAGE_KEY);
+    await clearBrowserDatabase();
     localStorage.removeItem(JOEAI_FEEDBACK_KEY);
     localStorage.removeItem(JOEAI_PREFERENCES_KEY);
     localStorage.removeItem(JOEAI_CONVERSATION_KEY);

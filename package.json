@@ -1,6 +1,6 @@
 {
   "name": "joeanime-db-4",
-  "version": "5.0.0-beta.11",
+  "version": "5.0.0-beta.12",
   "private": true,
   "description": "JoeAnimeDB desktop anime library powered by JoeAI",
   "author": "WickedWampa",
@@ -21,8 +21,9 @@
     "release:linux": "npm run build && electron-builder --linux AppImage --x64 --publish always",
     "android:sync": "npm run build && cap sync android",
     "android:open": "cap open android",
-    "android:debug": "node scripts/buildAndroidDebug.cjs",
-    "android:apk": "npm run android:debug"
+    "android:debug": "npm run android:sync && cd android && ./gradlew assembleDebug",
+    "android:apk": "npm run android:debug",
+    "test:reliability": "node scripts/testJoeAIRouting.mjs && node scripts/testNewUserReliability.mjs"
   },
   "dependencies": {
     "@capacitor-community/sqlite": "^8.1.0",
