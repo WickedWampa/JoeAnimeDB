@@ -95,19 +95,61 @@ function publicCandidate(candidate) {
   };
 }
 
-function cacheKey(kind, values) {
-  const url = new URL(`https://joeanimedb-watchmode-cache.invalid/${kind}`);
-  Object.entries(values).forEach(([key, value]) => url.searchParams.set(key, String(value || '')));
-  return new Request(url.toString(), { method: 'GET' });
+async function cacheKey(kind, values) {
+  const params = new URLSearchParams();
+  Object.entries(values).forEach(([key, value]) => params.set(key, String(value || '')));
+  const input = new TextEncoder().encode(`${kind}:${params.toString()}`);
+  const digest = await crypto.subtle.digest('SHA-256', input);
+  const hash = Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
+  return `watchmode:v1:${kind}:${hash}`;
 }
 
-async function readCache(request) {
-  return caches.default.match(request);
+function edgeCacheRequest(key) {
+  return new Request(`https://joeanimedb-watchmode-cache.invalid/${key}`, { method: 'GET' });
 }
 
-async function writeCache(context, request, response) {
-  context.waitUntil(caches.default.put(request, response.clone()));
-  return response;
+async function readCache(context, key) {
+  const namespace = context.env.WATCHMODE_CACHE;
+  if (namespace?.get) {
+    try {
+      const payload = await namespace.get(key, { type: 'json', cacheTtl: 60 });
+      if (payload) return { payload, source: 'KV' };
+    } catch (error) {
+      console.warn('Watchmode KV read failed; trying the edge cache.', error);
+    }
+  }
+
+  if (typeof caches !== 'undefined' && caches.default) {
+    try {
+      const response = await caches.default.match(edgeCacheRequest(key));
+      if (response) return { payload: await response.json(), source: 'EDGE' };
+    } catch (error) {
+      console.warn('Watchmode edge cache read failed.', error);
+    }
+  }
+
+  return null;
+}
+
+async function writeCache(context, key, payload, ttl) {
+  const writes = [];
+  const namespace = context.env.WATCHMODE_CACHE;
+
+  if (namespace?.put) {
+    writes.push(namespace.put(key, JSON.stringify(payload), { expirationTtl: ttl }));
+  }
+
+  if (typeof caches !== 'undefined' && caches.default) {
+    const response = json(payload, 200, `public, max-age=${ttl}`);
+    writes.push(caches.default.put(edgeCacheRequest(key), response));
+  }
+
+  if (!writes.length) return;
+  const operation = Promise.allSettled(writes);
+  if (context.waitUntil) context.waitUntil(operation);
+  else await operation;
 }
 
 async function watchmodeJson(url) {
@@ -117,15 +159,15 @@ async function watchmodeJson(url) {
 }
 
 async function findTitleMatch(context, identity, apiKey, forceReview = false) {
-  const key = cacheKey('match', {
+  const key = await cacheKey('match', {
     title: identity.names[0],
     aliases: identity.names.slice(1).join('|'),
     year: identity.year || '',
     type: identity.types.join(',')
   });
   if (!forceReview) {
-    const cached = await readCache(key);
-    if (cached) return cached.json();
+    const cached = await readCache(context, key);
+    if (cached) return { payload: cached.payload, cache: cached.source };
   }
 
   const url = new URL('https://api.watchmode.com/v1/search/');
@@ -158,21 +200,21 @@ async function findTitleMatch(context, identity, apiKey, forceReview = false) {
       : { status: 'not_found', candidates: [] };
 
   if (forceReview) {
-    return candidates.length
+    const reviewPayload = candidates.length
       ? { status: 'needs_review', candidates: candidates.slice(0, 3).map(publicCandidate) }
       : { status: 'not_found', candidates: [] };
+    return { payload: reviewPayload, cache: 'BYPASS' };
   }
 
   const ttl = highConfidence ? MATCH_TTL_SECONDS : REVIEW_TTL_SECONDS;
-  const response = json(payload, 200, `public, max-age=${ttl}`);
-  await writeCache(context, key, response);
-  return payload;
+  await writeCache(context, key, payload, ttl);
+  return { payload, cache: 'MISS' };
 }
 
 async function fetchProviders(context, watchmodeId, region, apiKey) {
-  const key = cacheKey('providers', { watchmodeId, region });
-  const cached = await readCache(key);
-  if (cached) return cached.json();
+  const key = await cacheKey('providers', { watchmodeId, region });
+  const cached = await readCache(context, key);
+  if (cached) return { providers: cached.payload.providers || [], cache: cached.source };
 
   const url = new URL(`https://api.watchmode.com/v1/title/${watchmodeId}/sources/`);
   url.searchParams.set('apiKey', apiKey);
@@ -197,13 +239,8 @@ async function fetchProviders(context, watchmodeId, region, apiKey) {
     })
     .sort((left, right) => left.name.localeCompare(right.name));
 
-  const response = json(
-    { providers },
-    200,
-    `public, max-age=${PROVIDER_TTL_SECONDS}`
-  );
-  await writeCache(context, key, response);
-  return { providers };
+  await writeCache(context, key, { providers }, PROVIDER_TTL_SECONDS);
+  return { providers, cache: 'MISS' };
 }
 
 function allowedRegions(env) {
@@ -249,20 +286,32 @@ export async function onRequestGet(context) {
     };
 
     let match;
+    let matchCache;
     if (Number.isInteger(requestedId) && requestedId > 0) {
       match = { id: requestedId, name: title, year, type: requestedType, confirmed: true };
+      matchCache = 'CONFIRMED';
     } else {
       const result = await findTitleMatch(context, identity, apiKey, forceReview);
-      if (result.status !== 'matched') return json(result);
-      match = result.match;
+      if (result.payload.status !== 'matched') {
+        return json({
+          ...result.payload,
+          cache: { match: result.cache }
+        });
+      }
+      match = result.payload.match;
+      matchCache = result.cache;
     }
 
-    const { providers } = await fetchProviders(context, match.id, region, apiKey);
+    const providerResult = await fetchProviders(context, match.id, region, apiKey);
     return json({
       status: 'ready',
       match,
       region,
-      providers
+      providers: providerResult.providers,
+      cache: {
+        match: matchCache,
+        providers: providerResult.cache
+      }
     });
   } catch (error) {
     console.error('Watchmode proxy failed:', error);
