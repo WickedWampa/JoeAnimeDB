@@ -282,6 +282,48 @@
   white-space: nowrap;
 }
 
+/* Keep desktop navigation on the left through laptop and narrow-window sizes.
+   app.css collapses the shell at 1050px, so this later-loaded stylesheet
+   restores a compact command rail until the real mobile layout takes over. */
+@media (min-width: 761px) and (max-width: 1050px) {
+  .shell {
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr);
+    min-height: 100vh;
+  }
+
+  .sidebar {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    padding-inline: 11px;
+  }
+
+  .sidebar .brand strong {
+    font-size: 21px;
+  }
+
+  .sidebar nav button {
+    padding-inline: 7px 8px;
+  }
+
+  .sidebarNavIcon {
+    width: 27px;
+    height: 27px;
+    flex-basis: 27px;
+  }
+
+  .sidebar .syncSide {
+    grid-template-columns: 31px minmax(0, 1fr);
+    padding-inline: 8px;
+  }
+
+  .sidebarSyncIcon {
+    width: 31px;
+    height: 31px;
+  }
+}
+
 @media (max-height: 760px) and (min-width: 761px) {
   .sidebar {
     padding-top: 14px;
