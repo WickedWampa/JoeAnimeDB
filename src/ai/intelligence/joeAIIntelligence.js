@@ -8,7 +8,38 @@ export function normalizeJoeAIKey(value = '') {
 export function recommendationKey(item = {}) {
   const malId = item.malId ?? item.mal_id;
   if (malId !== undefined && malId !== null && malId !== '') return `mal:${malId}`;
+  const kitsuId = item.kitsuId ?? item.kitsu_id;
+  if (kitsuId !== undefined && kitsuId !== null && kitsuId !== '') return `kitsu:${kitsuId}`;
   return `title:${normalizeJoeAIKey(item.officialTitle || item.title || item.name)}`;
+}
+
+export function sanitizeJoeAIConversationMessages(messages = [], limit = 48) {
+  return (Array.isArray(messages) ? messages : [])
+    .slice(-limit)
+    .map((message) => {
+      try {
+        const safe = JSON.parse(JSON.stringify(message));
+        if (typeof safe?.text === 'string') safe.text = safe.text.slice(0, 12000);
+        if (Array.isArray(safe?.items)) safe.items = safe.items.slice(0, 10);
+        return safe;
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
+}
+
+function promptExclusions(value = '') {
+  const found = [];
+  const pattern = /(?:^|\b)(?:no|without|avoid|exclude)\s+([a-z0-9][a-z0-9 -]{1,30})/gi;
+  let match;
+  while ((match = pattern.exec(String(value || '')))) {
+    const phrase = lower(match[1])
+      .split(/\b(?:but|and|with|under|over|that|which)\b/)[0]
+      .trim();
+    if (phrase) found.push(phrase);
+  }
+  return [...new Set(found)].slice(0, 8);
 }
 
 export function normalizeJoeAIState(state = {}) {
@@ -430,6 +461,26 @@ export function resolveJoeAIFollowUp(text = '', context = {}) {
     if (title) return { text: `recommend something like ${title}`, referencedTitle: title };
   }
 
+  if (/^(?:something|someone)\s+else[?.!]*$/i.test(raw) || /^(?:another|different)\s+(?:one|pick)[?.!]*$/i.test(raw)) {
+    return {
+      text: context.lastRecommendationPrompt || context.lastPrompt || 'recommend something different',
+      avoidRecent: true
+    };
+  }
+
+  const exclusionOnly = raw.match(/^(?:no|without|avoid|exclude)\s+(.+?)[?.!]*$/i);
+  if (exclusionOnly) {
+    const exclude = promptExclusions(raw);
+    return {
+      text: `${context.lastRecommendationPrompt || context.lastPrompt || 'recommend something'} without ${exclusionOnly[1].trim()}`,
+      constraints: {
+        ...(context.lastConstraints || {}),
+        exclude: [...new Set([...(context.lastConstraints?.exclude || []), ...exclude])]
+      },
+      avoidRecent: true
+    };
+  }
+
   const modifier = raw.match(/^(?:give me\s+)?something\s+(shorter|longer|darker|lighter|funnier|less bleak|more emotional)[?.!]*$/i);
   if (modifier) {
     const title = contextTitle(context);
@@ -440,7 +491,16 @@ export function resolveJoeAIFollowUp(text = '', context = {}) {
     };
   }
 
-  return { text: raw };
+  const exclusions = promptExclusions(raw);
+  return {
+    text: raw,
+    constraints: exclusions.length
+      ? {
+          ...(context.lastConstraints || {}),
+          exclude: [...new Set([...(context.lastConstraints?.exclude || []), ...exclusions])].slice(0, 8)
+        }
+      : undefined
+  };
 }
 
 export function updateJoeAIConversationContext(result, prompt = '', current = {}) {
@@ -448,10 +508,28 @@ export function updateJoeAIConversationContext(result, prompt = '', current = {}
   const titleMatch = String(prompt).match(/(?:recommend|about|like|why)\s+(.+?)[?.!]*$/i);
   const isTastePatternExplanation = result?.type === 'genreDNAExplanation';
 
+  const exclusions = promptExclusions(prompt);
+  const recentRecommendationKeys = items.length
+    ? [...new Set([
+        ...(items.map(recommendationKey).filter(Boolean)),
+        ...(current.recentRecommendationKeys || [])
+      ])].slice(0, 48)
+    : (current.recentRecommendationKeys || []);
+
   return {
     ...current,
     lastPrompt: prompt,
+    lastRecommendationPrompt: items.length || result?.type === 'recommendations'
+      ? prompt
+      : (current.lastRecommendationPrompt || ''),
     lastRecommendations: items.length ? items.slice(0, 10) : (current.lastRecommendations || []),
+    recentRecommendationKeys,
+    lastConstraints: exclusions.length
+      ? {
+          ...(current.lastConstraints || {}),
+          exclude: [...new Set([...(current.lastConstraints?.exclude || []), ...exclusions])].slice(0, 8)
+        }
+      : (current.lastConstraints || { exclude: [] }),
     lastReferencedTitle:
       result?.sourceTitle
       || (items.length === 1 ? items[0].officialTitle || items[0].title : '')

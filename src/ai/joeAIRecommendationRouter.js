@@ -326,7 +326,9 @@ function formatMoodRecommendationCards(intent, anime = [], catalog = []) {
   const pool = [];
   const poolKeys = new Set();
 
-  for (const item of [...safeAnime, ...safeCatalog]) {
+  // Recommendation cards are discovery candidates. Library titles can inform
+  // scoring elsewhere, but they must never consume a visible recommendation slot.
+  for (const item of safeCatalog) {
     const keys = itemIdentityKeys(item);
     if (sharesIdentity(keys, poolKeys)) continue;
     keys.forEach((key) => poolKeys.add(key));
@@ -341,7 +343,7 @@ function formatMoodRecommendationCards(intent, anime = [], catalog = []) {
     })
     .map((item) => {
       const owned = sharesIdentity(itemIdentityKeys(item), ownedKeys);
-      const rawScore = scoreMoodItem(item, intent, owned);
+      const rawScore = scoreMoodItem(item, intent, false);
       const match = Math.max(60, Math.min(98, Math.round(rawScore + 45)));
       const tags = (intent.keywords || [])
         .filter((keyword) => textBlob(item).includes(norm(keyword)))
@@ -349,8 +351,8 @@ function formatMoodRecommendationCards(intent, anime = [], catalog = []) {
 
       return {
         ...item,
-        owned,
-        bucket: owned ? 'library' : 'discovery',
+        owned: false,
+        bucket: 'discovery',
         match,
         tags: tags.length ? tags : (item.genres || []).slice(0, 4),
         blurb: moodBlurb(item, intent),

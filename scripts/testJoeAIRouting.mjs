@@ -16,6 +16,8 @@ try {
   const recommendationModule = await server.ssrLoadModule('/src/ai/joeAIRecommendationRouter.js');
   const traitModule = await server.ssrLoadModule('/src/ai/vibes/traitMixer.js');
   const discoverModule = await server.ssrLoadModule('/src/services/recommendationEngineV3.js');
+  const coordinatorModule = await server.ssrLoadModule('/src/ai/recommendationCoordinator.js');
+  const intelligenceModule = await server.ssrLoadModule('/src/ai/intelligence/joeAIIntelligence.js');
 
   const { parseJoeAIIntent } = intentModule;
   const {
@@ -68,6 +70,16 @@ try {
   for (const [prompt, expected] of routingCases) {
     assert.equal(parseJoeAIIntent(prompt).kind, expected, `Unexpected route for: ${prompt}`);
   }
+
+  const justFinished = parseJoeAIIntent('i just finished slime');
+  assert.equal(justFinished.kind, 'singleAdd');
+  assert.equal(justFinished.title, 'slime');
+  assert.equal(justFinished.status, 'Completed');
+
+  const finallyFinished = parseJoeAIIntent('I finally finished Frieren');
+  assert.equal(finallyFinished.kind, 'singleAdd');
+  assert.equal(finallyFinished.title, 'Frieren');
+  assert.equal(finallyFinished.status, 'Completed');
 
   const similar = recommendationModule.routeJoeAIRecommendation(
     'recommend something like Space Dandy',
@@ -142,10 +154,140 @@ try {
   });
   assert.equal(new Set(visibleIds).size, visibleIds.length, 'Discover repeated a title across visible shelves');
 
+  const guarded = coordinatorModule.finalizeJoeAIRecommendations({
+    type: 'recommendationCards',
+    items: [
+      { title: 'Owned Anchor', officialTitle: 'OWNED ANCHOR', match: 99 },
+      { title: 'Fresh One', kitsuId: 101, genres: ['Action'], match: 90 },
+      { title: 'Fresh Two', malId: 202, genres: ['Romance'], match: 89 },
+      { title: 'Fresh Three', kitsuId: 303, genres: ['Mystery'], match: 88 }
+    ]
+  }, {
+    library,
+    conversationContext: { recentRecommendationKeys: ['kitsu:101'] },
+    constraints: { exclude: ['romance'] }
+  });
+  assert.deepEqual(
+    guarded.items.map((item) => item.title),
+    ['Fresh Three', 'Fresh One'],
+    'JoeAI must exclude owned/blocked titles and move recent picks behind fresh ones'
+  );
+
+  const sparseRecommendation = {
+    id: 'catalog-kitsu-999',
+    title: 'Sparse Pick',
+    kitsuId: 999,
+    match: 91,
+    reasons: ['Strong Anime DNA overlap'],
+    confidenceReceipt: { tasteMatch: 91 }
+  };
+  assert.equal(coordinatorModule.recommendationNeedsHydration(sparseRecommendation), true);
+  const hydratedRecommendation = coordinatorModule.mergeHydratedRecommendation(
+    sparseRecommendation,
+    {
+      title: 'Sparse Pick',
+      officialTitle: 'Sparse Pick Official',
+      cover: 'https://example.invalid/poster.jpg',
+      synopsis: 'Hydrated synopsis.',
+      genres: ['Science Fiction'],
+      studio: 'Test Studio',
+      year: 2024,
+      episodeCount: 12,
+      ageRating: 'PG',
+      contentRatingCheckedAt: '2026-08-13T00:00:00.000Z',
+      metadataReady: true
+    }
+  );
+  assert.equal(hydratedRecommendation.cover, 'https://example.invalid/poster.jpg');
+  assert.equal(hydratedRecommendation.episodes, 12);
+  assert.equal(hydratedRecommendation.ageRating, 'PG');
+  assert.equal(hydratedRecommendation.match, 91);
+  assert.deepEqual(hydratedRecommendation.reasons, ['Strong Anime DNA overlap']);
+  assert.equal(coordinatorModule.recommendationNeedsHydration(hydratedRecommendation), false);
+  const catalogRecord = coordinatorModule.toCatalogMetadataRecord(hydratedRecommendation);
+  assert.equal(catalogRecord.match, undefined);
+  assert.equal(catalogRecord.confidenceReceipt, undefined);
+  assert.equal(catalogRecord.cover, 'https://example.invalid/poster.jpg');
+  assert.deepEqual(
+    coordinatorModule.mergeRecommendationCandidatePools(
+      [{ title: 'Genome Pick' }],
+      [{ title: 'Catalog Reserve' }]
+    ).map((item) => item.title),
+    ['Genome Pick', 'Catalog Reserve']
+  );
+
+  const completeCandidate = (index, rating = 'PG') => ({
+    id: `complete-${index}`,
+    title: `Complete Candidate ${index}`,
+    officialTitle: `Complete Candidate ${index}`,
+    cover: `https://example.invalid/complete-${index}.jpg`,
+    synopsis: 'Complete metadata for recommendation count testing.',
+    genres: ['Adventure'],
+    studio: 'Test Studio',
+    year: 2020 + index,
+    episodes: 12,
+    episodeCount: 12,
+    ageRating: rating,
+    contentRatingCheckedAt: '2026-08-13T00:00:00.000Z',
+    metadataReady: true,
+    match: 90 - index
+  });
+  const safeReserve = [
+    ...Array.from({ length: 4 }, (_, index) => completeCandidate(index, 'R')),
+    ...Array.from({ length: 10 }, (_, index) => completeCandidate(index + 4, 'PG'))
+  ];
+  const filledAfterSafety = await coordinatorModule.coordinateJoeAIRecommendation({
+    text: 'what should I watch next?',
+    anime: [],
+    catalog: safeReserve,
+    brain: { recommendations: () => safeReserve },
+    contentSafetyMode: 'teen'
+  });
+  assert.equal(filledAfterSafety.items.length, 8);
+  assert.ok(filledAfterSafety.items.every((item) => item.ageRating === 'PG'));
+
+  const followUp = intelligenceModule.resolveJoeAIFollowUp('no horror', {
+    lastPrompt: 'recommend a short movie',
+    lastRecommendationPrompt: 'recommend a short movie',
+    lastConstraints: { exclude: [] }
+  });
+  assert.match(followUp.text, /short movie without horror/i);
+  assert.deepEqual(followUp.constraints.exclude, ['horror']);
+
+  const directConstraint = intelligenceModule.resolveJoeAIFollowUp('recommend something without romance', {
+    lastConstraints: { exclude: [] }
+  });
+  assert.deepEqual(directConstraint.constraints.exclude, ['romance']);
+
+  const explanationThenAnother = intelligenceModule.resolveJoeAIFollowUp('another one', {
+    lastPrompt: 'why did you recommend Fresh One?',
+    lastRecommendationPrompt: 'recommend something adventurous'
+  });
+  assert.equal(explanationThenAnother.text, 'recommend something adventurous');
+
+  const recommendationContext = intelligenceModule.updateJoeAIConversationContext(
+    { type: 'recommendations', items: [{ title: 'Fresh One', kitsuId: 101 }] },
+    'recommend something adventurous',
+    {}
+  );
+  const explanationContext = intelligenceModule.updateJoeAIConversationContext(
+    { type: 'text', text: 'Fresh One matches your adventure signals.' },
+    'why did you recommend Fresh One?',
+    recommendationContext
+  );
+  assert.equal(explanationContext.lastRecommendationPrompt, 'recommend something adventurous');
+
+  const persistedMessages = intelligenceModule.sanitizeJoeAIConversationMessages(
+    Array.from({ length: 60 }, (_, index) => ({ who: index % 2 ? 'bot' : 'user', text: `message ${index}` }))
+  );
+  assert.equal(persistedMessages.length, 48);
+  assert.equal(persistedMessages[0].text, 'message 12');
+
   console.log(`[ok] JoeAI routing: ${routingCases.length} cases`);
   console.log(`[ok] Gold registry: ${ACTIVE_GENOME_REGISTRY.filter((card) => card.registryTier === 'gold').length} active cards`);
   console.log(`[ok] Similar-DNA recommendations: ${similar.items.length} unique cards`);
   console.log(`[ok] Discover shelves: ${visibleIds.length} unique visible titles`);
+  console.log('[ok] JoeAI excludes owned titles, hydrates and backfills eight safe catalog cards, carries follow-up constraints, and bounds saved conversations');
 } finally {
   await server.close();
 }

@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { initializePlatformBridge } from './platform/initializePlatformBridge';
 import './styles/app.css';
+import './styles/sidebar-command-rail.css';
 import './styles/mobile.css';
 import './styles/beta12-ui-consistency.css';
 

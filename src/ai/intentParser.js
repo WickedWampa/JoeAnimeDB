@@ -22,7 +22,7 @@ function stripCommandWords(value = '') {
     .replace(/^(bulk\s+add|add\s+list|import\s+list|add|import|mark|set|put)\s+/i, '')
     .replace(/^(these|this|the following|list)\s*/i, '')
     .replace(/^(i\s+am|i'm|im)\s+/i, '')
-    .replace(/^(i\s+)?(finished|completed|complete|watched|started)\s+/i, '')
+    .replace(/^(?:i\s+)?(?:(?:just|finally|recently)\s+)?(finished|completed|complete|watched|started)\s+/i, '')
     .replace(/\s+to\s+(my\s+)?library$/i, '')
     .trim();
 }
@@ -75,7 +75,7 @@ function parseLibraryCommand(raw = '', status = 'Watching') {
     /^(?:please\s+)?(?:joeai\s+)?(add these|import these|bulk add|add list|import list)\b/i.test(raw);
 
   const commandLike =
-    /^(?:please\s+)?(?:joeai\s+)?(add|import|bulk add|add list|import list|mark|set|put|i finished|i completed|i watched|i started|finished|completed|watched|started)\b/i.test(raw);
+    /^(?:please\s+)?(?:joeai\s+)?(add|import|bulk add|add list|import list|mark|set|put|i (?:(?:just|finally|recently) )?finished|i (?:(?:just|finally|recently) )?completed|i (?:(?:just|finally|recently) )?watched|i (?:(?:just|finally|recently) )?started|finished|completed|watched|started)\b/i.test(raw);
 
   // A comma by itself is not enough to mutate the library. Requiring an
   // action word prevents questions such as "compare Bleach, Naruto, and One

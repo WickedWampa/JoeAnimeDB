@@ -208,7 +208,11 @@ export function useAnimeLibrary() {
     conversation: {
       lastRecommendations: [],
       lastReferencedTitle: '',
-      lastPrompt: ''
+      lastPrompt: '',
+      lastRecommendationPrompt: '',
+      messages: [],
+      recentRecommendationKeys: [],
+      lastConstraints: { exclude: [] }
     }
   };
 
@@ -466,11 +470,20 @@ export function useAnimeLibrary() {
   async function setJoeAIConversationContext(context = {}) {
     const current = dataRef.current || data;
     const conversation = {
+      ...context,
       lastRecommendations: Array.isArray(context.lastRecommendations)
         ? context.lastRecommendations.slice(0, 10)
         : [],
       lastReferencedTitle: String(context.lastReferencedTitle || ''),
-      lastPrompt: String(context.lastPrompt || '')
+      lastPrompt: String(context.lastPrompt || ''),
+      lastRecommendationPrompt: String(context.lastRecommendationPrompt || ''),
+      messages: Array.isArray(context.messages) ? context.messages.slice(-48) : [],
+      recentRecommendationKeys: Array.isArray(context.recentRecommendationKeys)
+        ? context.recentRecommendationKeys.slice(0, 48)
+        : [],
+      lastConstraints: context.lastConstraints && typeof context.lastConstraints === 'object'
+        ? context.lastConstraints
+        : { exclude: [] }
     };
     const nextState = newUserMode
       ? { ...(current.joeAI || {}), conversation }
@@ -489,7 +502,11 @@ export function useAnimeLibrary() {
           conversation: {
             lastRecommendations: [],
             lastReferencedTitle: '',
-            lastPrompt: ''
+            lastPrompt: '',
+            lastRecommendationPrompt: '',
+            messages: [],
+            recentRecommendationKeys: [],
+            lastConstraints: { exclude: [] }
           }
         }
       : await animeRepository.clearJoeAIConversationContext();

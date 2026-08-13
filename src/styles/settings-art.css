@@ -19,15 +19,25 @@
 .panel.settingsPage::before {
   content: '';
   position: absolute;
-  inset: 0;
+  inset: 0 0 auto;
+  height: min(941px, 100vh);
+  height: min(941px, 100svh);
   z-index: -2;
   pointer-events: none;
-  background-image: var(--settings-art);
+  background-color: #07101a;
+  background-image:
+    linear-gradient(
+      180deg,
+      rgba(7, 16, 26, .04) 0%,
+      rgba(7, 16, 26, .22) 52%,
+      #07101a 100%
+    ),
+    var(--settings-art);
   background-repeat: no-repeat;
-  background-size: cover;
-  background-position: center center;
+  background-size: 100% 100%, 100% auto;
+  background-position: center top;
   filter: saturate(.92) contrast(1.02);
-  transform: scale(1.01);
+  transform: none;
 }
 
 .panel.settingsPage::after {
@@ -91,11 +101,11 @@
   background: rgba(5, 10, 18, .84);
 }
 
-.theme-sakura .settingsPage::before { background-position: center center; }
-.theme-vapor .settingsPage::before { background-position: center center; }
-.theme-ramen .settingsPage::before { background-position: center center; }
-.theme-inferno .settingsPage::before { background-position: center center; }
-.theme-amoled .settingsPage::before { background-position: center center; }
+.theme-sakura .settingsPage::before { background-position: center top; }
+.theme-vapor .settingsPage::before { background-position: center top; }
+.theme-ramen .settingsPage::before { background-position: center top; }
+.theme-inferno .settingsPage::before { background-position: center top; }
+.theme-amoled .settingsPage::before { background-position: center top; }
 
 @media (max-width: 900px) {
   .panel.settingsPage {
@@ -104,7 +114,8 @@
   }
 
   .panel.settingsPage::before {
-    background-size: auto 360px;
+    height: 360px;
+    background-size: 100% 100%, auto 360px;
     background-position: center top;
     transform: none;
   }

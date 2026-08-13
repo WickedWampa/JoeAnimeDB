@@ -1,30 +1,32 @@
-# JoeAnimeDB 5.0 Beta 12
+# JoeAnimeDB 5.0 Beta 13
 
-## Reliability and data safety
+Beta 13 focuses on JoeAI recommendation quality, discovery reliability, and a cleaner desktop experience. It also keeps the same shared application code working across web, Windows, Linux, and the Android beta.
 
-- Strengthened first-run behavior for empty, small, and imperfect libraries.
-- Hardened browser persistence, full backup restore, and rolling backup replacement.
-- Prevented stale New User Mode state from hiding an existing desktop SQLite library after an update.
-- Fixed an Electron preload startup failure that could make desktop show an empty browser-backed library instead of the existing SQLite database.
-- Added a release gate covering import and export, backups, filtering, JoeAI routing, version identity, and visible button wiring.
+## Smarter JoeAI recommendations
 
-## Discovery and JoeAI
+- Added catalog-backed recommendation routing so JoeAI can search beyond titles already stored in the user's library.
+- Strengthened library exclusion rules to reduce recommendations for titles the user already tracks.
+- Added metadata hydration for catalog discoveries, including artwork, episode counts, years, studios, ratings, and content-rating data when providers supply it.
+- Backfilled filtered recommendation sets so JoeAI continues searching instead of returning only one or two usable titles.
+- Improved natural completion requests such as "I just finished Slime" so JoeAI responds with relevant follow-up recommendations instead of dumping the completed library.
+- Preserved JoeAI conversation history when users leave the page and return during the same app session.
 
-- Expanded the Gold Genome registry to 100 active cards.
-- Improved recommendation uniqueness, artwork recovery, and routing for common library and recommendation requests.
-- Improved the JoeAI composer on phones and tablets with a full-width writing area and stacked action button.
+## Discovery reliability
+
+- Improved recommendation deduplication across title variants, alternate names, and existing library entries.
+- Added safer catalog and metadata fallbacks when a provider returns incomplete data.
+- Expanded routing and release-gate coverage for common recommendation, completion, and library-status prompts.
+
+## Desktop interface improvements
+
+- Redesigned the desktop sidebar as a more polished command rail with clearer grouping, stronger active states, and improved spacing.
+- Refined the Settings background treatment so theme artwork fits the page instead of appearing heavily zoomed.
+- Kept the responsive bottom navigation and mobile layouts isolated from the desktop sidebar changes.
 
 ## Platform consistency
 
-- Standardized the displayed version across web, Windows, Linux, and Android builds.
-- Added automated release checks to the web, Windows, Linux, and Android workflows.
+- Updated version identity to 5.0.0-beta.13 across web, Windows, Linux, and Android.
+- Verified that the production web build and Android synchronization use the shared JoeAI and discovery changes.
 - Retained MyAnimeList and AniList import and export support across supported platforms.
 
-## From Beta 11
-
-- Introduced the Android beta alongside the existing Windows and Linux releases.
-- Added responsive mobile navigation, local SQLite storage, and APK installation without Google Play.
-- Restored complete metadata for newly discovered recommendations and reduced repeated results.
-- Added MyAnimeList XML and AniList JSON/CSV import and export.
-
-This remains a public beta. Please report persistence problems, import mismatches, incorrect recommendations, broken provider links, or controls that do not respond.
+This is a public beta. Please report incorrect or repeated recommendations, missing discovery artwork or metadata, persistence problems, import mismatches, broken provider links, or controls that do not respond.

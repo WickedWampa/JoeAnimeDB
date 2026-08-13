@@ -1,0 +1,315 @@
+/* Desktop command rail */
+.sidebar {
+  --sidebar-accent: var(--cyan);
+  --sidebar-hot: var(--pink);
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 20px 14px 14px;
+  background:
+    radial-gradient(circle at 18% 0%, color-mix(in srgb, var(--sidebar-accent) 13%, transparent), transparent 26%),
+    linear-gradient(180deg, rgba(4, 12, 19, .985), rgba(2, 8, 14, .975));
+  box-shadow:
+    inset -1px 0 0 color-mix(in srgb, var(--sidebar-accent) 18%, transparent),
+    18px 0 48px rgba(0, 0, 0, .18);
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--sidebar-accent) 30%, transparent) transparent;
+}
+
+.sidebar::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--sidebar-accent), var(--sidebar-hot), transparent);
+  opacity: .85;
+  pointer-events: none;
+}
+
+.sidebar .brand {
+  position: relative;
+  margin: 0 4px 14px;
+  padding: 4px 0 15px;
+  border-bottom: 1px solid color-mix(in srgb, var(--sidebar-accent) 16%, transparent);
+}
+
+.sidebar .brand::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: -1px;
+  width: 58px;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--sidebar-accent), var(--sidebar-hot));
+  box-shadow: 0 0 14px color-mix(in srgb, var(--sidebar-accent) 42%, transparent);
+}
+
+.sidebar .brandEyebrow {
+  display: block;
+  margin-bottom: 5px;
+  color: color-mix(in srgb, var(--sidebar-accent) 76%, white);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .15em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.sidebar .brand strong {
+  display: block;
+  width: max-content;
+  color: var(--text);
+  font-size: 24px;
+  font-weight: 1000;
+  letter-spacing: -.045em;
+  line-height: 1.08;
+}
+
+.sidebar .brand strong span {
+  color: var(--sidebar-accent);
+  text-shadow: 0 0 18px color-mix(in srgb, var(--sidebar-accent) 30%, transparent);
+}
+
+.sidebar .brand small {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  color: color-mix(in srgb, var(--muted) 82%, transparent);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.sidebar .brand small i,
+.sidebar .syncSide small i {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #32e6a1;
+  box-shadow: 0 0 10px rgba(50, 230, 161, .72);
+}
+
+.sidebar nav {
+  display: grid;
+  gap: 10px;
+}
+
+.sidebarNavSection {
+  min-width: 0;
+}
+
+.sidebarNavHeading {
+  margin: 0 10px 4px;
+  color: color-mix(in srgb, var(--muted) 65%, transparent);
+  font-size: 9px;
+  font-weight: 950;
+  letter-spacing: .15em;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+.sidebarNavItems {
+  display: grid;
+  gap: 3px;
+}
+
+.sidebar nav button {
+  position: relative;
+  min-height: 42px;
+  width: 100%;
+  gap: 10px;
+  padding: 6px 10px 6px 8px;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: 13px;
+  background: transparent;
+  color: color-mix(in srgb, var(--text) 88%, var(--muted));
+  font-size: 14px;
+  transition: border-color .16s ease, background .16s ease, color .16s ease, transform .16s ease;
+}
+
+.sidebar nav button::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 9px;
+  bottom: 9px;
+  width: 3px;
+  border-radius: 0 999px 999px 0;
+  background: linear-gradient(180deg, var(--sidebar-accent), var(--sidebar-hot));
+  box-shadow: 0 0 13px color-mix(in srgb, var(--sidebar-accent) 70%, transparent);
+  opacity: 0;
+  transform: translateX(-3px);
+  transition: opacity .16s ease, transform .16s ease;
+}
+
+.sidebar nav button:hover {
+  transform: translateX(2px);
+  border-color: color-mix(in srgb, var(--sidebar-accent) 18%, transparent);
+  background: color-mix(in srgb, var(--sidebar-accent) 7%, transparent);
+  color: var(--text);
+}
+
+.sidebar nav button.active {
+  border-color: color-mix(in srgb, var(--sidebar-accent) 38%, transparent);
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--sidebar-accent) 18%, transparent), color-mix(in srgb, var(--sidebar-accent) 7%, transparent));
+  color: var(--sidebar-accent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .035),
+    0 9px 24px rgba(0, 0, 0, .16);
+}
+
+.sidebar nav button.active::before {
+  opacity: 1;
+  transform: none;
+}
+
+.sidebarNavIcon {
+  width: 29px;
+  height: 29px;
+  flex: 0 0 29px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, .065);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, .035);
+  color: color-mix(in srgb, var(--sidebar-accent) 55%, var(--text));
+  transition: background .16s ease, border-color .16s ease, box-shadow .16s ease;
+}
+
+.sidebarNavIcon svg {
+  width: 17px;
+  height: 17px;
+  stroke-width: 2.15;
+}
+
+.sidebar nav button:hover .sidebarNavIcon,
+.sidebar nav button.active .sidebarNavIcon {
+  border-color: color-mix(in srgb, var(--sidebar-accent) 38%, transparent);
+  background: color-mix(in srgb, var(--sidebar-accent) 13%, rgba(255, 255, 255, .025));
+  box-shadow: 0 0 18px color-mix(in srgb, var(--sidebar-accent) 14%, transparent);
+}
+
+.sidebar nav button.featured:not(.active) .sidebarNavIcon {
+  color: var(--sidebar-hot);
+  border-color: color-mix(in srgb, var(--sidebar-hot) 26%, transparent);
+  background: color-mix(in srgb, var(--sidebar-hot) 8%, transparent);
+}
+
+.sidebarNavLabel {
+  min-width: 0;
+  flex: 1;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.sidebar .navBadge {
+  min-width: 23px;
+  height: 21px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0 6px;
+  border: 1px solid color-mix(in srgb, var(--sidebar-hot) 42%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--sidebar-hot) 16%, rgba(0, 0, 0, .4));
+  color: color-mix(in srgb, var(--sidebar-hot) 72%, white);
+  font-size: 10px;
+  font-weight: 1000;
+  line-height: 1;
+  box-shadow: 0 0 14px color-mix(in srgb, var(--sidebar-hot) 13%, transparent);
+}
+
+.sidebarFooter {
+  margin-top: auto;
+  padding-top: 12px;
+}
+
+.sidebar .syncSide {
+  width: 100%;
+  min-height: 59px;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 9px 10px;
+  border: 1px solid color-mix(in srgb, var(--sidebar-accent) 24%, transparent);
+  border-radius: 15px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--sidebar-accent) 11%, rgba(7, 16, 25, .92)), rgba(5, 11, 18, .94));
+  color: var(--text);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .18);
+}
+
+.sidebar .syncSide:hover {
+  border-color: color-mix(in srgb, var(--sidebar-accent) 48%, transparent);
+  background: color-mix(in srgb, var(--sidebar-accent) 13%, rgba(7, 16, 25, .94));
+  color: var(--sidebar-accent);
+}
+
+.sidebarSyncIcon {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--sidebar-accent) 15%, transparent);
+  color: var(--sidebar-accent);
+}
+
+.sidebar .syncSide > span:last-child {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.sidebar .syncSide strong {
+  font-size: 12px;
+  line-height: 1.15;
+}
+
+.sidebar .syncSide small {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+@media (max-height: 760px) and (min-width: 761px) {
+  .sidebar {
+    padding-top: 14px;
+  }
+
+  .sidebar .brand {
+    margin-bottom: 9px;
+    padding-bottom: 11px;
+  }
+
+  .sidebar .brandEyebrow,
+  .sidebarNavHeading {
+    display: none;
+  }
+
+  .sidebar nav {
+    gap: 4px;
+  }
+
+  .sidebar nav button {
+    min-height: 39px;
+  }
+
+  .sidebarFooter {
+    padding-top: 7px;
+  }
+
+  .sidebar .syncSide {
+    min-height: 48px;
+  }
+}

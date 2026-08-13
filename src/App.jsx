@@ -681,6 +681,7 @@ export function App() {
             anime={anime}
             catalog={catalog}
             updateAnime={handleUpdateAnime}
+            updateCatalogAnime={updateCatalogAnime}
             joeAIState={joeAI}
             onRecommendationFeedback={recordJoeAIFeedback}
             onJoeAIPreference={setJoeAIPreference}

@@ -28,7 +28,11 @@ function emptyJoeAIConversation() {
   return {
     lastRecommendations: [],
     lastReferencedTitle: '',
-    lastPrompt: ''
+    lastPrompt: '',
+    lastRecommendationPrompt: '',
+    messages: [],
+    recentRecommendationKeys: [],
+    lastConstraints: { exclude: [] }
   };
 }
 
@@ -316,6 +320,10 @@ export const animeRepository = {
       ...context,
       lastRecommendations: Array.isArray(context.lastRecommendations)
         ? context.lastRecommendations.slice(0, 10)
+        : [],
+      messages: Array.isArray(context.messages) ? context.messages.slice(-48) : [],
+      recentRecommendationKeys: Array.isArray(context.recentRecommendationKeys)
+        ? context.recentRecommendationKeys.slice(0, 48)
         : []
     };
     localStorage.setItem(JOEAI_CONVERSATION_KEY, JSON.stringify(conversation));
