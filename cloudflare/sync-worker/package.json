@@ -1,0 +1,15 @@
+{
+  "name": "joeanime-sync-worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:local": "wrangler d1 execute joeanime-sync --local --file=./schema.sql",
+    "db:remote": "wrangler d1 execute joeanime-sync --remote --file=./schema.sql"
+  },
+  "devDependencies": {
+    "wrangler": "^4.30.0"
+  }
+}

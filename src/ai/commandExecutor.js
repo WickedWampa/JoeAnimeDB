@@ -760,10 +760,14 @@ export async function executeJoeAICommand({
     }
 
     case 'recommendation': {
-      const picks = brain?.recommendations?.(5, {
+      let picks = brain?.recommendations?.(5, {
         prompt: intent.text || '',
         joeAIState
       }) || [];
+
+      if (!picks.length) {
+        picks = brain?.recommendations?.(5, { joeAIState }) || [];
+      }
 
       return picks.length
         ? {
@@ -772,7 +776,7 @@ export async function executeJoeAICommand({
             subtitle: 'Based on your Anime DNA, these unseen catalog picks look strongest.',
             items: picks
           }
-        : makeTextResult(brain?.answer?.('recommend something') || 'I need more catalog metadata before I can recommend well.');
+        : makeTextResult('I need more catalog metadata before I can recommend well.');
     }
 
     case 'question':

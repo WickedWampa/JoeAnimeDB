@@ -56,6 +56,8 @@ jobs:
         run: chmod +x android/gradlew
 
       - name: Build debug APK
+        env:
+          VITE_SYNC_API_URL: ${{ vars.VITE_SYNC_API_URL }}
         run: npm run android:debug
 
       - name: Upload debug APK

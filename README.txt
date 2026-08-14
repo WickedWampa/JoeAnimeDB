@@ -1,22 +1,15 @@
-JoeAnimeDB Mobile and Tablet JoeAI Composer Fix
+JoeAnimeDB medium-width sidebar fix
 
-This patch fixes the cramped JoeAI prompt composer on phone and tablet
-layouts without changing the desktop composition.
+Extract this ZIP into the project root and replace the matching file.
 
 Changed file:
-src/styles/mobile.css
+src/styles/sidebar-command-rail.css
 
-Responsive behavior through 1024 px:
-The composer uses the full available chat width.
-The textarea and Ask JoeAI button stack vertically.
-The textarea is taller and remains vertically resizable.
-Desktop width, grid, flex, and minimum-button constraints are reset.
-The Ask JoeAI button uses the full row width and a 48 px minimum height.
+Behavior:
+- Above 1050px: full desktop sidebar.
+- From 761px through 1050px: compact fixed left sidebar.
+- At 760px and below: existing mobile bottom navigation.
 
-Phone layouts through 760 px receive a 104 px minimum textarea height.
-Tablet layouts receive an 88 px minimum textarea height.
-
-Verification:
-npm run build
-
-Result: passed.
+Verified with:
+- npm run build
+- npm run test:release

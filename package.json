@@ -1,6 +1,6 @@
 {
   "name": "joeanime-db-4",
-  "version": "5.0.0-beta.13",
+  "version": "5.0.0-beta.12",
   "private": true,
   "description": "JoeAnimeDB desktop anime library powered by JoeAI",
   "author": "WickedWampa",
@@ -24,7 +24,8 @@
     "android:open": "cap open android",
     "android:debug": "npm run android:sync && cd android && ./gradlew assembleDebug",
     "android:apk": "npm run android:debug",
-    "test:reliability": "node scripts/testJoeAIRouting.mjs && node scripts/testNewUserReliability.mjs",
+    "test:sync": "node scripts/testCloudSync.mjs",
+    "test:reliability": "node scripts/testJoeAIRouting.mjs && node scripts/testNewUserReliability.mjs && npm run test:sync",
     "test:release": "npm run test:reliability && node scripts/testReleaseGate.mjs",
     "test:release:live": "npm run test:reliability && node scripts/testReleaseGate.mjs --live"
   },

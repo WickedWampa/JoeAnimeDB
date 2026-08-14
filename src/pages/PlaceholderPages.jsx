@@ -7,6 +7,7 @@ import '../styles/joeai-command-center.css';
 import '../styles/settings-art.css';
 import { Poster } from '../components/Poster';
 import { AnimeCard } from '../components/AnimeCard';
+import { CloudSyncPanel } from '../components/CloudSyncPanel';
 import { score, countBy } from '../utils/animeUtils';
 import {
   exportBackup,
@@ -42,7 +43,6 @@ import {
   inferFeedbackTraits,
   recommendationKey,
   resolveJoeAIFollowUp,
-  sanitizeJoeAIConversationMessages,
   updateJoeAIConversationContext
 } from '../ai/intelligence/joeAIIntelligence';
 import {
@@ -206,7 +206,6 @@ export function Assistant({
   anime,
   catalog: rawCatalog = [],
   updateAnime,
-  updateCatalogAnime,
   joeAIState = {},
   contentSafetyMode = 'unrestricted',
   onRecommendationFeedback,
@@ -215,14 +214,6 @@ export function Assistant({
   initialPrompt = '',
   onPromptConsumed
 }) {
-  const welcomeMessage = {
-    who: 'bot',
-    type: 'text',
-    text: 'JoeAI is ready. Ask what I can do, tell me what you finished, bulk add titles, or ask for recommendations.'
-  };
-  const savedConversation = joeAIState?.conversation && typeof joeAIState.conversation === 'object'
-    ? joeAIState.conversation
-    : {};
   const catalog = useMemo(
     () => filterContentBySafety(rawCatalog, contentSafetyMode),
     [rawCatalog, contentSafetyMode]
@@ -235,77 +226,29 @@ export function Assistant({
     () => createAnimeBrain(recommendationAnime, catalog, { joeAIState }),
     [recommendationAnime, catalog, joeAIState]
   );
-  const [log, setLog] = useState(() => {
-    const savedMessages = sanitizeJoeAIConversationMessages(savedConversation.messages);
-    return savedMessages.length ? savedMessages : [welcomeMessage];
-  });
+  const [log, setLog] = useState([
+    {
+      who: 'bot',
+      type: 'text',
+      text: 'JoeAI is wicked smaht now. Ask what I can do, tell me what you finished, bulk add titles, or ask for recommendations.'
+    }
+  ]);
   const [text, setText] = useState('');
   const [addingId, setAddingId] = useState('');
   const [pendingAction, setPendingAction] = useState(null);
   const [expandedRecommendationIds, setExpandedRecommendationIds] = useState({});
   const [dailyPickSeed, setDailyPickSeed] = useState(() => localDaySeed());
   const [conversationContext, setConversationContext] = useState(() => ({
-    ...savedConversation,
-    lastRecommendations: Array.isArray(savedConversation.lastRecommendations)
-      ? savedConversation.lastRecommendations.slice(0, 10)
+    lastRecommendations: Array.isArray(joeAIState?.conversation?.lastRecommendations)
+      ? joeAIState.conversation.lastRecommendations.slice(0, 10)
       : [],
-    lastReferencedTitle: savedConversation.lastReferencedTitle || '',
-    lastPrompt: savedConversation.lastPrompt || '',
-    lastRecommendationPrompt: savedConversation.lastRecommendationPrompt || '',
-    recentRecommendationKeys: Array.isArray(savedConversation.recentRecommendationKeys)
-      ? savedConversation.recentRecommendationKeys.slice(0, 48)
-      : [],
-    lastConstraints: savedConversation.lastConstraints || { exclude: [] }
+    lastReferencedTitle: joeAIState?.conversation?.lastReferencedTitle || '',
+    lastPrompt: joeAIState?.conversation?.lastPrompt || ''
   }));
   const [feedbackMenuId, setFeedbackMenuId] = useState('');
   const [feedbackStatus, setFeedbackStatus] = useState({});
   const lastAutoPromptRef = useRef('');
   const conversationRef = useRef(null);
-  const conversationContextRef = useRef(conversationContext);
-  const persistConversationRef = useRef(onJoeAIConversation);
-  const logRef = useRef(log);
-
-  useEffect(() => {
-    conversationContextRef.current = conversationContext;
-  }, [conversationContext]);
-
-  useEffect(() => {
-    logRef.current = log;
-  }, [log]);
-
-  useEffect(() => {
-    if (log.length <= 48) return;
-    setLog((current) => current.length > 48 ? current.slice(-48) : current);
-  }, [log.length]);
-
-  useEffect(() => {
-    persistConversationRef.current = onJoeAIConversation;
-  }, [onJoeAIConversation]);
-
-  useEffect(() => {
-    if (!persistConversationRef.current) return undefined;
-    const timer = window.setTimeout(() => {
-      const payload = {
-        ...conversationContextRef.current,
-        messages: sanitizeJoeAIConversationMessages(log)
-      };
-      Promise.resolve(persistConversationRef.current(payload)).catch((error) => {
-        console.warn('Could not persist JoeAI conversation:', error);
-      });
-    }, 120);
-    return () => window.clearTimeout(timer);
-  }, [log, conversationContext]);
-
-  useEffect(() => () => {
-    if (!persistConversationRef.current) return;
-    const payload = {
-      ...conversationContextRef.current,
-      messages: sanitizeJoeAIConversationMessages(logRef.current)
-    };
-    Promise.resolve(persistConversationRef.current(payload)).catch((error) => {
-      console.warn('Could not persist JoeAI conversation while leaving the page:', error);
-    });
-  }, []);
 
   useEffect(() => {
     const refreshDailyPick = () => {
@@ -412,10 +355,8 @@ export function Assistant({
       /^i started\s+(.+)$/i,
       /^started\s+(.+)$/i,
       /^i finished\s+(.+)$/i,
-      /^i (?:just|finally|recently) finished\s+(.+)$/i,
       /^finished\s+(.+)$/i,
       /^i completed\s+(.+)$/i,
-      /^i (?:just|finally|recently) completed\s+(.+)$/i,
       /^completed\s+(.+)$/i,
       /^mark\s+(.+?)\s+as\s+(completed|watched|watching|planned|plan to watch|dropped|on hold)$/i
     ];
@@ -607,12 +548,21 @@ export function Assistant({
 
     if (typeof result === 'string') {
       setLog((current) => [...current, { who: 'bot', type: 'text', text: result }]);
-      setConversationContext((current) => updateJoeAIConversationContext({ type: 'text', text: result }, prompt, current));
       return;
     }
 
     setLog((current) => [...current, { who: 'bot', ...result }]);
-    setConversationContext((current) => updateJoeAIConversationContext(result, prompt, current));
+    setConversationContext((current) => {
+      const next = updateJoeAIConversationContext(result, prompt, current);
+
+      if (onJoeAIConversation) {
+        Promise.resolve(onJoeAIConversation(next)).catch((error) => {
+          console.warn('Could not persist JoeAI conversation context:', error);
+        });
+      }
+
+      return next;
+    });
   }
 
   function toggleRecommendationWhy(id) {
@@ -903,19 +853,12 @@ export function Assistant({
     }
 
     if (intent.kind === 'recommendation') {
-      const requestContext = resolved.constraints
-        ? { ...conversationContext, lastConstraints: resolved.constraints }
-        : conversationContext;
-      const result = await coordinateJoeAIRecommendation({
+      const result = coordinateJoeAIRecommendation({
         text: routedText,
         anime: recommendationAnime,
         catalog,
         brain,
-        joeAIState: activeJoeAIState,
-        conversationContext: requestContext,
-        constraints: resolved.constraints || {},
-        contentSafetyMode,
-        persistCatalogItem: updateCatalogAnime
+        joeAIState: activeJoeAIState
       });
 
       appendBotResult(result, routedText);
@@ -3832,6 +3775,13 @@ export function SettingsPage({
           </strong>
         </footer>
       </section>
+
+      <CloudSyncPanel
+        data={data}
+        onRestoreBackup={onRestoreBackup}
+        onThemeChange={onThemeChange}
+        onSaveDisplayName={onSaveDisplayName}
+      />
 
       <section className="settingsWorkshopSummary" aria-label="Workshop summary">
         <div>

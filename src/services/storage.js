@@ -66,7 +66,7 @@ function backupSnapshotWeight(snapshot = {}) {
   return (animeCount * 1000) + catalogCount;
 }
 
-async function resolveLiveBackupDatabase(data = {}) {
+export async function resolveLiveBackupDatabase(data = {}) {
   const currentSnapshot = data && typeof data === 'object' ? data : {};
   const getDatabase = window.JoeAnimeDB?.database?.getDatabase;
 
