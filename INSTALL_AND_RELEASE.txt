@@ -1,0 +1,47 @@
+JoeAnimeDB 5.0.0-beta.13 release candidate
+
+This ZIP is an overlay for the project root. Extract it into the real
+JoeAnimeDB repository while feature/android-beta is checked out and allow it
+to replace the matching files.
+
+Included work
+
+1. JoeAI catalog-backed recommendations and stronger owned-title exclusion.
+2. Catalog metadata hydration and result backfilling.
+3. Natural handling for completion prompts such as "I just finished Slime".
+4. Session conversation persistence and expanded JoeAI regression coverage.
+5. Settings theme-art fit correction.
+6. Desktop sidebar command-rail redesign.
+7. Beta 13 version identities and GitHub release notes.
+
+Verified before packaging
+
+- npm run test:release
+- npm run build
+- npm run android:sync
+- No unresolved Git conflict markers in the release files
+
+Recommended Git sequence after extraction
+
+git status --short
+npm run test:release
+npm run build
+git add android/app/build.gradle electron/database.cjs package.json package-lock.json RELEASE_NOTES.md scripts/testJoeAIRouting.mjs scripts/testReleaseGate.mjs src/App.jsx src/main.jsx src/ai/intentParser.js src/ai/intelligence/joeAIIntelligence.js src/ai/joeAIRecommendationRouter.js src/ai/recommendationCoordinator.js src/components/Sidebar.jsx src/hooks/useAnimeLibrary.js src/pages/PlaceholderPages.jsx src/repositories/animeRepository.js src/styles/settings-art.css src/styles/sidebar-command-rail.css
+git commit -m "release: JoeAnimeDB 5.0.0 beta 13"
+git push origin feature/android-beta
+
+Then merge the tested branch into main:
+
+git switch main
+git pull --ff-only origin main
+git merge --no-ff feature/android-beta -m "release: merge JoeAnimeDB 5.0.0 beta 13"
+git push origin main
+
+After the main branch checks pass, create the release tag:
+
+git tag -a v5.0.0-beta.13 -m "JoeAnimeDB 5.0.0 beta 13"
+git push origin v5.0.0-beta.13
+
+The existing release-windows.yml workflow will run the release gate, build
+Windows and Linux packages, create the GitHub prerelease, and publish the
+contents of RELEASE_NOTES.md.

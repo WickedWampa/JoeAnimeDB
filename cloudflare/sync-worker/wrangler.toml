@@ -1,0 +1,8 @@
+name = "joeanime-sync-api"
+main = "src/index.js"
+compatibility_date = "2026-08-14"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "joeanime-sync"
+database_id = "81245930-e650-40fb-8a76-5cf9c65a2208"

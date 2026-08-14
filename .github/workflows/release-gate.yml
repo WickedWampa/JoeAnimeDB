@@ -34,4 +34,6 @@ jobs:
         run: npm run test:release
 
       - name: Build production web app
+        env:
+          VITE_SYNC_API_URL: ${{ vars.VITE_SYNC_API_URL }}
         run: npm run build

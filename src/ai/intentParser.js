@@ -22,7 +22,7 @@ function stripCommandWords(value = '') {
     .replace(/^(bulk\s+add|add\s+list|import\s+list|add|import|mark|set|put)\s+/i, '')
     .replace(/^(these|this|the following|list)\s*/i, '')
     .replace(/^(i\s+am|i'm|im)\s+/i, '')
-    .replace(/^(?:i\s+)?(?:(?:just|finally|recently)\s+)?(finished|completed|complete|watched|started)\s+/i, '')
+    .replace(/^(i\s+)?(finished|completed|complete|watched|started)\s+/i, '')
     .replace(/\s+to\s+(my\s+)?library$/i, '')
     .trim();
 }
@@ -75,7 +75,7 @@ function parseLibraryCommand(raw = '', status = 'Watching') {
     /^(?:please\s+)?(?:joeai\s+)?(add these|import these|bulk add|add list|import list)\b/i.test(raw);
 
   const commandLike =
-    /^(?:please\s+)?(?:joeai\s+)?(add|import|bulk add|add list|import list|mark|set|put|i (?:(?:just|finally|recently) )?finished|i (?:(?:just|finally|recently) )?completed|i (?:(?:just|finally|recently) )?watched|i (?:(?:just|finally|recently) )?started|finished|completed|watched|started)\b/i.test(raw);
+    /^(?:please\s+)?(?:joeai\s+)?(add|import|bulk add|add list|import list|mark|set|put|i finished|i completed|i watched|i started|finished|completed|watched|started)\b/i.test(raw);
 
   // A comma by itself is not enough to mutate the library. Requiring an
   // action word prevents questions such as "compare Bleach, Naruto, and One
@@ -282,6 +282,16 @@ export function parseJoeAIIntent(input = '') {
     /\b(recommend|suggest|find|give me|show me|what should i watch|watch next|something to watch|hidden gem|surprise me|next anime)\b/i.test(raw);
   const recommendationDescription =
     isGenericRecommendationDescription(cleanKnownTitleQueryForGenome(raw));
+
+  // These are complete recommendation questions, not possible anime titles.
+  // Handle them before fuzzy Genome-title matching so words such as "next"
+  // cannot accidentally route the request into the plain question fallback.
+  const genericNextWatchPrompt =
+    /^(?:please\s+)?(?:what\s+should\s+i\s+watch(?:\s+next)?|what\s+do\s+i\s+watch\s+next|what\s+to\s+watch(?:\s+next)?|pick\s+(?:my\s+)?next\s+anime|give\s+me\s+something\s+to\s+watch|surprise\s+me)[?.!]*$/i.test(raw);
+
+  if (genericNextWatchPrompt) {
+    return { kind: 'recommendation', text: raw };
+  }
 
   if (explicitRecommendationPrompt && recommendationDescription && !isExactGenomeTitleQuery(raw)) {
     return { kind: 'recommendation', text: raw };

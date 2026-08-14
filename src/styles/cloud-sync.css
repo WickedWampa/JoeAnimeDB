@@ -1,0 +1,198 @@
+.cloudSyncPanel {
+  width: min(100%, 1000px);
+  margin: 0 0 20px;
+  padding: 22px;
+  border: 1px solid color-mix(in srgb, var(--settings-accent, var(--cyan)) 42%, var(--line));
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 100% 0%, color-mix(in srgb, var(--pink) 11%, transparent), transparent 35%),
+    rgba(3, 10, 18, .9);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .24);
+}
+
+.cloudSyncPanel > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.cloudSyncPanel h2 {
+  margin: 3px 0 7px;
+  font-size: clamp(24px, 4vw, 34px);
+}
+
+.cloudSyncPanel header p:last-child {
+  max-width: 720px;
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.cloudSyncPanel header > span {
+  flex: 0 0 auto;
+  padding: 7px 11px;
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 999px;
+  color: var(--muted);
+  background: rgba(0, 0, 0, .22);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.cloudSyncPanel header > span.linked {
+  border-color: color-mix(in srgb, var(--cyan) 48%, var(--line));
+  color: var(--cyan);
+}
+
+.cloudSyncPanel > aside {
+  margin-top: 16px;
+  padding: 11px 13px;
+  border: 1px solid color-mix(in srgb, var(--gold) 38%, var(--line));
+  border-radius: 12px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--gold) 7%, transparent);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.cloudSyncFacts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 18px 0 12px;
+}
+
+.cloudSyncFacts > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(0, 0, 0, .2);
+}
+
+.cloudSyncFacts small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+
+.cloudSyncFacts strong {
+  overflow: hidden;
+  color: var(--cyan);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cloudSyncActions,
+.cloudSyncStart {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.cloudSyncPanel button {
+  min-height: 48px;
+}
+
+.cloudSyncActions button,
+.cloudSyncStart button {
+  display: grid;
+  gap: 3px;
+  text-align: left;
+}
+
+.cloudSyncPanel button.primary {
+  border-color: color-mix(in srgb, var(--cyan) 58%, var(--line));
+  background: color-mix(in srgb, var(--cyan) 11%, rgba(0, 0, 0, .25));
+}
+
+.cloudSyncPanel button strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.cloudSyncPanel button small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.cloudSyncPanel button:disabled {
+  opacity: .46;
+  cursor: not-allowed;
+}
+
+.cloudSyncPanel button.danger {
+  border-color: rgba(255, 80, 100, .42);
+  color: #ff8295;
+}
+
+.cloudSyncPanel details {
+  margin-top: 13px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.cloudSyncPanel details summary {
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.cloudSyncPanel details > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 9px;
+}
+
+.cloudSyncImport {
+  margin-top: 10px;
+}
+
+.cloudSyncStatus {
+  margin: 13px 0 0;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--cyan) 26%, var(--line));
+  border-radius: 11px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--cyan) 6%, transparent);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.cloudSyncPanel > footer {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, .08);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+@media (max-width: 700px) {
+  .cloudSyncPanel {
+    padding: 17px;
+  }
+
+  .cloudSyncPanel > header {
+    display: grid;
+  }
+
+  .cloudSyncPanel header > span {
+    justify-self: start;
+  }
+
+  .cloudSyncFacts,
+  .cloudSyncActions,
+  .cloudSyncStart {
+    grid-template-columns: 1fr;
+  }
+}
