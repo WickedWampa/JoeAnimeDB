@@ -17,7 +17,14 @@ function normalizedTitle(item = {}) {
 try {
   const discoverModule = await server.ssrLoadModule('/src/services/recommendationEngineV3.js');
   const recommendationModule = await server.ssrLoadModule('/src/ai/joeAIRecommendationRouter.js');
+  const intentModule = await server.ssrLoadModule('/src/ai/intentParser.js');
   const readinessModule = await server.ssrLoadModule('/src/ai/tasteReadiness.js');
+
+  assert.equal(
+    intentModule.parseJoeAIIntent('recommend a comedy under 12 episodes').kind,
+    'recommendation',
+    'Constrained recommendation was intercepted by fuzzy title lookup'
+  );
 
   const emptyReadiness = readinessModule.getTasteReadiness([]);
   assert.equal(emptyReadiness.hasTasteData, false);

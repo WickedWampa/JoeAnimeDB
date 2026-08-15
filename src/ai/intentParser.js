@@ -300,7 +300,7 @@ export function parseJoeAIIntent(input = '') {
   // An exact known title wins before broad recommendation wording. This keeps
   // "recommend One Piece" on its direct Genome answer while
   // "recommend something like One Piece" still produces explained picks.
-  if (!hasSimilarityWording && isKnownGenomeTitleQuery(raw)) {
+  if (!explicitRecommendationPrompt && !hasSimilarityWording && isKnownGenomeTitleQuery(raw)) {
     return {
       kind: 'question',
       text: raw,
