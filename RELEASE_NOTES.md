@@ -1,32 +1,27 @@
-# JoeAnimeDB 5.0 Beta 13
+# JoeAnimeDB 5.0 Beta 14
 
-Beta 13 focuses on JoeAI recommendation quality, discovery reliability, and a cleaner desktop experience. It also keeps the same shared application code working across web, Windows, Linux, and the Android beta.
+Beta 14 adds optional encrypted device sync while keeping JoeAnimeDB offline-first. It also packages the Windows installer, Linux AppImage, and Android APK together in one GitHub prerelease.
 
-## Smarter JoeAI recommendations
+## Optional encrypted device sync
 
-- Added catalog-backed recommendation routing so JoeAI can search beyond titles already stored in the user's library.
-- Strengthened library exclusion rules to reduce recommendations for titles the user already tracks.
-- Added metadata hydration for catalog discoveries, including artwork, episode counts, years, studios, ratings, and content-rating data when providers supply it.
-- Backfilled filtered recommendation sets so JoeAI continues searching instead of returning only one or two usable titles.
-- Improved natural completion requests such as "I just finished Slime" so JoeAI responds with relevant follow-up recommendations instead of dumping the completed library.
-- Preserved JoeAI conversation history when users leave the page and return during the same app session.
+- Added account-free library transfer between web, Windows, Linux, and Android.
+- Encrypts each cloud snapshot on the device with AES-256-GCM before upload.
+- Added Recovery Kits and recovery codes for linking another device without an email address, account, or subscription.
+- Added upload and restore controls with visible cloud revision and last-sync status.
+- Keeps local storage as the primary copy. Cloud sync remains optional and user-controlled.
+- Replaces the previous cloud snapshot when a newer revision is uploaded.
 
-## Discovery reliability
+## Reliability and data safety
 
-- Improved recommendation deduplication across title variants, alternate names, and existing library entries.
-- Added safer catalog and metadata fallbacks when a provider returns incomplete data.
-- Expanded routing and release-gate coverage for common recommendation, completion, and library-status prompts.
+- Added corrupt-data fallback and encrypted recovery tests.
+- Verified full backup creation, parsing, and preference restoration.
+- Preserved MyAnimeList and AniList import and export support.
+- Added release-gate coverage for cloud sync, web and desktop backup replacement, Android restore wiring, and cross-platform version identity.
 
-## Desktop interface improvements
+## Platform release
 
-- Redesigned the desktop sidebar as a more polished command rail with clearer grouping, stronger active states, and improved spacing.
-- Refined the Settings background treatment so theme artwork fits the page instead of appearing heavily zoomed.
-- Kept the responsive bottom navigation and mobile layouts isolated from the desktop sidebar changes.
+- Updated version identity to 5.0.0-beta.14 across web, Windows, Linux, and Android.
+- Added the production sync API configuration to automated builds.
+- Publishes the Windows installer, Linux AppImage, and Android APK under the same Beta 14 prerelease.
 
-## Platform consistency
-
-- Updated version identity to 5.0.0-beta.13 across web, Windows, Linux, and Android.
-- Verified that the production web build and Android synchronization use the shared JoeAI and discovery changes.
-- Retained MyAnimeList and AniList import and export support across supported platforms.
-
-This is a public beta. Please report incorrect or repeated recommendations, missing discovery artwork or metadata, persistence problems, import mismatches, broken provider links, or controls that do not respond.
+This is a public beta. Keep your Recovery Kit private and store a separate backup. Please report sync failures, restore problems, incorrect recommendations, missing metadata, import mismatches, broken provider links, or controls that do not respond.
