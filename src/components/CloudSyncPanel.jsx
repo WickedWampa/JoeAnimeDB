@@ -31,6 +31,8 @@ export function CloudSyncPanel({
   const [config, setConfig] = React.useState(() => readCloudSyncConfig());
   const [busy, setBusy] = React.useState('');
   const [status, setStatus] = React.useState('');
+  const [recoveryCodeInput, setRecoveryCodeInput] = React.useState('');
+  const [showRecoveryCodeLink, setShowRecoveryCodeLink] = React.useState(false);
   const kitInputRef = React.useRef(null);
   const apiReady = cloudSyncAvailable();
 
@@ -54,12 +56,41 @@ export function CloudSyncPanel({
     setStatus('Sync identity created. Download the Recovery Kit, then upload this library.');
   }
 
-  function linkWithCode() {
-    const code = window.prompt('Paste the JoeAnimeDB recovery code from the other device:');
-    if (!code) return;
+  function beginLinkWithCode() {
+    setRecoveryCodeInput('');
+    setShowRecoveryCodeLink(true);
+    setStatus(config
+      ? 'Paste the recovery code from the device whose cloud library you want to use.'
+      : 'Paste the recovery code from your other JoeAnimeDB device.');
+  }
+
+  function cancelLinkWithCode() {
+    setRecoveryCodeInput('');
+    setShowRecoveryCodeLink(false);
+  }
+
+  function linkWithCode(event) {
+    event?.preventDefault();
+    const code = recoveryCodeInput.trim();
+
+    if (!code) {
+      setStatus('Paste a JoeAnimeDB recovery code first.');
+      return;
+    }
+
+    if (config) {
+      const confirmed = window.confirm(
+        'Replace this device\'s current sync link with the recovery code from another device?\n\n' +
+        'Your local library will not be changed. After linking, choose Restore Cloud Library to load the shared cloud copy.'
+      );
+      if (!confirmed) return;
+    }
+
     try {
       const identity = linkCloudSyncWithCode(code);
       setConfig(identity);
+      setRecoveryCodeInput('');
+      setShowRecoveryCodeLink(false);
       setStatus('This device is linked. Choose Restore Cloud Library to load the shared library.');
     } catch (error) {
       setStatus(error?.message || String(error));
@@ -148,7 +179,6 @@ export function CloudSyncPanel({
       'Restore the encrypted cloud library on this device?\n\nThe current local database will be replaced.'
     );
     if (!confirmed) return;
-
     setBusy('download');
     setStatus('Downloading and decrypting the cloud library...');
     try {
@@ -166,6 +196,8 @@ export function CloudSyncPanel({
     if (!window.confirm('Disconnect this device? The local library and cloud copy will be kept.')) return;
     disconnectCloudSync();
     setConfig(null);
+    setShowRecoveryCodeLink(false);
+    setRecoveryCodeInput('');
     setStatus('This device was disconnected. Its local library was not changed.');
   }
 
@@ -179,6 +211,8 @@ export function CloudSyncPanel({
     try {
       await deleteCloudLibrary(config);
       setConfig(null);
+      setShowRecoveryCodeLink(false);
+      setRecoveryCodeInput('');
       setStatus('Cloud copy deleted. The local library was kept.');
     } catch (error) {
       setStatus(`Cloud deletion failed: ${error?.message || String(error)}`);
@@ -217,17 +251,25 @@ export function CloudSyncPanel({
               <strong>{busy === 'upload' ? 'Uploading...' : 'Upload This Library'}</strong>
               <small>Create a new encrypted cloud revision</small>
             </button>
+
             <button type="button" onClick={restoreCloud} disabled={Boolean(busy) || !apiReady}>
               <strong>{busy === 'download' ? 'Restoring...' : 'Restore Cloud Library'}</strong>
               <small>Replace this device from the cloud copy</small>
             </button>
+
             <button type="button" onClick={exportKit} disabled={Boolean(busy)}>
               <strong>{busy === 'kit' ? 'Preparing...' : 'Download Recovery Kit'}</strong>
               <small>Encrypted snapshot plus the device-link secret</small>
             </button>
+
             <button type="button" onClick={copyRecoveryCode} disabled={Boolean(busy)}>
               <strong>Copy Recovery Code</strong>
               <small>Link another device without an account</small>
+            </button>
+
+            <button type="button" onClick={beginLinkWithCode} disabled={Boolean(busy)}>
+              <strong>Link With Recovery Code</strong>
+              <small>Switch this device to an existing cloud library</small>
             </button>
           </div>
 
@@ -247,11 +289,45 @@ export function CloudSyncPanel({
             <strong>Enable Sync</strong>
             <small>Create a private library identity on this device</small>
           </button>
-          <button type="button" onClick={linkWithCode}>
+
+          <button type="button" onClick={beginLinkWithCode}>
             <strong>Link With Recovery Code</strong>
             <small>Connect to an existing encrypted cloud library</small>
           </button>
         </div>
+      )}
+
+      {showRecoveryCodeLink && (
+        <form className="cloudSyncCodeLink" onSubmit={linkWithCode}>
+          <label htmlFor="cloudSyncRecoveryCode">Recovery code from your other device</label>
+          <div className="cloudSyncCodeLinkRow">
+            <input
+              id="cloudSyncRecoveryCode"
+              type="password"
+              value={recoveryCodeInput}
+              onChange={(event) => setRecoveryCodeInput(event.target.value)}
+              placeholder="Paste recovery code"
+              autoComplete="off"
+              autoCapitalize="none"
+              spellCheck="false"
+              disabled={Boolean(busy)}
+              autoFocus
+            />
+            <button
+              type="submit"
+              className="primary"
+              disabled={Boolean(busy) || !recoveryCodeInput.trim()}
+            >
+              Link This Device
+            </button>
+            <button type="button" onClick={cancelLinkWithCode} disabled={Boolean(busy)}>
+              Cancel
+            </button>
+          </div>
+          <small>
+            Linking changes only the sync identity. It does not overwrite this device&apos;s local library until you choose Restore Cloud Library.
+          </small>
+        </form>
       )}
 
       <input
@@ -261,11 +337,18 @@ export function CloudSyncPanel({
         accept=".json,application/json"
         onChange={importKit}
       />
-      <button type="button" className="cloudSyncImport" onClick={() => kitInputRef.current?.click()} disabled={Boolean(busy)}>
+
+      <button
+        type="button"
+        className="cloudSyncImport"
+        onClick={() => kitInputRef.current?.click()}
+        disabled={Boolean(busy)}
+      >
         Import Recovery Kit
       </button>
 
       {status && <p className="cloudSyncStatus" aria-live="polite">{status}</p>}
+
       <footer>
         Local storage remains the primary copy. A Recovery Kit contains the secret that unlocks the encrypted snapshot, so keep the file private and back it up separately.
       </footer>
