@@ -1502,12 +1502,14 @@ function DiscoverPage({
 
       setLiveState(result.state || (result.partial ? 'partial' : 'live'));
 
+      const currentVisible = refreshedLiveRows.filter((item) => item?.discoverBucket === 'current').length;
+      const upcomingVisible = refreshedLiveRows.filter((item) => item?.discoverBucket === 'upcoming').length;
       const cacheNote = result.usedCache ? ' Cached Kitsu titles were kept for the unavailable feed.' : '';
       const providerNote = result.sources ? ` Sources: current ${result.sources.current}, upcoming ${result.sources.upcoming}.` : '';
       const partialNote = result.partial ? ' One or more feeds used a fallback or cache.' : '';
 
       setCatalogMessage(
-        `✓ Live Discover ready: ${result.currentCount} current-season and ${result.upcomingCount} upcoming titles.${partialNote}${cacheNote}${providerNote}`
+        `Live Discover ready: ${currentVisible} current-season and ${upcomingVisible} upcoming titles.${partialNote}${cacheNote}${providerNote}`
       );
     } catch (error) {
       console.warn('Live Discover refresh failed:', error);

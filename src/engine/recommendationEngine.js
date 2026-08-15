@@ -244,13 +244,19 @@ function requestConstraints(prompt = '', library = [], catalog = []) {
     : null;
 
   return {
-    maxEpisodes: episodeLimit ? Number(episodeLimit[1]) : 0,
+    maxEpisodes: episodeLimit
+      ? Math.max(1, Number(episodeLimit[1]) - 1)
+      : /\b(short|short binge|quick watch|one cour)\b/.test(text)
+        ? 13
+        : 0,
     referenceEpisodes: getEpisodes(comparisonItem),
     wantsShorter: /\b(shorter|short binge|quick watch)\b/.test(text),
     wantsLonger: /\b(longer|long journey|long-form)\b/.test(text),
     wantsDarker: /\b(darker|dark fantasy|more intense|bleak)\b/.test(text),
     wantsLighter: /\b(lighter|less bleak|less dark|feel good|wholesome)\b/.test(text),
     wantsFunny: /\b(funnier|funny|comedy|make me laugh|hilarious)\b/.test(text),
+    wantsSad: /\b(sad|emotional|tearjerker|heartbreaking|make me cry|tragedy)\b/.test(text),
+    wantsMovie: /\b(movie|film)\b/.test(text),
     excludeHorror: /\b(?:not|without|no)\s+horror\b/.test(text)
   };
 }
@@ -264,11 +270,14 @@ function requestAdjustment(candidate = {}, constraints = {}) {
     ...(candidate.genomeTraits || [])
   ].filter(Boolean).join(' ')).toLowerCase();
   const episodes = getEpisodes(candidate);
+  const type = String(candidate.type || candidate.format || '').toLowerCase();
   let adjustment = 0;
   let excluded = false;
   const reasons = [];
 
   if (constraints.maxEpisodes && episodes && episodes > constraints.maxEpisodes) excluded = true;
+  if (constraints.maxEpisodes && !episodes) excluded = true;
+  if (constraints.wantsMovie && !/\b(movie|film)\b/.test(type)) excluded = true;
   if (constraints.referenceEpisodes && episodes) {
     if (constraints.wantsShorter && episodes < constraints.referenceEpisodes) {
       adjustment += 10;
@@ -291,6 +300,7 @@ function requestAdjustment(candidate = {}, constraints = {}) {
 
   const isDark = /\b(dark|horror|gore|violent|survival|tragedy|psychological)\b/.test(text);
   const isFunny = /\b(comedy|funny|humor|parody|lighthearted)\b/.test(text);
+  const isSad = /\b(drama|emotional|tragedy|tearjerker|heartbreak|melancholy|grief)\b/.test(text);
   if (constraints.wantsDarker && isDark) {
     adjustment += 9;
     reasons.push('matches the darker tone in your request');
@@ -303,6 +313,9 @@ function requestAdjustment(candidate = {}, constraints = {}) {
     adjustment += 10;
     reasons.push('matches the comedic energy you asked for');
   }
+  if (constraints.wantsFunny && !isFunny) excluded = true;
+  if (constraints.wantsDarker && !isDark) excluded = true;
+  if (constraints.wantsSad && !isSad) excluded = true;
   if (constraints.excludeHorror && /\bhorror\b/.test(text)) excluded = true;
 
   return { adjustment, excluded, reasons };

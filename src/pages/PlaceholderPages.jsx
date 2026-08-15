@@ -32,6 +32,7 @@ import {
 } from '../services/wikidataRepair';
 import { getAnimeStudios, getAnimeTasteSignals } from '../utils/metadataAdapters';
 import { coordinateJoeAIRecommendation } from '../ai/recommendationCoordinator';
+import { getTasteReadiness } from '../ai/tasteReadiness';
 import { friendlyJoeAIError } from '../ai/joeAIErrorResponse';
 import {
   importTitleKey,
@@ -1591,6 +1592,8 @@ export function Assistant({
     };
   }, [anime]);
 
+  const tasteReadiness = useMemo(() => getTasteReadiness(anime), [anime]);
+
   const joeAIPick = useMemo(() => {
     const dailyPool = brain.recommendations(12, {
       prompt: 'JoeAI Pick of the Day',
@@ -1611,7 +1614,15 @@ export function Assistant({
   }, [brain, dailyPickSeed, joeAIState]);
 
   const joeAIThought = useMemo(() => {
-    const topGenre = joeAIStats.genreRows[0]?.[0] || 'Adventure';
+    if (!tasteReadiness.hasTasteData) {
+      return {
+        eyebrow: 'JoeAI is ready to learn',
+        headline: 'Your Anime DNA starts with your first few titles.',
+        body: 'Import a list or add, rate, favorite, and rewatch anime. JoeAI will only claim a taste pattern after your library provides evidence.'
+      };
+    }
+
+    const topGenre = joeAIStats.genreRows[0]?.[0] || 'Your current taste';
     const comfortCount = joeAIStats.favorites.length;
 
     if (joeAIStats.rewatches >= 8) {
@@ -1627,7 +1638,7 @@ export function Assistant({
       headline: `${topGenre} is leading your Anime DNA.`,
       body: `${joeAIStats.completed} completed titles are shaping this pattern. Ratings, rewatches, favorites, and rejected picks will keep making it sharper.`
     };
-  }, [joeAIStats]);
+  }, [joeAIStats, tasteReadiness]);
 
   const quickPrompts = [
     'what should I watch next?',
@@ -1829,7 +1840,7 @@ export function Assistant({
         <article className="joeAIPickCard">
           <header>
             <span>☆</span>
-            <h2>JoeAI Pick of the Day</h2>
+            <h2>{tasteReadiness.hasPersonalizedTaste ? 'JoeAI Pick of the Day' : 'Starter Pick of the Day'}</h2>
           </header>
 
           {joeAIPick ? (
@@ -1838,7 +1849,7 @@ export function Assistant({
               <div>
                 <div className="joeAIPickHeading">
                   <h3>{joeAIPick.item.officialTitle || joeAIPick.item.title}</h3>
-                  <strong>{joeAIPick.confidence}% Match</strong>
+                  <strong>{tasteReadiness.hasPersonalizedTaste ? `${joeAIPick.confidence}% Match` : 'Catalog Pick'}</strong>
                 </div>
 
                 <div className="joeAIPickTags">
@@ -1848,7 +1859,9 @@ export function Assistant({
                 </div>
 
                 <p>
-                  This overlaps with the strongest genres and patterns already visible in your library.
+                  {tasteReadiness.hasPersonalizedTaste
+                    ? 'This overlaps with the strongest genres and patterns already visible in your library.'
+                    : 'This is a well-supported catalog starting point. Add and rate titles to make future picks personal.'}
                 </p>
 
                 <div className="joeAIPickActions">
@@ -1905,6 +1918,11 @@ export function Assistant({
           </header>
 
           <div className="joeAIDNARows">
+            {!joeAIStats.genreRows.length && (
+              <p className="joeAIEmptyCard">
+                No taste pattern yet. Import a list or add a few titles to begin building your Anime DNA.
+              </p>
+            )}
             {joeAIStats.genreRows.map(([name, count]) => (
               <button
                 type="button"

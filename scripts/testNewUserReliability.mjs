@@ -17,6 +17,19 @@ function normalizedTitle(item = {}) {
 try {
   const discoverModule = await server.ssrLoadModule('/src/services/recommendationEngineV3.js');
   const recommendationModule = await server.ssrLoadModule('/src/ai/joeAIRecommendationRouter.js');
+  const readinessModule = await server.ssrLoadModule('/src/ai/tasteReadiness.js');
+
+  const emptyReadiness = readinessModule.getTasteReadiness([]);
+  assert.equal(emptyReadiness.hasTasteData, false);
+  assert.equal(emptyReadiness.hasPersonalizedTaste, false);
+
+  const earlyReadiness = readinessModule.getTasteReadiness([{
+    title: 'First title',
+    status: 'Completed',
+    joeScore: 8
+  }]);
+  assert.equal(earlyReadiness.hasTasteData, true);
+  assert.equal(earlyReadiness.hasPersonalizedTaste, false);
 
   const emptyPlan = discoverModule.buildDiscoverPlan({
     library: null,
@@ -155,6 +168,55 @@ try {
   assert.equal(new Set(mood.items.map(normalizedTitle)).size, mood.items.length);
   assert.ok(mood.items.every((item) => item.title && Number.isFinite(item.match)));
 
+  const compoundCatalog = [
+    {
+      id: 'valid-sad-short-movie',
+      title: 'Rain Letters',
+      type: 'Movie',
+      episodeCount: 1,
+      genres: ['Drama', 'Romance'],
+      synopsis: 'A melancholy tragedy about grief, memory, and emotional healing.',
+      communityScore: 8.3
+    },
+    {
+      id: 'wrong-format',
+      title: 'Long Sad Series',
+      type: 'TV',
+      episodeCount: 64,
+      genres: ['Drama'],
+      synopsis: 'An emotional tragedy.',
+      communityScore: 9
+    },
+    {
+      id: 'wrong-mood',
+      title: 'Happy Movie',
+      type: 'Movie',
+      episodeCount: 1,
+      genres: ['Comedy'],
+      synopsis: 'A lighthearted parody.',
+      communityScore: 9
+    }
+  ];
+  const compound = recommendationModule.routeJoeAIRecommendation(
+    'recommend a short sad anime movie',
+    [],
+    compoundCatalog
+  );
+  assert.equal(compound?.type, 'recommendationCards');
+  assert.deepEqual(compound.items.map((item) => item.id), ['valid-sad-short-movie']);
+  assert.ok(compound.items.every((item) => /movie|film/i.test(String(item.type))));
+  assert.ok(compound.items.every((item) => Number(item.episodeCount) <= 13));
+
+  const shortMovie = recommendationModule.routeJoeAIRecommendation(
+    'recommend a short anime movie',
+    [],
+    compoundCatalog
+  );
+  assert.equal(shortMovie?.type, 'recommendationCards');
+  assert.ok(shortMovie.items.length >= 1);
+  assert.ok(shortMovie.items.every((item) => /movie|film/i.test(String(item.type))));
+  assert.ok(shortMovie.items.every((item) => Number(item.episodeCount) <= 13));
+
   const baselineSimilar = recommendationModule.routeJoeAIRecommendation(
     'recommend something like Space Dandy',
     [],
@@ -178,6 +240,8 @@ try {
   console.log('[ok] Empty-state Discover does not throw or invent rows');
   console.log(`[ok] Tiny-library Discover: ${plan.ranked.length} usable unique candidates`);
   console.log(`[ok] Messy-catalog JoeAI: ${mood.items.length} unique recommendation cards`);
+  console.log('[ok] Compound JoeAI constraints reject wrong format, length, and mood');
+  console.log('[ok] Fresh users do not receive invented Anime DNA claims');
   console.log('[ok] JoeAI recovered catalog artwork for Genome recommendations');
 } finally {
   await server.close();

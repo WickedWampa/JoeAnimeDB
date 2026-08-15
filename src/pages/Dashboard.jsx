@@ -5,6 +5,7 @@ import { Poster } from '../components/Poster';
 import { countBy } from '../utils/animeUtils';
 import joeAIHologramBrain from '../assets/joeai-hologram-brain.png';
 import '../styles/joeai-brain-hologram.css';
+import { getTasteReadiness } from '../ai/tasteReadiness';
 
 function normalizeStatus(status = '') {
   return String(status || '').toLowerCase().replace(/\s+/g, '');
@@ -246,6 +247,15 @@ export function Dashboard({
           };
 
   const joeAIInsight = (() => {
+    const readiness = getTasteReadiness(anime);
+    if (!readiness.hasTasteData) {
+      return {
+        eyebrow: 'JoeAI is ready to learn',
+        headline: 'Your Anime DNA starts with your first few titles.',
+        body: 'Import a list or add, rate, favorite, and rewatch anime. JoeAI will show real taste patterns once your library provides evidence.'
+      };
+    }
+
     if (rewatches >= 10 && anchorCount >= 3) {
       return {
         eyebrow: 'JoeAI noticed a comfort pattern',

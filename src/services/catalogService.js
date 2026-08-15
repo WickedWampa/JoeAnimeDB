@@ -6,6 +6,26 @@ import {
   fetchKitsuLiveDiscoverFeeds
 } from './kitsuProvider';
 
+const METADATA_FAILURE_COOLDOWN_MS = 10 * 60 * 1000;
+const metadataFailureCooldowns = new Map();
+
+function metadataCooldownKey(item = {}) {
+  return String(
+    item.malId || item.mal_id || item.kitsuId || item.kitsu_id || titleKey(item.title)
+  );
+}
+
+function metadataRequestCoolingDown(item = {}) {
+  const key = metadataCooldownKey(item);
+  if (!key) return false;
+  const retryAt = metadataFailureCooldowns.get(key) || 0;
+  if (retryAt <= Date.now()) {
+    metadataFailureCooldowns.delete(key);
+    return false;
+  }
+  return true;
+}
+
 export function titleKey(title = '') {
   return String(title)
     .toLowerCase()
@@ -223,7 +243,8 @@ export async function updateCatalogMetadata({
   limit = 50
 } = {}) {
   let nextCatalog = mergeCatalogEntries({ library, catalog, seed: catalogSeed });
-  const queue = buildCatalogQueue({ library, catalog: nextCatalog, seed: [], limit });
+  const queue = buildCatalogQueue({ library, catalog: nextCatalog, seed: [], limit })
+    .filter(({ item }) => !metadataRequestCoolingDown(item));
 
   if (!queue.length) {
     const saved = await repository.importCatalog(nextCatalog);
@@ -245,6 +266,7 @@ export async function updateCatalogMetadata({
 
     try {
       const enriched = await fetchMetadata(item);
+      metadataFailureCooldowns.delete(metadataCooldownKey(item));
       const contentRatingCheckedAt =
         enriched.contentRatingCheckedAt || new Date().toISOString();
 
@@ -271,6 +293,10 @@ export async function updateCatalogMetadata({
           : candidate
       );
     } catch (error) {
+      metadataFailureCooldowns.set(
+        metadataCooldownKey(item),
+        Date.now() + METADATA_FAILURE_COOLDOWN_MS
+      );
       console.warn('Catalog metadata failed:', item.title, error);
     }
 
@@ -481,10 +507,13 @@ export async function fetchLiveDiscoverCatalog({
   const allCached = sources.current === 'cache' && sources.upcoming === 'cache';
   const state = allLive ? 'live' : allCached ? 'offline' : 'partial';
 
+  const authoritativeCurrent = nextCatalog.filter((item) => item?.discoverBucket === 'current');
+  const authoritativeUpcoming = nextCatalog.filter((item) => item?.discoverBucket === 'upcoming');
+
   return {
     catalog: nextCatalog,
-    currentCount: currentRows.length || cachedCurrent.length,
-    upcomingCount: upcomingRows.length || cachedUpcoming.length,
+    currentCount: authoritativeCurrent.length,
+    upcomingCount: authoritativeUpcoming.length,
     received: incoming.length,
     syncedAt: new Date().toISOString(),
     warnings,

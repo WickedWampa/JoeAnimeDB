@@ -182,6 +182,38 @@ function textBlob(item = {}) {
   ].filter(Boolean).join(' '));
 }
 
+function episodeCount(item = {}) {
+  return Number(item.episodeCount || item.episodes || 0);
+}
+
+function itemIsMovie(item = {}) {
+  return /\b(movie|film)\b/i.test(String(item.type || item.format || ''));
+}
+
+function parseEpisodeLimit(question = '', normalized = '') {
+  const under = String(question).match(/\b(?:under|fewer than|less than)\s+(\d+)\s*(?:episodes?|eps?)\b/i);
+  if (under) return Math.max(1, Number(under[1]) - 1);
+  const atMost = String(question).match(/\b(\d+)\s*(?:episodes?|eps?)\s*(?:or less|max(?:imum)?|at most)\b/i);
+  if (atMost) return Number(atMost[1]);
+  if (/\b(one cour|12 episodes|twelve episodes)\b/.test(normalized)) return 13;
+  if (/\b(short|quick|short binge|quick watch)\b/.test(normalized)) return 13;
+  return 0;
+}
+
+function matchesHardIntent(item = {}, intent = {}) {
+  const blob = textBlob(item);
+  const episodes = episodeCount(item);
+  if (intent.format === 'movie' && !itemIsMovie(item)) return false;
+  if (intent.maxEpisodes && (!episodes || episodes > intent.maxEpisodes)) return false;
+  if (intent.studio && !getAnimeStudios(item).some((studio) => norm(studio).includes(norm(intent.studio)))) return false;
+
+  for (const group of intent.requiredKeywordGroups || []) {
+    if (!group.some((keyword) => blob.includes(norm(keyword)))) return false;
+  }
+
+  return true;
+}
+
 function extractBroadRecommendationIntent(question = '') {
   const q = norm(question);
   const isRecommendation = /\b(recommend|watch|show me|find|give me|suggest|pick)\b/i.test(question);
@@ -251,7 +283,8 @@ function extractBroadRecommendationIntent(question = '') {
     }
   ];
 
-  const profile = moodProfiles.find((entry) => entry.test.test(q));
+  const matchedProfiles = moodProfiles.filter((entry) => entry.test.test(q));
+  const profile = matchedProfiles.find((entry) => entry.id !== 'movie') || matchedProfiles[0];
   if (!profile && !studio) return null;
 
   if (profile) {
@@ -260,6 +293,11 @@ function extractBroadRecommendationIntent(question = '') {
       ...profile,
       studio,
       format: wantsMovie ? 'movie' : null,
+      maxEpisodes: parseEpisodeLimit(question, q),
+      requiredKeywordGroups: matchedProfiles
+        .filter((entry) => entry.id !== 'short' && entry.id !== 'movie')
+        .map((entry) => entry.keywords),
+      keywords: [...new Set(matchedProfiles.flatMap((entry) => entry.keywords || []))],
       label: compoundMovieRequest
         ? `${profile.id === 'emotional' ? 'Sad / emotional' : profile.label.replace(/^Something\s+/i, '')} anime movies`
         : profile.label
@@ -271,6 +309,8 @@ function extractBroadRecommendationIntent(question = '') {
     label: `Shows from ${studio}`,
     studio,
     format: wantsMovie ? 'movie' : null,
+    maxEpisodes: parseEpisodeLimit(question, q),
+    requiredKeywordGroups: [],
     keywords: []
   };
 }
@@ -336,9 +376,10 @@ function formatMoodRecommendationCards(intent, anime = [], catalog = []) {
   }
 
   const scored = pool
-    .filter((item) => intent.format !== 'movie' || /\b(movie|film)\b/i.test(String(item.type || '')))
+    .filter((item) => matchesHardIntent(item, intent))
     .filter((item) => {
       if (intent.id === 'movie' || intent.id === 'studio' || intent.mode === 'hiddenGems') return true;
+      if (!(intent.requiredKeywordGroups || []).length && (intent.format || intent.maxEpisodes)) return true;
       return (intent.keywords || []).some((keyword) => textBlob(item).includes(norm(keyword)));
     })
     .map((item) => {
@@ -359,6 +400,7 @@ function formatMoodRecommendationCards(intent, anime = [], catalog = []) {
         deepDive: [
           `Mood request: ${intent.label}`,
           intent.format === 'movie' ? 'Format filter: anime movie' : '',
+          intent.maxEpisodes ? `Length filter: ${intent.maxEpisodes} episodes or fewer` : '',
           intent.studio ? `Studio filter: ${intent.studio}` : '',
           `JoeAI matched this using metadata, genres, themes, studio, episode count, and library ownership.`,
           `This is a broad recommendation mode, not a title-similarity Genome match yet.`
@@ -369,7 +411,14 @@ function formatMoodRecommendationCards(intent, anime = [], catalog = []) {
     .sort((a, b) => b.match - a.match)
     .slice(0, 10);
 
-  if (!scored.length) return null;
+  if (!scored.length) {
+    return {
+      type: 'recommendationCards',
+      title: intent.label,
+      subtitle: 'No catalog title currently satisfies every requested filter. Try relaxing one constraint or fetch more catalog titles.',
+      items: []
+    };
+  }
 
   return {
     type: 'recommendationCards',
