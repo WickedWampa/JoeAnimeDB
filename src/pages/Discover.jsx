@@ -440,6 +440,8 @@ function DiscoverCard({
   const score = numericScore(item);
   const intelligence = item.joeAIRecommendation || null;
   const receipt = intelligence?.confidenceReceipt || null;
+  const displayConfidence = Number(receipt?.predictionConfidence || intelligence?.tasteMatch || 0);
+  const personalized = Boolean(intelligence?.personalized);
   const [whyOpen, setWhyOpen] = useState(false);
   const [feedbackMenuOpen, setFeedbackMenuOpen] = useState(false);
   const [feedbackStatus, setFeedbackStatus] = useState(
@@ -472,8 +474,8 @@ function DiscoverCard({
       <div className="discoverPosterWrap">
         <Poster anime={item} className="discoverPoster" mode="thumb" />
         {score > 0 && <span className="discoverScore">★ {score.toFixed(2)}</span>}
-        {intelligence?.tasteMatch > 0 && (
-          <span className="discoverTasteBadge">{intelligence.tasteMatch}% match</span>
+        {displayConfidence > 0 && (
+          <span className="discoverTasteBadge">{displayConfidence}% {personalized ? 'match' : 'catalog fit'}</span>
         )}
         {showRelease && (
           <span className={`discoverReleaseBadge release-${release.key}`}>
@@ -497,13 +499,15 @@ function DiscoverCard({
         {intelligence && (
           <div className="discoverCardIntelligence">
             <div className="discoverCardConfidence">
-              <span>Prediction <strong>{receipt?.predictionConfidence || intelligence.tasteMatch}%</strong></span>
+              <span>{personalized ? 'Taste match' : 'Catalog fit'} <strong>{displayConfidence}%</strong></span>
               <span>{receipt?.genomeTier || 'Metadata only'}</span>
             </div>
 
             <p>
               {intelligence.reasons?.[0]
-                || `JoeAI sees a ${intelligence.tasteMatch}% taste match.`}
+                || (personalized
+                  ? `JoeAI predicts a ${displayConfidence}% taste match.`
+                  : `JoeAI found a ${displayConfidence}% fit from catalog metadata.`)}
             </p>
 
             <button
@@ -1740,8 +1744,8 @@ function DiscoverPage({
             <h2>{titleOf(dailyPick.item)}</h2>
 
             <div className="dailyPickMatch">
-              <strong>{dailyPick.confidence}% Match</strong>
-              <span>Chosen from your strongest Anime DNA signals</span>
+              <strong>{dailyPick.confidenceReceipt?.predictionConfidence || dailyPick.confidence}% {dailyPick.personalized ? 'Match' : 'Catalog Fit'}</strong>
+              <span>{dailyPick.personalized ? 'Chosen from your strongest Anime DNA signals' : 'Chosen from catalog quality and metadata signals'}</span>
             </div>
 
             {dailyPick.confidenceReceipt && (

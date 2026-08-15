@@ -203,7 +203,7 @@ export function Dashboard({
   const studioRows = countBy(anime.map((item) => item.studio)).slice(0, 4);
   const topMax = topSignalRows[0]?.[1] || 1;
   const studioMax = studioRows[0]?.[1] || 1;
-  const topSignal = topSignalRows[0]?.[0] || 'Worldbuilding';
+  const topSignal = topSignalRows[0]?.[0] || '';
 
   const statAvg = stats?.avg ?? (() => {
     const rated = anime.filter((item) => Number(item.joeScore || item.score || item.finalScore || item.rating || 0) > 0);
@@ -475,7 +475,7 @@ export function Dashboard({
 
         <Panel className="homeV3Learning" icon="📈" title="Recently Learned" action="View All" onAction={() => setView?.('assistant')}>
           <div className="homeV3LearningGrid">
-            <div><span>↗</span><strong>{topSignal}</strong><small>strongest current signal</small></div>
+            <div><span>↗</span><strong>{topSignal || 'Learning'}</strong><small>{topSignal ? 'strongest current signal' : 'add ratings to reveal a signal'}</small></div>
             <div><span>↻</span><strong>{rewatches}</strong><small>rewatches reinforcing comfort</small></div>
             <div><span>▣</span><strong>{studioRows[0]?.[0] || 'Studio DNA'}</strong><small>top studio pattern</small></div>
             <div><span>✓</span><strong>{completed}</strong><small>completed anime analyzed</small></div>

@@ -217,6 +217,27 @@ try {
   assert.ok(shortMovie.items.every((item) => /movie|film/i.test(String(item.type))));
   assert.ok(shortMovie.items.every((item) => Number(item.episodeCount) <= 13));
 
+  const comedyUnderTwelve = recommendationModule.routeJoeAIRecommendation(
+    'recommend a comedy under 12 episodes',
+    [],
+    [
+      { id: 'short-comedy', title: 'Short Laughs', type: 'TV', episodeCount: 10, genres: ['Comedy'] },
+      { id: 'long-comedy', title: 'Long Laughs', type: 'TV', episodeCount: 24, genres: ['Comedy'] },
+      { id: 'wrong-genre', title: 'Short Tears', type: 'TV', episodeCount: 10, genres: ['Drama'] }
+    ]
+  );
+  assert.equal(comedyUnderTwelve?.type, 'recommendationCards');
+  assert.deepEqual(comedyUnderTwelve.items.map((item) => item.id), ['short-comedy']);
+
+  const constrainedSimilar = recommendationModule.routeJoeAIRecommendation(
+    'recommend something like Slime but under 13 episodes',
+    [],
+    []
+  );
+  assert.equal(constrainedSimilar?.type, 'recommendationCards');
+  assert.ok(constrainedSimilar.items.every((item) => Number(item.episodeCount || item.episodes || 0) > 0));
+  assert.ok(constrainedSimilar.items.every((item) => Number(item.episodeCount || item.episodes) < 13));
+
   const baselineSimilar = recommendationModule.routeJoeAIRecommendation(
     'recommend something like Space Dandy',
     [],

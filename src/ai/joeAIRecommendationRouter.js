@@ -138,7 +138,12 @@ function extractSimilarityTitle(question = '') {
 
   for (const pattern of patterns) {
     const match = raw.match(pattern);
-    if (match?.[1]) return match[1].replace(/[?.!]+$/g, '').trim();
+    if (match?.[1]) {
+      return match[1]
+        .replace(/\s+(?:but|and|with)\s+(?=(?:under|fewer than|less than|at most|max(?:imum)?|\d+\s*(?:episodes?|eps?)|a\s+(?:movie|film))\b)[\s\S]*$/i, '')
+        .replace(/[?.!]+$/g, '')
+        .trim();
+    }
   }
 
   return '';
@@ -195,7 +200,8 @@ function parseEpisodeLimit(question = '', normalized = '') {
   if (under) return Math.max(1, Number(under[1]) - 1);
   const atMost = String(question).match(/\b(\d+)\s*(?:episodes?|eps?)\s*(?:or less|max(?:imum)?|at most)\b/i);
   if (atMost) return Number(atMost[1]);
-  if (/\b(one cour|12 episodes|twelve episodes)\b/.test(normalized)) return 13;
+  if (/\b(12 episodes|twelve episodes)\b/.test(normalized)) return 12;
+  if (/\bone cour\b/.test(normalized)) return 13;
   if (/\b(short|quick|short binge|quick watch)\b/.test(normalized)) return 13;
   return 0;
 }
@@ -571,7 +577,7 @@ function genomeCardToRecommendationItem(card = {}, index = 0, sourceCard = {}, a
   };
 }
 
-function formatSimilarGenomeCards(sourceCard, anime = [], catalog = []) {
+function formatSimilarGenomeCards(sourceCard, anime = [], catalog = [], question = '') {
   const sourceTitle = title(sourceCard);
   const related = scoreRelatedCards(sourceCard);
 
@@ -593,10 +599,20 @@ function formatSimilarGenomeCards(sourceCard, anime = [], catalog = []) {
     ? `I think you are chasing ${chasing.join(', ')} — so I turned that into card-based follow-ups.`
     : 'JoeAI turned the source Genome into card-based follow-ups instead of a wall of text.';
 
+  const hardIntent = {
+    format: /\b(movie|film)\b/i.test(question) ? 'movie' : null,
+    maxEpisodes: parseEpisodeLimit(question, norm(question)),
+    requiredKeywordGroups: []
+  };
+  const hasHardConstraint = Boolean(hardIntent.format || hardIntent.maxEpisodes);
+  const items = related
+    .map((card, index) => genomeCardToRecommendationItem(card, index, sourceCard, anime, catalog))
+    .filter((item) => !hasHardConstraint || matchesHardIntent(item, hardIntent))
+    .slice(0, 6);
+
   return {
     type: 'recommendationCards',
     title: `🍜 Because you like ${sourceTitle}`,
-    subtitle,
     sourceAnime: sourceTitle,
     fullAnalysis: [
       `Source: ${sourceTitle}`,
@@ -604,7 +620,10 @@ function formatSimilarGenomeCards(sourceCard, anime = [], catalog = []) {
       chasing.length ? `Likely chase: ${chasing.join(', ')}` : '',
       'Cards are ranked from ideal follow-ups plus inferred Genome neighbors.'
     ].filter(Boolean).join('\\n'),
-    items: related.map((card, index) => genomeCardToRecommendationItem(card, index, sourceCard, anime, catalog))
+    items,
+    subtitle: items.length
+      ? subtitle
+      : `No catalog title currently matches ${sourceTitle} while satisfying every requested format or length constraint.`
   };
 }
 
@@ -824,7 +843,7 @@ export function routeJoeAIRecommendation(question = '', anime = [], catalog = []
   const similarTitle = extractSimilarityTitle(question);
   if (similarTitle) {
     const sourceCard = findGenomeCardByTitle(similarTitle);
-    if (sourceCard) return formatSimilarGenomeCards(sourceCard, anime, catalog);
+    if (sourceCard) return formatSimilarGenomeCards(sourceCard, anime, catalog, question);
 
     // Only fall back to the older knowledge-first text path when there is no
     // Genome source card to build structured recommendation cards from.

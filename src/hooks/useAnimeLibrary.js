@@ -9,7 +9,8 @@ import {
   updateCatalogContentRatings,
   updateCatalogMetadata,
   fetchMoreCatalogTitles as fetchMoreCatalogPage,
-  fetchLiveDiscoverCatalog
+  fetchLiveDiscoverCatalog,
+  mergeCatalogEntries
 } from '../services/catalogService';
 import seedData from '../data/animeSeed.json';
 import { createNewUserDemoDatabase } from '../services/newUserMode';
@@ -125,6 +126,22 @@ const emptyProgress = {
   current: ''
 };
 
+function bootstrapCatalog(database = {}) {
+  let cachedRows = [];
+  try {
+    const cached = JSON.parse(localStorage.getItem('joeanime-live-discover-cache-v1') || '{}');
+    cachedRows = Array.isArray(cached?.rows) ? cached.rows : [];
+  } catch {}
+
+  return {
+    ...database,
+    catalog: mergeCatalogEntries({
+      library: database.anime || [],
+      catalog: [...(database.catalog || []), ...cachedRows]
+    })
+  };
+}
+
 export function useAnimeLibrary() {
   const [data, setData] = useState(() => ({ ...seedData, anime: [], catalog: [] }));
   const dataRef = useRef(data);
@@ -173,7 +190,7 @@ export function useAnimeLibrary() {
         // flag must never hide an existing desktop SQLite library after an
         // installer update.
         if (requestedNewUserMode && !window.JoeAnimeDB?.desktop) {
-          if (alive) setData(createNewUserDemoDatabase());
+          if (alive) setData(bootstrapCatalog(createNewUserDemoDatabase()));
           return;
         }
 
@@ -183,8 +200,9 @@ export function useAnimeLibrary() {
             localStorage.removeItem('joeanime-new-user-mode');
             setNewUserMode(false);
           }
-          setData(loaded);
-          startContentRatingBackfill(loaded);
+          const bootstrapped = bootstrapCatalog(loaded);
+          setData(bootstrapped);
+          startContentRatingBackfill(bootstrapped);
         }
       } catch (error) {
         console.error('Failed to load JoeAnimeDB database.', error);
@@ -216,7 +234,7 @@ export function useAnimeLibrary() {
   async function enableNewUserMode() {
     localStorage.setItem('joeanime-new-user-mode', 'true');
     setNewUserMode(true);
-    const demo = createNewUserDemoDatabase();
+    const demo = bootstrapCatalog(createNewUserDemoDatabase());
     setData(demo);
     return demo;
   }
@@ -236,7 +254,7 @@ export function useAnimeLibrary() {
   }
 
   async function resetNewUserMode() {
-    const demo = createNewUserDemoDatabase();
+    const demo = bootstrapCatalog(createNewUserDemoDatabase());
     setData(demo);
     return demo;
   }

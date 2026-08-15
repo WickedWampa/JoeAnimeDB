@@ -1360,15 +1360,18 @@ export function Assistant({
 
   function renderRecommendationCards(message, index) {
     const sourceTitle = sourceTitleFromMessage(message);
+    const resultCount = message.items?.length || 0;
+    const heading = message.title || (sourceTitle
+      ? `${resultCount} matches for ${sourceTitle}`
+      : `${resultCount} JoeAI recommendations`);
+    const subtitle = message.subtitle || 'JoeAI matched the request against the catalog metadata currently available.';
 
     return (
       <div key={index} className="chat bot joeaiRecommendations">
         <div className="joeaiRecHeader joeaiSmartRecHeader">
           <p className="joeaiRecEyebrow">🧬 Genome recommendation run</p>
-          <h2>JoeAI found {message.items?.length || 0} strong matches for {sourceTitle}</h2>
-          <p>
-            These picks are based on shared world design, character dynamics, tone, and your personal library signals—not just genre labels.
-          </p>
+          <h2>{heading}</h2>
+          <p>{subtitle}</p>
         </div>
 
         {message.items?.some((item) => item.bucket === 'library') && (
@@ -1975,7 +1978,8 @@ export function Assistant({
         </div>
 
         <div ref={conversationRef} className="assistant-log joeAIConversation">
-          {log.map((message, index) => renderMessage(message, index))}
+          {log.length > 10 && <p className="joeAIHistoryNotice">Earlier messages are hidden to keep JoeAI responsive.</p>}
+          {log.slice(-10).map((message, index) => renderMessage(message, index))}
         </div>
 
         <div className="assistant-input joeaiChatInput joeAIComposer">

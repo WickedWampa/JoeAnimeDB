@@ -16,6 +16,13 @@ function shouldUseGenomeRouter(value = '') {
   );
 }
 
+function mayRelaxPrompt(value = '') {
+  const lower = String(value || '').trim().toLowerCase();
+  const hasConstraint = /\b(under|fewer than|less than|at most|max(?:imum)?|episodes?|eps?|movie|film|dark|comedy|funny|sad|emotional|cozy|strategy|sports|from\s+\w+)\b/.test(lower);
+  if (hasConstraint) return false;
+  return /^(?:what should i watch(?: next)?|recommend (?:me )?(?:something|an anime)|pick (?:me )?something|surprise me)[?.!]*$/.test(lower);
+}
+
 export function enrichRecommendationItems(result, joeAIState) {
   if (!result || !Array.isArray(result.items)) return result;
 
@@ -110,7 +117,7 @@ export function coordinateJoeAIRecommendation({
   // action, not a title, genre, or mood filter. If the prompt-aware pass
   // filters every candidate out, retry the same engine without the prompt so
   // the successful fallback can still be returned as structured cards.
-  if (!picks.length) {
+  if (!picks.length && mayRelaxPrompt(text)) {
     picks = brain?.recommendations?.(5, { joeAIState }) || [];
   }
 

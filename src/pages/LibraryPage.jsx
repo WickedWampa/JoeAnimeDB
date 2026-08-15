@@ -109,7 +109,8 @@ function AddAnimeModal({ allAnime = [], updateAnime, deleteAnime, setSelected, o
     try {
       const next = buildQuickAddEntry(result, {
         source: 'Library search',
-        librarySize: allAnime.length
+        librarySize: allAnime.length,
+        status
       });
       const saved = await updateAnime(next);
       const added = (saved.anime || []).find((item) => String(item.id) === String(next.id)) || next;
@@ -386,7 +387,7 @@ function AddAnimeModal({ allAnime = [], updateAnime, deleteAnime, setSelected, o
     });
     setMessage(
       review.length
-        ? `Bulk import complete — ${review.length} title${review.length === 1 ? '' : 's'} genuinely need identity review.`
+        ? `Bulk import complete — ${review.length} title${review.length === 1 ? ' needs' : 's need'} identity review.`
         : 'Bulk import complete — metadata finalization finished.'
     );
     setWorking(false);

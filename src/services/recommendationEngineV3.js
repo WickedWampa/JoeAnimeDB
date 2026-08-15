@@ -8,6 +8,7 @@ import {
   scoreGenomeFit
 } from '../ai/intelligence/genomeRecommendationSignals';
 import { animeIdentityKeys } from './titleIdentity';
+import { getTasteReadiness } from '../ai/tasteReadiness';
 
 const clean = (value = '') => String(value).trim();
 const lower = (value = '') => clean(value).toLowerCase();
@@ -231,7 +232,8 @@ export function scoreCandidate(item, profile, intelligence = {}) {
     warnings: [...new Set(warnings)].slice(0, 2),
     traits: [...new Set([...matchedTraits.map(([trait]) => trait), ...genome.traits])],
     confidenceReceipt,
-    feedbackAction: learning.directFeedback?.action || ''
+    feedbackAction: learning.directFeedback?.action || '',
+    personalized: Boolean(intelligence.personalized)
   };
 }
 
@@ -261,7 +263,8 @@ function enrichDiscoverItem(entry = {}) {
       warnings: entry.warnings || [],
       traits: entry.traits || [],
       confidenceReceipt: entry.confidenceReceipt || null,
-      feedbackAction: entry.feedbackAction || ''
+      feedbackAction: entry.feedbackAction || '',
+      personalized: Boolean(entry.personalized)
     }
   };
 }
@@ -271,10 +274,15 @@ export function buildDiscoverPlan({ library = [], candidates = [], daySeed = 0, 
   const safeCandidates = (Array.isArray(candidates) ? candidates : []).filter(usableAnimeItem);
   const libraryKeys = new Set(safeLibrary.flatMap((item) => [...identityKeys(item)]));
   const profile = buildTasteProfile(safeLibrary);
+  const tasteReadiness = getTasteReadiness(safeLibrary);
   const genomeProfile = buildLibraryGenomeProfile(safeLibrary);
   const scored = safeCandidates
     .filter((item) => !overlapsIdentity(identityKeys(item), libraryKeys))
-    .map((item) => scoreCandidate(item, profile, { joeAIState, genomeProfile }))
+    .map((item) => scoreCandidate(item, profile, {
+      joeAIState,
+      genomeProfile,
+      personalized: tasteReadiness.hasPersonalizedTaste
+    }))
     .filter((entry) => !entry.excluded)
     .sort((a, b) => b.score - a.score);
   const ranked = [];
