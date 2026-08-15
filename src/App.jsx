@@ -368,7 +368,13 @@ export function App() {
   const detailNavigationItems = useMemo(() => {
     if (!selected) return [];
 
-    const selectedIsCatalog = String(selected.id || '').startsWith('catalog-') || Boolean(selected.catalogSource);
+    const selectedId = String(selected.id || '');
+    const selectedIsLibrary = Boolean(selectedId) && anime.some(
+      (item) => String(item.id || '') === selectedId
+    );
+    const selectedIsCatalog = !selectedIsLibrary && (
+      selectedId.startsWith('catalog-') || Boolean(selected.catalogSource)
+    );
     if (selectedIsCatalog) {
       if (view === 'following') return catalog.filter((item) => Boolean(item.followed));
       return catalog;
@@ -681,7 +687,6 @@ export function App() {
             anime={anime}
             catalog={catalog}
             updateAnime={handleUpdateAnime}
-            updateCatalogAnime={updateCatalogAnime}
             joeAIState={joeAI}
             onRecommendationFeedback={recordJoeAIFeedback}
             onJoeAIPreference={setJoeAIPreference}

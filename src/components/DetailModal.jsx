@@ -69,7 +69,13 @@ export function DetailModal({
   const [deleteMessage, setDeleteMessage] = useState('');
   const [watchRegion, setWatchRegion] = useState(() => getSavedWatchRegion());
   const [watchState, setWatchState] = useState({ status: 'loading', providers: [], candidates: [] });
-  const isCatalogTitle = String(anime.id || '').startsWith('catalog-') || Boolean(anime.catalogSource);
+  const selectedId = String(anime.id || '');
+  const isLibraryTitle = Boolean(selectedId) && (library || []).some(
+    (entry) => String(entry.id || '') === selectedId
+  );
+  const isCatalogTitle = !isLibraryTitle && (
+    selectedId.startsWith('catalog-') || Boolean(anime.catalogSource)
+  );
   const currentScore = Number(scoreDraft || 0);
   const currentStatus = anime.status || '';
   const navigationLocked = repairingMetadata || deleting || scoreSaving;

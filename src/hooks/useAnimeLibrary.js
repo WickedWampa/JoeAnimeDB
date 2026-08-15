@@ -15,6 +15,7 @@ import seedData from '../data/animeSeed.json';
 import { createNewUserDemoDatabase } from '../services/newUserMode';
 import { auditGenomeCoverage } from '../ai/genome/runtime/autoGenomeRuntime';
 import { preservePersonalAnimeData } from '../services/personalAnimeData';
+import { promoteCatalogTitleToLibrary } from '../services/quickAdd';
 
 
 function hasGoodMetadata(item = {}) {
@@ -208,11 +209,7 @@ export function useAnimeLibrary() {
     conversation: {
       lastRecommendations: [],
       lastReferencedTitle: '',
-      lastPrompt: '',
-      lastRecommendationPrompt: '',
-      messages: [],
-      recentRecommendationKeys: [],
-      lastConstraints: { exclude: [] }
+      lastPrompt: ''
     }
   };
 
@@ -264,22 +261,24 @@ export function useAnimeLibrary() {
   }
 
   async function updateAnime(updatedAnime) {
+    const libraryAnime = promoteCatalogTitleToLibrary(updatedAnime);
+
     if (newUserMode) {
       const previousData = dataRef.current || { ...seedData, anime: [], catalog: [] };
       const currentAnime = previousData.anime || [];
-      const malId = updatedAnime.malId ?? updatedAnime.mal_id;
+      const malId = libraryAnime.malId ?? libraryAnime.mal_id;
       const existing = currentAnime.find((item) =>
         (malId && String(item.malId || '') === String(malId)) ||
-        String(item.id) === String(updatedAnime.id)
+        String(item.id) === String(libraryAnime.id)
       );
 
       const nextAnime = existing
         ? currentAnime.map((item) =>
             String(item.id) === String(existing.id)
-              ? { ...item, ...updatedAnime, id: existing.id }
+              ? { ...item, ...libraryAnime, id: existing.id }
               : item
           )
-        : [...currentAnime, updatedAnime];
+        : [...currentAnime, libraryAnime];
 
       const nextSnapshot = {
         ...previousData,
@@ -296,18 +295,18 @@ export function useAnimeLibrary() {
 
     const before = dataRef.current || data || { anime: [] };
     const beforeAnime = Array.isArray(before.anime) ? before.anime : [];
-    console.group(`[Metadata Repair Debug][Hook] ${updatedAnime.title || updatedAnime.id}`);
+    console.group(`[Metadata Repair Debug][Hook] ${libraryAnime.title || libraryAnime.id}`);
     console.log('REACT STATE BEFORE REPOSITORY UPDATE', {
       count: beforeAnime.length,
       incoming: {
-        id: updatedAnime.id,
-        title: updatedAnime.title,
-        malId: updatedAnime.malId ?? updatedAnime.mal_id ?? null,
-        kitsuId: updatedAnime.kitsuId ?? updatedAnime.kitsu_id ?? null
+        id: libraryAnime.id,
+        title: libraryAnime.title,
+        malId: libraryAnime.malId ?? libraryAnime.mal_id ?? null,
+        kitsuId: libraryAnime.kitsuId ?? libraryAnime.kitsu_id ?? null
       }
     });
 
-    const saved = await animeRepository.updateAnime(updatedAnime);
+    const saved = await animeRepository.updateAnime(libraryAnime);
     const afterAnime = Array.isArray(saved?.anime) ? saved.anime : [];
     const afterIds = new Set(afterAnime.map((item) => String(item.id)));
     const beforeIds = new Set(beforeAnime.map((item) => String(item.id)));
@@ -470,20 +469,11 @@ export function useAnimeLibrary() {
   async function setJoeAIConversationContext(context = {}) {
     const current = dataRef.current || data;
     const conversation = {
-      ...context,
       lastRecommendations: Array.isArray(context.lastRecommendations)
         ? context.lastRecommendations.slice(0, 10)
         : [],
       lastReferencedTitle: String(context.lastReferencedTitle || ''),
-      lastPrompt: String(context.lastPrompt || ''),
-      lastRecommendationPrompt: String(context.lastRecommendationPrompt || ''),
-      messages: Array.isArray(context.messages) ? context.messages.slice(-48) : [],
-      recentRecommendationKeys: Array.isArray(context.recentRecommendationKeys)
-        ? context.recentRecommendationKeys.slice(0, 48)
-        : [],
-      lastConstraints: context.lastConstraints && typeof context.lastConstraints === 'object'
-        ? context.lastConstraints
-        : { exclude: [] }
+      lastPrompt: String(context.lastPrompt || '')
     };
     const nextState = newUserMode
       ? { ...(current.joeAI || {}), conversation }
@@ -502,11 +492,7 @@ export function useAnimeLibrary() {
           conversation: {
             lastRecommendations: [],
             lastReferencedTitle: '',
-            lastPrompt: '',
-            lastRecommendationPrompt: '',
-            messages: [],
-            recentRecommendationKeys: [],
-            lastConstraints: { exclude: [] }
+            lastPrompt: ''
           }
         }
       : await animeRepository.clearJoeAIConversationContext();

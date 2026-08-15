@@ -3,6 +3,7 @@ import { CalendarClock, RefreshCw, Search, Heart, Plus, ExternalLink } from 'luc
 import { Poster } from '../components/Poster';
 import { fetchLiveDiscoverCatalog } from '../services/catalogService';
 import { classifyAnimeRelease } from '../services/releaseState';
+import { promoteCatalogTitleToLibrary } from '../services/quickAdd';
 import '../styles/upcoming-anime.css';
 
 function normalizeTitle(value = '') {
@@ -221,15 +222,15 @@ export function UpcomingAnime({
 
   async function addToLibrary(item) {
     if (isLibraryMatch(item, anime)) return;
+    const libraryItem = promoteCatalogTitleToLibrary(item);
     await updateAnime?.({
-      ...item,
+      ...libraryItem,
       id: item.kitsuId
         ? `anime-kitsu-${item.kitsuId}`
         : item.malId
           ? `anime-${item.malId}`
           : `anime-${Date.now()}`,
       status: classifyAnimeRelease(item).key === 'airing' ? 'Watching' : 'Plan to Watch',
-      followed: false,
       favorite: false,
       rewatches: 0,
       notes: item.notes || '',
