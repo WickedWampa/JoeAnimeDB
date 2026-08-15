@@ -8,7 +8,6 @@
 
 import { buildKnowledgeIntro, buildKnowledgeWarnings, knowledgeOpinionFor } from './animeKnowledgeBase';
 import { findGenomeCardFromRegistry as findGenomeCard } from './genome/genomeRegistry';
-
 const PROFILE_PRESETS = {
   dorohedoro: {
     hook: 'There really is not much like Dorohedoro. It is dirty, violent, hilarious, gross, and somehow weirdly lovable.',
@@ -57,7 +56,6 @@ const PROFILE_PRESETS = {
     ]
   }
 };
-
 function norm(value = '') {
   return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
@@ -73,7 +71,6 @@ function presetFor(anime = {}) {
 function titleKey(anime = {}) {
   return norm(anime.title || anime.officialTitle || '');
 }
-
 function starLine(score = 0) {
   if (score >= 0.82) return '★★★★★';
   if (score >= 0.72) return '★★★★☆';
@@ -93,7 +90,6 @@ function meta(item = {}) {
 function listLines(items = [], max = 6) {
   return items.slice(0, max).map((item) => `• ${item}`).join('\n');
 }
-
 function buildGenomeIntro(source = {}) {
   const card = findGenomeCard(source);
   if (!card) return null;
@@ -105,7 +101,6 @@ function buildGenomeIntro(source = {}) {
     '',
     card.signature || card.note || `${title} has a Genome profile.`
   ];
-
   const chasing = card.viewerMotivations || card.chasing || [];
   if (chasing.length) {
     parts.push('', 'What you are probably chasing:');
@@ -122,7 +117,6 @@ function buildGenomeIntro(source = {}) {
   if (themes.length) {
     parts.push('', `Core themes: ${themes.slice(0, 6).join(', ')}.`);
   }
-
   if (card.accessibility) {
     parts.push('', `Accessibility: ${card.accessibility}`);
   }
@@ -130,15 +124,13 @@ function buildGenomeIntro(source = {}) {
   return parts.join('\n');
 }
 
-function opinionFor(sourceProfile, candidate, fallbackReasons = [], score = 0) {
+function opinionFor(sourceProfile, candidate, fallbackReasons = [], score = 0, source = {}) {
   const key = titleKey(candidate);
-  const source = window.__joeaiCurrentSource || {};
   const knowledgeOpinion = knowledgeOpinionFor(source, candidate);
   if (knowledgeOpinion) return knowledgeOpinion;
 
   const exact = sourceProfile?.strongestMatches?.[key];
   if (exact) return exact;
-
   const title = candidate.title || 'This one';
   const reasons = fallbackReasons.slice(0, 5).join(', ').toLowerCase();
 
@@ -149,7 +141,6 @@ function opinionFor(sourceProfile, candidate, fallbackReasons = [], score = 0) {
   if (reasons.includes('identity') || reasons.includes('consciousness')) {
     return `${title} fits because it plays in the same identity/philosophy space.`;
   }
-
   if (reasons.includes('war') || reasons.includes('military')) {
     return `${title} fits more through war, systems, and emotional pressure than surface genre.`;
   }
@@ -157,7 +148,6 @@ function opinionFor(sourceProfile, candidate, fallbackReasons = [], score = 0) {
   if (reasons.includes('chaos') || reasons.includes('weird')) {
     return `${title} is worth a look because it carries some of that weird, unpredictable energy.`;
   }
-
   if (reasons.includes('darkness') || reasons.includes('violence')) {
     return `${title} matches more on the dark/violent side than the comedy side. Good pick if you want heavier material.`;
   }
@@ -169,7 +159,6 @@ function opinionFor(sourceProfile, candidate, fallbackReasons = [], score = 0) {
   if (score >= 0.75) {
     return `${title} is a strong overall vibe match, even if it gets there in a different way.`;
   }
-
   return `${title} has some overlap, but I would treat it as a maybe rather than a perfect follow-up.`;
 }
 
@@ -178,9 +167,7 @@ function formatOpinionEntry(sourceProfile, entry, index, source) {
   const info = meta(item);
   const stars = starLine(match);
 
-  window.__joeaiCurrentSource = source;
-  const opinion = opinionFor(sourceProfile, item, reasons || [], match);
-
+  const opinion = opinionFor(sourceProfile, item, reasons || [], match, source);
   return [
     `${index + 1}. ${item.title} — ${stars} ${Math.round(match * 100)}%${info ? ` (${info})` : ''}`,
     `   • ${opinion}`,
@@ -191,10 +178,8 @@ function formatOpinionEntry(sourceProfile, entry, index, source) {
 export function buildPersonalityRecommendationText({ source, inLibrary = [], discoveries = [] }) {
   const profile = presetFor(source);
   const title = source.title || source.officialTitle || 'that anime';
-
   const genomeIntro = buildGenomeIntro(source);
   const knowledgeIntro = buildKnowledgeIntro(source);
-
   const intro = genomeIntro
     ? [genomeIntro]
     : knowledgeIntro
@@ -213,7 +198,6 @@ export function buildPersonalityRecommendationText({ source, inLibrary = [], dis
             `I do not have a Genome Card or handcrafted profile for ${title} yet, so I’m using Anime DNA plus your library patterns.`,
             ''
           ];
-
   const parts = [...intro, ''];
 
   if (inLibrary.length) {
@@ -222,14 +206,12 @@ export function buildPersonalityRecommendationText({ source, inLibrary = [], dis
     parts.push(inLibrary.map((entry, index) => formatOpinionEntry(profile, entry, index, source)).join('\n\n'));
     parts.push('');
   }
-
   if (discoveries.length) {
     parts.push('New discoveries I would consider:');
     parts.push('');
     parts.push(discoveries.map((entry, index) => formatOpinionEntry(profile, entry, index, source)).join('\n\n'));
     parts.push('');
   }
-
   const knowledgeWarnings = buildKnowledgeWarnings(source);
   if (knowledgeWarnings) {
     parts.push(knowledgeWarnings);

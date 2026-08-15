@@ -2,7 +2,6 @@
 // Do not hand-edit.
 // Add files under src/ai/genome/gold, core25, core100, enhanced, generated, or src/ai/modules,
 // then run: node scripts/rebuildGenomeRegistry.cjs
-
 import * as pack0 from './gold/goldStandardGenomeCards';
 import * as pack1 from './gold/goldStandardGenomeCardsPack2';
 import * as pack2 from './gold/goldStandardGenomeCardsPack3';
@@ -34,7 +33,6 @@ export const GENOME_REGISTRY_PRECEDENCE = Object.freeze(["gold","core25","enhanc
 
 function normalizePack(value, source, tier) {
   if (!value) return [];
-
   if (Array.isArray(value)) {
     return value
       .filter((card) => card && card.id && (card.titles || card.title || card.signature || card.domain))
@@ -44,7 +42,6 @@ function normalizePack(value, source, tier) {
         registryTier: card.registryTier || tier,
       }));
   }
-
   if (value.cards && Array.isArray(value.cards)) {
     return value.cards.map((card) => ({
       ...card,
@@ -89,7 +86,6 @@ const RAW_GENOME_REGISTRY = [
 
 const seen = new Set();
 const duplicateIds = [];
-
 export const ACTIVE_GENOME_REGISTRY = RAW_GENOME_REGISTRY.filter((card) => {
   if (!card || !card.id) return false;
   if (seen.has(card.id)) {
@@ -107,6 +103,15 @@ function fallbackNormalize(value = '') {
   return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
+function fallbackContainsMatch(searchText = '', candidate = '') {
+  const cleanSearch = fallbackNormalize(searchText);
+  const cleanCandidate = fallbackNormalize(candidate);
+  if (!cleanSearch || !cleanCandidate) return false;
+  if (cleanSearch === cleanCandidate) return true;
+  if (Math.min(cleanSearch.length, cleanCandidate.length) < 4) return false;
+  return cleanSearch.includes(cleanCandidate) || cleanCandidate.includes(cleanSearch);
+}
+
 export function findGenomeCardByTitle(animeOrTitle = '') {
   const searchText = typeof animeOrTitle === 'string'
     ? animeOrTitle
@@ -119,28 +124,17 @@ export function findGenomeCardByTitle(animeOrTitle = '') {
         ...(animeOrTitle.titleSynonyms || []),
         ...(animeOrTitle.aliases || []),
       ].filter(Boolean).join(' ');
-
   const direct = GENOME_ALIAS_INDEX.get(normalizeAnimeTitle(searchText))
     || GENOME_ALIAS_INDEX.get(canonicalAnimeId(searchText));
 
   if (direct) return direct;
-
   return ACTIVE_GENOME_REGISTRY.find((card) =>
     cardMatchesTitle(card, searchText)
-    || fallbackNormalize(searchText).includes(fallbackNormalize(card.id))
-    || (card.titles || []).some((title) => {
-      const cleanTitle = fallbackNormalize(title);
-      const cleanSearch = fallbackNormalize(searchText);
-      return cleanSearch.includes(cleanTitle) || cleanTitle.includes(cleanSearch);
-    })
-    || (card.aliases || []).some((alias) => {
-      const cleanAlias = fallbackNormalize(alias);
-      const cleanSearch = fallbackNormalize(searchText);
-      return cleanSearch.includes(cleanAlias) || cleanAlias.includes(cleanSearch);
-    })
+    || fallbackContainsMatch(searchText, card.id)
+    || (card.titles || []).some((title) => fallbackContainsMatch(searchText, title))
+    || (card.aliases || []).some((alias) => fallbackContainsMatch(searchText, alias))
   ) || null;
 }
-
 export function findGenomeCardFromRegistry(animeOrTitle = '') {
   return findGenomeCardByTitle(animeOrTitle);
 }
@@ -151,7 +145,6 @@ export function getGenomeRegistryStats() {
     counts[tier] = (counts[tier] || 0) + 1;
     return counts;
   }, {});
-
   return {
     version: GENOME_REGISTRY_VERSION,
     precedence: [...GENOME_REGISTRY_PRECEDENCE],

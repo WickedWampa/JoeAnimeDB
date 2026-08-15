@@ -5,7 +5,6 @@ import { sameFranchise, enrichAnimeKnowledge } from './knowledge/knowledgeRegist
 import { compareGenome } from './genome/genomeEngine';
 import { findGenomeCardFromRegistry as findGenomeCard } from './genome/genomeRegistry';
 import { maybeGenomeIntentRecommendation } from './joeAIIntentEngine';
-
 function norm(value = '') {
   return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
@@ -21,10 +20,12 @@ function allTitles(anime = {}) {
 function titleMatches(anime = {}, query = '') {
   const q = norm(query);
   if (!q) return false;
-
   return allTitles(anime).some((title) => {
     const t = norm(title);
-    return t === q || t.includes(q) || q.includes(t);
+    if (!t) return false;
+    if (t === q) return true;
+    if (Math.min(t.length, q.length) < 4) return false;
+    return t.includes(q) || q.includes(t);
   });
 }
 
@@ -38,7 +39,6 @@ function extractSimilarityTitle(question = '') {
     /anime\s+like\s+(.+?)[?.!]*$/i,
     /show\s+me\s+something\s+like\s+(.+?)[?.!]*$/i
   ];
-
   for (const pattern of patterns) {
     const match = raw.match(pattern);
     if (match?.[1]) return match[1].replace(/[?.!]+$/g, '').trim();
@@ -54,7 +54,6 @@ function extractSimilarityTitle(question = '') {
 function boostForKnowledge(source = {}, candidate = {}) {
   const found = findKnowledgeProfile(source);
   if (!found) return { boost: 0, reason: '' };
-
   const profile = found.profile;
   const candidateTitle = norm(`${candidate.title || ''} ${candidate.officialTitle || ''}`);
   const matches = profile.bestMatches || {};
@@ -68,7 +67,6 @@ function boostForKnowledge(source = {}, candidate = {}) {
 
   return { boost: 0, reason: '' };
 }
-
 function explainOverlap(sourceDna, candidateDna) {
   const sourceTraits = topDnaTraits(sourceDna, 14);
   const candidateTraits = new Set(topDnaTraits(candidateDna, 16).map((trait) => trait.key));
@@ -78,7 +76,6 @@ function explainOverlap(sourceDna, candidateDna) {
     .slice(0, 6)
     .map((trait) => labelTrait(trait.key));
 }
-
 function buildCandidate({ source, item, anime, sourceDna }) {
   // SPRINT5_GENOME_SCORING
   const candidateDna = buildAnimeDNA(item);
@@ -90,7 +87,6 @@ function buildCandidate({ source, item, anime, sourceDna }) {
   const match = Math.min(0.99, Math.max(dnaScore + knowledge.boost, genome ? genome.score : 0));
   const owned = new Set(anime.map(keyFor)).has(keyFor(item));
   const reasons = explainOverlap(sourceDna, candidateDna);
-
   if (genome?.reasons?.length) {
     reasons.unshift(...genome.reasons.slice(0, 3));
   }
@@ -109,7 +105,6 @@ function buildCandidate({ source, item, anime, sourceDna }) {
     owned
   };
 }
-
 export function recommendKnowledgeFirst({ query = '', anime = [], catalog = [], limit = 8 }) {
   const source =
     anime.find((item) => titleMatches(item, query)) ||
@@ -123,7 +118,6 @@ export function recommendKnowledgeFirst({ query = '', anime = [], catalog = [], 
   }
 
   const sourceDna = buildAnimeDNA(source);
-
   const enrichedSource = enrichAnimeKnowledge(source);
 
   const pool = [...catalog, ...anime]
@@ -131,7 +125,6 @@ export function recommendKnowledgeFirst({ query = '', anime = [], catalog = [], 
     .filter((item) => keyFor(item) !== keyFor(source))
     .filter((item) => !sameFranchise(enrichedSource, item))
     .filter((item, index, arr) => arr.findIndex((other) => keyFor(other) === keyFor(item)) === index);
-
   const scored = pool
     .map((item) => buildCandidate({ source, item, anime, sourceDna }))
     .filter((entry) => entry.match > 0.35 || entry.knowledgeBoost > 0)
@@ -142,7 +135,6 @@ export function recommendKnowledgeFirst({ query = '', anime = [], catalog = [], 
 
   const inLibrary = scored.filter((entry) => entry.owned).slice(0, Math.ceil(limit / 2));
   const discoveries = scored.filter((entry) => !entry.owned).slice(0, limit);
-
   return {
     found: true,
     source,
@@ -158,7 +150,6 @@ function metaLabel(item = {}) {
     .filter(Boolean)
     .join(' · ');
 }
-
 function shortRecommendationBlurb(source = {}, item = {}, reasons = []) {
   const sourceTitle = source.officialTitle || source.title || 'that anime';
   const itemTitle = item.officialTitle || item.title || 'this pick';
@@ -167,21 +158,18 @@ function shortRecommendationBlurb(source = {}, item = {}, reasons = []) {
   if (cleanReasons.length >= 2) {
     return `${itemTitle} shares ${cleanReasons.slice(0, 2).join(' and ')} with ${sourceTitle}, but brings its own flavor instead of feeling like a copy.`;
   }
-
   if (cleanReasons.length === 1) {
     return `${itemTitle} connects to ${sourceTitle} through ${cleanReasons[0]}, so it should scratch part of the same itch.`;
   }
 
   return `${itemTitle} is a strong vibe match for ${sourceTitle}, even if it gets there in a different way.`;
 }
-
 function cardFromEntry(entry, source, bucket = 'discovery', index = 0) {
   const item = entry.item || entry;
   const pct = Math.round(Number(entry.match || 0) * 100);
   const reasons = (entry.reasons || []).filter(Boolean).slice(0, 5);
   const title = item.officialTitle || item.title || 'Unknown title';
   const score = Math.max(0, Math.min(99, pct || 0));
-
   return {
     id: item.id || item.malId || title,
     title,
@@ -215,13 +203,11 @@ function cardFromEntry(entry, source, bucket = 'discovery', index = 0) {
     ].filter(Boolean).join('\n')
   };
 }
-
 export function buildRecommendationCardsResult({ source, inLibrary = [], discoveries = [], text = '' }) {
   const sourceTitle = source?.officialTitle || source?.title || 'that anime';
   const libraryCards = (inLibrary || []).map((entry, index) => cardFromEntry(entry, source, 'library', index));
   const discoveryCards = (discoveries || []).map((entry, index) => cardFromEntry(entry, source, 'discovery', index));
   const cards = [...libraryCards, ...discoveryCards].slice(0, 10);
-
   return {
     type: 'recommendationCards',
     title: `🍜 Because you like ${sourceTitle}`,
@@ -240,5 +226,7 @@ export function maybeKnowledgeFirstRecommendation(question = '', anime = [], cat
     return maybeGenomeIntentRecommendation(question);
   }
 
-  return recommendKnowledgeFirst({ query: title, anime, catalog }).text;
+  const result = recommendKnowledgeFirst({ query: title, anime, catalog });
+  if (!result.found) return result.text;
+  return buildRecommendationCardsResult(result);
 }
