@@ -230,7 +230,7 @@ check('backup restore is wired on desktop, web, and Android', async () => {
   assert.match(mobileSource, /async restoreBackup\(snapshot = \{\}\)/);
 });
 
-check('Beta 13 version identity is consistent across platforms', async () => {
+check('Beta 14 version identity is consistent across platforms', async () => {
   const [androidSource, preloadSource, mainSource, viteSource, settingsSource, aboutSource] = await Promise.all([
     source('android/app/build.gradle'),
     source('electron/preload.cjs'),
@@ -240,9 +240,9 @@ check('Beta 13 version identity is consistent across platforms', async () => {
     source('src/pages/AboutHelpPage.jsx')
   ]);
 
-  assert.equal(packageMetadata.version, '5.0.0-beta.13');
-  assert.match(androidSource, /versionCode\s+5000013/);
-  assert.match(androidSource, /versionName\s+"5\.0\.0-beta\.13"/);
+  assert.equal(packageMetadata.version, '5.0.0-beta.14');
+  assert.match(androidSource, /versionCode\s+5000014/);
+  assert.match(androidSource, /versionName\s+"5\.0\.0-beta\.14"/);
   assert.doesNotMatch(preloadSource, /require\(['"]\.\.\/package\.json['"]\)/);
   assert.match(mainSource, /version:\s*app\.getVersion\(\)/);
   assert.match(viteSource, /__APP_VERSION__:\s*JSON\.stringify\(packageMetadata\.version\)/);
@@ -399,8 +399,8 @@ for (const { name, operation } of checks) {
 }
 
 if (failures) {
-  console.error(`\nBeta 13 release gate failed: ${failures} check(s).`);
+  console.error(`\nBeta 14 release gate failed: ${failures} check(s).`);
   process.exitCode = 1;
 } else {
-  console.log(`\nBeta 13 automated release gate passed: ${checks.length} checks.`);
+  console.log(`\nBeta 14 automated release gate passed: ${checks.length} checks.`);
 }
