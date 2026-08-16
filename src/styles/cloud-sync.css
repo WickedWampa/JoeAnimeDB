@@ -199,8 +199,15 @@
   margin-top: 9px;
 }
 
-.cloudSyncImport {
+.cloudSyncImportRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   margin-top: 10px;
+}
+
+.cloudSyncImport {
+  margin: 0;
 }
 
 .cloudSyncStatus {
@@ -223,6 +230,114 @@
   line-height: 1.45;
 }
 
+.cloudSyncModal {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(0, 0, 0, .78);
+  backdrop-filter: blur(8px);
+}
+
+.cloudSyncQrCard,
+.cloudSyncScannerCard {
+  position: relative;
+  width: min(100%, 430px);
+  max-height: min(90vh, 760px);
+  overflow: auto;
+  padding: 22px;
+  border: 1px solid color-mix(in srgb, var(--cyan) 48%, var(--line));
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--cyan) 10%, transparent), transparent 38%),
+    rgba(3, 10, 18, .98);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, .58);
+}
+
+.cloudSyncQrCard h3,
+.cloudSyncScannerCard h3 {
+  margin: 3px 0 8px;
+  color: var(--text);
+  font-size: 24px;
+}
+
+.cloudSyncQrCard > p,
+.cloudSyncScannerCard > p {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.cloudSyncModalClose {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  min-height: 38px !important;
+  padding: 0;
+  border-radius: 999px;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.cloudSyncQrImageWrap {
+  display: grid;
+  place-items: center;
+  margin: 18px auto;
+  padding: 16px;
+  border-radius: 18px;
+  background: #fff;
+}
+
+.cloudSyncQrImageWrap img {
+  display: block;
+  width: min(100%, 360px);
+  height: auto;
+  image-rendering: pixelated;
+}
+
+.cloudSyncQrWarning {
+  margin-bottom: 0;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--gold) 34%, var(--line));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--gold) 7%, transparent);
+  font-size: 11px;
+}
+
+.cloudSyncScannerViewport {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 3 / 4;
+  margin: 16px 0;
+  border: 1px solid color-mix(in srgb, var(--cyan) 42%, var(--line));
+  border-radius: 18px;
+  background: #000;
+}
+
+.cloudSyncScannerViewport video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.cloudSyncScannerTarget {
+  position: absolute;
+  inset: 20% 12%;
+  border: 2px solid var(--cyan);
+  border-radius: 18px;
+  box-shadow: 0 0 0 999px rgba(0, 0, 0, .28), 0 0 28px color-mix(in srgb, var(--cyan) 38%, transparent);
+  pointer-events: none;
+}
+
+.cloudSyncScannerCard > button:last-child {
+  width: 100%;
+  text-align: center;
+}
+
 @media (max-width: 700px) {
   .cloudSyncPanel {
     padding: 17px;
@@ -243,7 +358,20 @@
     grid-template-columns: 1fr;
   }
 
-  .cloudSyncCodeLinkRow button {
+  .cloudSyncCodeLinkRow button,
+  .cloudSyncImportRow button {
     width: 100%;
+  }
+
+  .cloudSyncModal {
+    align-items: end;
+    padding: 10px;
+  }
+
+  .cloudSyncQrCard,
+  .cloudSyncScannerCard {
+    width: 100%;
+    max-height: 92vh;
+    border-radius: 22px 22px 14px 14px;
   }
 }
