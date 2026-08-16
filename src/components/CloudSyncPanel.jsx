@@ -533,10 +533,10 @@ export function CloudSyncPanel({
         <button
           type="button"
           className="cloudSyncImport"
-          onClick={() => qrImageInputRef.current?.click()}
+          onClick={openScanner}
           disabled={Boolean(busy)}
         >
-          Read Saved QR Image
+          Scan Recovery QR
         </button>
       </div>
 
@@ -573,7 +573,7 @@ export function CloudSyncPanel({
               <div className="cloudSyncScannerTarget" aria-hidden="true" />
             </div>
             <button type="button" onClick={() => qrImageInputRef.current?.click()}>
-              Can&apos;t use the camera? Read a saved QR image
+              Use a saved QR image instead
             </button>
           </section>
         </div>
