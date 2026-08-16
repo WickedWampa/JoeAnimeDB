@@ -1,8 +1,8 @@
-node_modules/ 
-dist/ 
-out/ 
-.vite/ 
-*.log 
+node_modules/
+dist/
+out/
+.vite/
+*.log
 JoeAnime.db
 *.zip
 *.db
@@ -18,3 +18,6 @@ dist-desktop/
 *.lnk
 .tmp-genome-library.json
 .idea/
+
+# Private Android release signing material
+android-signing-private/

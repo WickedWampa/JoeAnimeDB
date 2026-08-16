@@ -1,5 +1,27 @@
 apply plugin: 'com.android.application'
 
+def releaseKeystorePath = System.getenv('JADB_ANDROID_KEYSTORE_PATH')
+def releaseKeystorePassword = System.getenv('JADB_ANDROID_KEYSTORE_PASSWORD')
+def releaseKeyAlias = System.getenv('JADB_ANDROID_KEY_ALIAS')
+def releaseKeyPassword = System.getenv('JADB_ANDROID_KEY_PASSWORD')
+def releaseSigningRequested = [
+    releaseKeystorePath,
+    releaseKeystorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword
+].any { value -> value != null && !value.trim().isEmpty() }
+
+def releaseSigningComplete = [
+    releaseKeystorePath,
+    releaseKeystorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword
+].every { value -> value != null && !value.trim().isEmpty() }
+
+if (releaseSigningRequested && !releaseSigningComplete) {
+    throw new GradleException('Android release signing is only partially configured. Provide all JADB_ANDROID_* signing environment variables.')
+}
+
 android {
     namespace = "com.joeanimedb.app"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -16,8 +38,21 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            if (releaseSigningComplete) {
+                storeFile file(releaseKeystorePath)
+                storePassword releaseKeystorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
+    }
     buildTypes {
         release {
+            if (releaseSigningComplete) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
@@ -28,13 +63,11 @@ android {
         }
     }
 }
-
 repositories {
     flatDir{
         dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
     }
 }
-
 dependencies {
     implementation fileTree(include: ['*.jar'], dir: 'libs')
     implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
@@ -46,7 +79,6 @@ dependencies {
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
     implementation project(':capacitor-cordova-android-plugins')
 }
-
 apply from: 'capacitor.build.gradle'
 
 try {

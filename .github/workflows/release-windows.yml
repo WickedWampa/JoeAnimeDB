@@ -256,15 +256,62 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x android/gradlew
 
-      - name: Build Android APK
+      - name: Restore Android signing key
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [[ -z "$ANDROID_KEYSTORE_BASE64" ]]; then
+            echo "Missing GitHub Actions secret: ANDROID_KEYSTORE_BASE64" >&2
+            exit 1
+          fi
+          signing_dir="$RUNNER_TEMP/joeanime-signing"
+          mkdir -p "$signing_dir"
+          keystore_path="$signing_dir/joeanime-release.jks"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore_path"
+          if [[ ! -s "$keystore_path" ]]; then
+            echo "Android signing keystore could not be restored." >&2
+            exit 1
+          fi
+          echo "JADB_ANDROID_KEYSTORE_PATH=$keystore_path" >> "$GITHUB_ENV"
+
+      - name: Build signed Android release APK
         env:
           VITE_SYNC_API_URL: ${{ vars.VITE_SYNC_API_URL }}
-        run: npm run android:debug
+          JADB_ANDROID_KEYSTORE_PATH: ${{ env.JADB_ANDROID_KEYSTORE_PATH }}
+          JADB_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          JADB_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          JADB_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          for required in JADB_ANDROID_KEYSTORE_PASSWORD JADB_ANDROID_KEY_ALIAS JADB_ANDROID_KEY_PASSWORD; do
+            if [[ -z "${!required}" ]]; then
+              echo "Missing Android signing secret: $required" >&2
+              exit 1
+            fi
+          done
+          npm run android:sync
+          cd android
+          ./gradlew assembleRelease
+
+      - name: Verify Android release signature
+        shell: bash
+        run: |
+          source_apk="android/app/build/outputs/apk/release/app-release.apk"
+          apksigner="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          if [[ ! -f "$source_apk" ]]; then
+            echo "Required signed Android APK was not generated: $source_apk" >&2
+            exit 1
+          fi
+          if [[ ! -x "$apksigner" ]]; then
+            echo "apksigner was not found at $apksigner" >&2
+            exit 1
+          fi
+          "$apksigner" verify --verbose --print-certs "$source_apk"
 
       - name: Prepare Android release asset
         shell: bash
         run: |
-          source_apk="android/app/build/outputs/apk/debug/app-debug.apk"
+          source_apk="android/app/build/outputs/apk/release/app-release.apk"
           release_apk="dist-android/JoeAnimeDB-${RELEASE_VERSION}-Android.apk"
           if [[ ! -f "$source_apk" ]]; then
             echo "Required Android APK was not generated: $source_apk" >&2
