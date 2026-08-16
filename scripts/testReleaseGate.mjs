@@ -245,8 +245,8 @@ check('Beta 18 version identity is consistent across platforms', async () => {
     source('src/pages/AboutHelpPage.jsx')
   ]);
 
-  assert.equal(packageMetadata.version, '5.0.0-beta.18');
-  assert.match(androidSource, /versionCode\s+5000018/);
+  assert.equal(packageMetadata.version, '5.0.0-beta.19');
+  assert.match(androidSource, /versionCode\s+5000019/);
   assert.match(androidSource, /versionName\s+"5\.0\.0-beta\.18"/);
   assert.doesNotMatch(preloadSource, /require\(['"]\.\.\/package\.json['"]\)/);
   assert.match(mainSource, /version:\s*app\.getVersion\(\)/);

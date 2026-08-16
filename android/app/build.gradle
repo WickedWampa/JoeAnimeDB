@@ -29,7 +29,7 @@ android {
         applicationId "com.joeanimedb.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 5000018
+        versionCode 5000019
         versionName "5.0.0-beta.18"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
