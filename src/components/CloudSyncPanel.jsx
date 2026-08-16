@@ -21,6 +21,13 @@ import {
   takePendingRecoveryQrCode
 } from '../services/recoveryQr.js';
 import { applyBackupPreferences } from '../services/storage.js';
+import {
+  buildSyncPreflight,
+  readSyncSafetyCopy,
+  saveSyncSafetyCopy,
+  summarizeSyncLibrary,
+  syncRiskLabel
+} from '../services/syncSafety.js';
 import '../styles/cloud-sync.css';
 
 function formatDate(value) {
@@ -43,6 +50,8 @@ export function CloudSyncPanel({
   const [qrImage, setQrImage] = React.useState('');
   const [showQr, setShowQr] = React.useState(false);
   const [scannerOpen, setScannerOpen] = React.useState(false);
+  const [syncSnapshot, setSyncSnapshot] = React.useState(null);
+  const [safetyCopy, setSafetyCopy] = React.useState(() => readSyncSafetyCopy());
   const kitInputRef = React.useRef(null);
   const qrImageInputRef = React.useRef(null);
   const scannerVideoRef = React.useRef(null);
@@ -51,6 +60,74 @@ export function CloudSyncPanel({
   function refreshConfig() {
     setConfig(readCloudSyncConfig());
   }
+
+  async function refreshSyncSnapshot(nextConfig = config) {
+    if (!nextConfig || !apiReady) {
+      setSyncSnapshot(null);
+      return null;
+    }
+
+    try {
+      const snapshot = await buildSyncPreflight(data, nextConfig);
+      setSyncSnapshot(snapshot);
+      return snapshot;
+    } catch (error) {
+      setSyncSnapshot(null);
+      throw error;
+    }
+  }
+
+  function confirmSyncDirection(action, comparison) {
+    const isUpload = action === 'upload';
+    const risk = isUpload ? comparison.uploadRisk : comparison.restoreRisk;
+    const reason = isUpload ? comparison.uploadReason : comparison.restoreReason;
+    const phrase = isUpload ? comparison.uploadPhrase : comparison.restorePhrase;
+    const direction = isUpload
+      ? `LOCAL ${comparison.localCount} → CLOUD ${comparison.cloudCount}`
+      : `CLOUD ${comparison.cloudCount} → THIS DEVICE ${comparison.localCount}`;
+
+    if (risk === 'blocked') {
+      setStatus(reason);
+      return false;
+    }
+
+    if (phrase) {
+      const typed = window.prompt(
+        `${syncRiskLabel(risk).toUpperCase()}\n\n${direction}\n\n${reason}\n\n` +
+        `Type exactly: ${phrase}\n\nCancel is the safe choice if you are not 100% sure.`,
+        ''
+      );
+      if (typed !== phrase) {
+        setStatus('Sync cancelled. Nothing was changed.');
+        return false;
+      }
+      return true;
+    }
+
+    const confirmed = window.confirm(
+      `${direction}\n\n${reason}\n\n` +
+      (risk === 'warning'
+        ? 'Review those numbers carefully before continuing.'
+        : 'Continue with this sync?')
+    );
+    if (!confirmed) setStatus('Sync cancelled. Nothing was changed.');
+    return confirmed;
+  }
+
+  React.useEffect(() => {
+    if (!config || !apiReady) return undefined;
+    let cancelled = false;
+
+    buildSyncPreflight(data, config)
+      .then((snapshot) => {
+        if (!cancelled) setSyncSnapshot(snapshot);
+      })
+      .catch(() => {
+        if (!cancelled) setSyncSnapshot(null);
+      });
+
+    return () => { cancelled = true; };
+  }, [config?.vaultId, config?.revision, apiReady]);
 
   function prepareRecoveryCode(code, source = 'Recovery code') {
     setRecoveryCodeInput(code);
@@ -161,6 +238,7 @@ export function CloudSyncPanel({
   function enableSync() {
     const identity = createCloudSyncIdentity();
     setConfig(identity);
+    setSafetyCopy(readSyncSafetyCopy(identity));
     setStatus('Sync identity created. Download the Recovery Kit, then upload this library.');
   }
 
@@ -197,6 +275,7 @@ export function CloudSyncPanel({
     try {
       const identity = linkCloudSyncWithCode(code);
       setConfig(identity);
+      setSafetyCopy(readSyncSafetyCopy(identity));
       setRecoveryCodeInput('');
       setShowRecoveryCodeLink(false);
       setStatus('This device is linked. Choose Restore Cloud Library to load the shared library.');
@@ -319,14 +398,29 @@ export function CloudSyncPanel({
   async function upload() {
     if (!config || busy) return;
     setBusy('upload');
-    setStatus('Encrypting and uploading this library...');
+    setStatus('Checking local and cloud libraries before upload...');
     try {
+      const preflight = await buildSyncPreflight(data, config);
+      setSyncSnapshot(preflight);
+      if (!confirmSyncDirection('upload', preflight.comparison)) return;
+
+      if (preflight.remote.exists && preflight.remote.backup) {
+        const copy = saveSyncSafetyCopy(preflight.remote.backup, {
+          kind: 'cloud-before-upload',
+          vaultId: config.vaultId,
+          revision: preflight.remote.revision
+        });
+        if (copy) setSafetyCopy(copy);
+      }
+
+      setStatus('Safety check passed. Previous cloud copy saved locally. Encrypting and uploading...');
       const result = await uploadCloudLibrary(data, config);
       setConfig(result.config);
-      setStatus(`Cloud library updated at revision ${result.revision}.`);
+      setStatus(`Cloud library updated safely at revision ${result.revision}.`);
+      await refreshSyncSnapshot(result.config).catch(() => null);
     } catch (error) {
       refreshConfig();
-      setStatus(`Upload failed: ${error?.message || String(error)}`);
+      setStatus(`Upload stopped: ${error?.message || String(error)}`);
     } finally {
       setBusy('');
     }
@@ -334,18 +428,65 @@ export function CloudSyncPanel({
 
   async function restoreCloud() {
     if (!config || busy) return;
-    const confirmed = window.confirm(
-      'Restore the encrypted cloud library on this device?\n\nThe current local database will be replaced.'
-    );
-    if (!confirmed) return;
     setBusy('download');
-    setStatus('Downloading and decrypting the cloud library...');
+    setStatus('Checking this device against the cloud library before restore...');
     try {
+      const preflight = await buildSyncPreflight(data, config);
+      setSyncSnapshot(preflight);
+      if (!confirmSyncDirection('restore', preflight.comparison)) return;
+
+      const copy = saveSyncSafetyCopy(preflight.localBackup, {
+        kind: 'local-before-restore',
+        vaultId: config.vaultId,
+        revision: config.revision
+      });
+      if (copy) setSafetyCopy(copy);
+
+      setStatus('Safety check passed. Current local copy saved. Downloading and decrypting the cloud library...');
       const result = await downloadCloudLibrary(config);
+
+      if (Number(result.revision || 0) !== Number(preflight.remote.revision || 0)) {
+        setConfig(result.config);
+        setStatus('The cloud library changed while you were confirming the restore. Nothing local was replaced. Press Restore again to review the new revision.');
+        await refreshSyncSnapshot(result.config).catch(() => null);
+        return;
+      }
+
       await applyBackup(result.backup, `Cloud revision ${result.revision}`);
       setConfig(result.config);
+      await refreshSyncSnapshot(result.config).catch(() => null);
     } catch (error) {
-      setStatus(`Cloud restore failed: ${error?.message || String(error)}`);
+      setStatus(`Cloud restore stopped: ${error?.message || String(error)}`);
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function restoreSafetyCopy() {
+    const copy = readSyncSafetyCopy(config);
+    if (!copy) {
+      setSafetyCopy(null);
+      setStatus('No local sync safety copy is available on this device.');
+      return;
+    }
+
+    const count = summarizeSyncLibrary(copy.backup).count;
+    const label = copy.kind === 'cloud-before-upload'
+      ? 'the cloud copy from immediately before your last upload'
+      : 'this device from immediately before your last restore';
+    const confirmed = window.confirm(
+      `Restore ${count} title${count === 1 ? '' : 's'} from ${label}?\n\n` +
+      'This only restores the local library. It will NOT upload automatically.'
+    );
+    if (!confirmed) return;
+
+    setBusy('safety');
+    try {
+      await applyBackup(copy.backup, 'Sync safety copy');
+      setStatus('Safety copy restored locally. Check the library, then use Upload Local → Cloud only if you want this recovered copy to become the cloud version.');
+      await refreshSyncSnapshot(config).catch(() => null);
+    } catch (error) {
+      setStatus(`Safety-copy restore failed: ${error?.message || String(error)}`);
     } finally {
       setBusy('');
     }
@@ -380,6 +521,19 @@ export function CloudSyncPanel({
     }
   }
 
+  const comparison = syncSnapshot?.comparison || null;
+  const localTitles = comparison?.localCount ?? '—';
+  const cloudTitles = comparison?.remoteExists ? comparison.cloudCount : (comparison ? 'None' : '—');
+  const preferRestore = Boolean(
+    comparison?.remoteExists &&
+    (comparison.staleRevision || comparison.localCount === 0 || comparison.recommendedAction === 'restore')
+  );
+  const safetyTone = comparison?.staleRevision || comparison?.uploadRisk === 'critical'
+    ? 'danger'
+    : comparison?.uploadRisk === 'danger' || comparison?.uploadRisk === 'warning'
+      ? 'warning'
+      : 'safe';
+
   return (
     <section className="cloudSyncPanel">
       <header>
@@ -400,20 +554,43 @@ export function CloudSyncPanel({
       {config ? (
         <>
           <div className="cloudSyncFacts">
-            <div><small>Cloud revision</small><strong>{config.revision || 'Not uploaded'}</strong></div>
+            <div><small>Local titles</small><strong>{localTitles}</strong></div>
+            <div><small>Cloud titles</small><strong>{cloudTitles}</strong></div>
+            <div><small>Cloud revision</small><strong>{comparison?.cloudRevision || config.revision || 'Not uploaded'}</strong></div>
             <div><small>Last sync</small><strong>{formatDate(config.lastSyncedAt)}</strong></div>
             <div><small>Protection</small><strong>AES-256-GCM</strong></div>
+            <div><small>Safety copy</small><strong>{safetyCopy ? `${summarizeSyncLibrary(safetyCopy.backup).count} titles` : 'None yet'}</strong></div>
           </div>
 
+          {comparison && (
+            <div className={`cloudSyncSafety ${safetyTone}`}>
+              <div>
+                <strong>
+                  {comparison.staleRevision
+                    ? 'Restore before uploading'
+                    : comparison.recommendedAction === 'restore'
+                      ? 'Cloud copy looks newer / fuller'
+                      : comparison.recommendedAction === 'upload'
+                        ? 'Local copy has changes to upload'
+                        : 'Local and cloud titles match'}
+                </strong>
+                <small>
+                  Local {comparison.localCount} · Cloud {comparison.cloudCount} · +{comparison.addedCount} local-only · −{comparison.removedCount} missing locally · Ratings {comparison.localMetrics?.rated || 0}/{comparison.cloudMetrics?.rated || 0}
+                </small>
+              </div>
+              <span>{comparison.staleRevision ? 'Protected' : syncRiskLabel(comparison.uploadRisk)}</span>
+            </div>
+          )}
+
           <div className="cloudSyncActions">
-            <button type="button" className="primary" onClick={upload} disabled={Boolean(busy) || !apiReady}>
-              <strong>{busy === 'upload' ? 'Uploading...' : 'Upload This Library'}</strong>
-              <small>Create a new encrypted cloud revision</small>
+            <button type="button" className={preferRestore ? '' : 'primary'} onClick={upload} disabled={Boolean(busy) || !apiReady}>
+              <strong>{busy === 'upload' ? 'Checking...' : 'Upload Local → Cloud'}</strong>
+              <small>{comparison ? `Local ${comparison.localCount} → Cloud ${comparison.cloudCount}` : 'Safety check runs before every upload'}</small>
             </button>
 
-            <button type="button" onClick={restoreCloud} disabled={Boolean(busy) || !apiReady}>
-              <strong>{busy === 'download' ? 'Restoring...' : 'Restore Cloud Library'}</strong>
-              <small>Replace this device from the cloud copy</small>
+            <button type="button" className={preferRestore ? 'primary' : ''} onClick={restoreCloud} disabled={Boolean(busy) || !apiReady}>
+              <strong>{busy === 'download' ? 'Checking...' : 'Restore Cloud → Device'}</strong>
+              <small>{comparison ? `Cloud ${comparison.cloudCount} → Local ${comparison.localCount}` : 'Safety check runs before every restore'}</small>
             </button>
 
             <button type="button" onClick={showRecoveryQr} disabled={Boolean(busy)}>
@@ -443,8 +620,13 @@ export function CloudSyncPanel({
           </div>
 
           <details>
-            <summary>Device and cloud controls</summary>
+            <summary>Device, recovery and cloud controls</summary>
             <div>
+              {safetyCopy && (
+                <button type="button" onClick={restoreSafetyCopy} disabled={Boolean(busy)}>
+                  Restore Last Safety Copy
+                </button>
+              )}
               <button type="button" onClick={disconnect} disabled={Boolean(busy)}>Disconnect This Device</button>
               <button type="button" className="danger" onClick={removeCloudCopy} disabled={Boolean(busy) || !apiReady}>
                 Delete Cloud Copy

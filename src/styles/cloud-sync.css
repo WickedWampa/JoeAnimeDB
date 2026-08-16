@@ -60,7 +60,7 @@
 
 .cloudSyncFacts {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   gap: 10px;
   margin: 18px 0 12px;
 }
@@ -338,7 +338,80 @@
   text-align: center;
 }
 
+
+
+.cloudSyncSafety {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 12px 0 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(0, 0, 0, .2);
+}
+
+.cloudSyncSafety > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.cloudSyncSafety strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.cloudSyncSafety small {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.cloudSyncSafety > span {
+  flex: 0 0 auto;
+  padding: 6px 9px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.cloudSyncSafety.safe {
+  border-color: color-mix(in srgb, var(--cyan) 32%, var(--line));
+  background: color-mix(in srgb, var(--cyan) 5%, rgba(0, 0, 0, .2));
+}
+
+.cloudSyncSafety.safe > span {
+  color: var(--cyan);
+}
+
+.cloudSyncSafety.warning {
+  border-color: color-mix(in srgb, var(--gold) 45%, var(--line));
+  background: color-mix(in srgb, var(--gold) 7%, rgba(0, 0, 0, .2));
+}
+
+.cloudSyncSafety.warning > span {
+  color: var(--gold);
+}
+
+.cloudSyncSafety.danger {
+  border-color: rgba(255, 80, 100, .55);
+  background: rgba(255, 80, 100, .08);
+}
+
+.cloudSyncSafety.danger > span {
+  color: #ff8295;
+}
+
 @media (max-width: 700px) {
+  .cloudSyncSafety {
+    align-items: flex-start;
+    flex-direction: column;
+  }
   .cloudSyncPanel {
     padding: 17px;
   }
