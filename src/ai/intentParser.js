@@ -272,7 +272,8 @@ export function parseJoeAIIntent(input = '') {
   }
 
   const hasSimilarityWording =
-    /\b(similar to|something like|anime like|show like|shows like|show me something like)\b/i.test(raw);
+    /\b(similar to|something like|anything like|anime like|show like|shows like|show me something like|same vibe as|same energy as|same feel as|close to|watch after)\b/i.test(raw)
+    || /\b(?:liked|loved)\b.+\b(?:what next|what else|what should i watch|give me more)\b/i.test(raw);
 
   // Explicit requests that describe a kind of anime must reach the
   // recommendation router before fuzzy title matching. Otherwise phrases
