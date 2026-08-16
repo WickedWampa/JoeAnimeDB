@@ -74,8 +74,7 @@ export function CloudSyncPanel({
 
     async function startScanner() {
       if (!navigator.mediaDevices?.getUserMedia) {
-        setStatus('Camera scanning is not available in this browser. Use your phone camera or choose a saved QR image instead.');
-        setScannerOpen(false);
+        setStatus('Live camera scanning is not available in this browser. Use the phone Camera app on the Recovery QR, or choose a saved QR image below.');
         return;
       }
 
@@ -134,8 +133,7 @@ export function CloudSyncPanel({
 
         scanFrame();
       } catch (error) {
-        setStatus(`Camera could not open: ${error?.message || String(error)}. You can still use your phone camera or choose a saved QR image.`);
-        setScannerOpen(false);
+        setStatus(`Camera could not open: ${error?.message || String(error)}. Check camera permission, use the phone Camera app, or choose a saved QR image below.`);
       }
     }
 
@@ -424,8 +422,8 @@ export function CloudSyncPanel({
             </button>
 
             <button type="button" onClick={openScanner} disabled={Boolean(busy)}>
-              <strong>Scan Recovery QR</strong>
-              <small>Use this device&apos;s camera to find a QR</small>
+              <strong>Open Camera Scanner</strong>
+              <small>Use the live camera to scan another device</small>
             </button>
 
             <button type="button" onClick={exportKit} disabled={Boolean(busy)}>
@@ -462,8 +460,8 @@ export function CloudSyncPanel({
           </button>
 
           <button type="button" onClick={openScanner}>
-            <strong>Scan Recovery QR</strong>
-            <small>Link by pointing the camera at another device</small>
+            <strong>Open Camera Scanner</strong>
+            <small>Use the live camera to scan another device</small>
           </button>
 
           <button type="button" onClick={beginLinkWithCode}>
@@ -510,6 +508,7 @@ export function CloudSyncPanel({
         ref={kitInputRef}
         className="settingsImportInput"
         type="file"
+        hidden
         accept=".json,application/json"
         onChange={importKit}
       />
@@ -517,6 +516,7 @@ export function CloudSyncPanel({
         ref={qrImageInputRef}
         className="settingsImportInput"
         type="file"
+        hidden
         accept="image/*"
         onChange={scanQrImage}
       />
@@ -536,7 +536,7 @@ export function CloudSyncPanel({
           onClick={() => qrImageInputRef.current?.click()}
           disabled={Boolean(busy)}
         >
-          Read QR From Image
+          Read Saved QR Image
         </button>
       </div>
 
@@ -551,8 +551,8 @@ export function CloudSyncPanel({
           <section className="cloudSyncQrCard" role="dialog" aria-modal="true" aria-labelledby="recovery-qr-title" onClick={(event) => event.stopPropagation()}>
             <button type="button" className="cloudSyncModalClose" onClick={() => setShowQr(false)} aria-label="Close Recovery QR">×</button>
             <p className="settingsWorkshopEyebrow">Private Device Link</p>
-            <h3 id="recovery-qr-title">Scan Recovery QR</h3>
-            <p>On the other device, use the phone camera or JoeAnimeDB&apos;s <strong>Scan Recovery QR</strong> button.</p>
+            <h3 id="recovery-qr-title">Recovery QR</h3>
+            <p>On the other device, scan this with the phone&apos;s normal Camera app, or use JoeAnimeDB&apos;s <strong>Open Camera Scanner</strong>.</p>
             <div className="cloudSyncQrImageWrap">
               <img src={qrImage} alt="JoeAnimeDB Recovery QR code" />
             </div>
@@ -566,14 +566,14 @@ export function CloudSyncPanel({
           <section className="cloudSyncScannerCard" role="dialog" aria-modal="true" aria-labelledby="recovery-scanner-title" onClick={(event) => event.stopPropagation()}>
             <button type="button" className="cloudSyncModalClose" onClick={() => setScannerOpen(false)} aria-label="Close QR scanner">×</button>
             <p className="settingsWorkshopEyebrow">Camera Pairing</p>
-            <h3 id="recovery-scanner-title">Look for Recovery QR</h3>
-            <p>Point this device at the Recovery QR shown on your other JoeAnimeDB device.</p>
+            <h3 id="recovery-scanner-title">Live QR Scanner</h3>
+            <p>Allow camera access, then point this device at the Recovery QR shown on your other JoeAnimeDB device.</p>
             <div className="cloudSyncScannerViewport">
-              <video ref={scannerVideoRef} playsInline muted />
+              <video ref={scannerVideoRef} autoPlay playsInline muted />
               <div className="cloudSyncScannerTarget" aria-hidden="true" />
             </div>
             <button type="button" onClick={() => qrImageInputRef.current?.click()}>
-              Choose a saved QR image instead
+              Can&apos;t use the camera? Read a saved QR image
             </button>
           </section>
         </div>

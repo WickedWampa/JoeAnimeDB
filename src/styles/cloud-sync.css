@@ -375,3 +375,10 @@
     border-radius: 22px 22px 14px 14px;
   }
 }
+
+
+/* QR recovery inputs are programmatic fallbacks only. Never let mobile input
+   styles place them over the live-camera button. */
+.cloudSyncPanel input.settingsImportInput[hidden] {
+  display: none !important;
+}
