@@ -72,6 +72,7 @@ try {
     ['recommend something like Space Dandy but under 12 episodes', 'recommendation'],
     ['recommend something darker', 'recommendation'],
     ['recommend a 12 episode anime', 'recommendation'],
+    ['recommend slice of life over 12 episodes', 'recommendation'],
     ['give me a hidden gem', 'recommendation'],
     ['pick my next anime', 'recommendation'],
     ['surprise me', 'recommendation'],
@@ -366,6 +367,148 @@ try {
     shortCards.items.every((item) => !/Knowledge boost:/i.test(item.deepDive || '')),
     'Why text should explain the pick without exposing internal scoring jargon'
   );
+
+
+  // Root regression: broad recommendation constraints must be hard filters, not
+  // loose scoring hints. In particular, "over 12" must never be read as "12 or fewer",
+  // and an explicit genre must come from metadata instead of synopsis keyword overlap.
+  const hardConstraintCatalog = [
+    null,
+    {
+      id: 'sol-13',
+      title: 'Slice Life Thirteen',
+      officialTitle: 'Slice Life Thirteen',
+      genres: ['Slice of Life', 'Comedy'],
+      synopsis: 'Friends settle into everyday school and family routines.',
+      episodeCount: 13,
+      type: 'TV',
+      communityScore: 8.1
+    },
+    {
+      id: 'sol-24',
+      title: 'Slice Life Twenty Four',
+      officialTitle: 'Slice Life Twenty Four',
+      genres: ['Slice of Life'],
+      synopsis: 'A quiet everyday character story.',
+      episodeCount: 24,
+      type: 'TV',
+      communityScore: 7.9
+    },
+    {
+      id: 'sol-12',
+      title: 'Slice Life Twelve',
+      officialTitle: 'Slice Life Twelve',
+      genres: ['Slice of Life'],
+      synopsis: 'A twelve episode everyday story.',
+      episodeCount: 12,
+      type: 'TV',
+      communityScore: 8.6
+    },
+    {
+      id: 'action-decoy-25',
+      title: 'Titan Action Decoy',
+      officialTitle: 'Titan Action Decoy',
+      genres: ['Action', 'Drama', 'Suspense'],
+      synopsis: 'A brutal survival story that happens to mention slice of life in a review quote.',
+      episodeCount: 25,
+      type: 'TV',
+      communityScore: 9.4
+    },
+    {
+      id: 'comedy-23',
+      title: 'Comedy Twenty Three',
+      officialTitle: 'Comedy Twenty Three',
+      genres: ['Comedy'],
+      episodeCount: 23,
+      type: 'TV',
+      communityScore: 8.0
+    },
+    {
+      id: 'comedy-24',
+      title: 'Comedy Twenty Four',
+      officialTitle: 'Comedy Twenty Four',
+      genres: ['Comedy'],
+      episodeCount: 24,
+      type: 'TV',
+      communityScore: 9.2
+    },
+    {
+      id: 'fantasy-24',
+      title: 'Fantasy Twenty Four',
+      officialTitle: 'Fantasy Twenty Four',
+      genres: ['Fantasy'],
+      episodeCount: 24,
+      type: 'TV',
+      communityScore: 8.2
+    },
+    {
+      id: 'fantasy-13',
+      title: 'Fantasy Thirteen',
+      officialTitle: 'Fantasy Thirteen',
+      genres: ['Fantasy'],
+      episodeCount: 13,
+      type: 'TV',
+      communityScore: 9.0
+    }
+  ];
+
+  const longSliceOfLife = recommendationModule.routeJoeAIRecommendation(
+    'recommend slice of life over 12 episodes',
+    [],
+    hardConstraintCatalog
+  );
+  assert.equal(longSliceOfLife?.type, 'recommendationCards');
+  assert.ok(longSliceOfLife.items?.length >= 2, 'Long Slice of Life request should return valid candidates');
+  assert.match(longSliceOfLife.title || '', /Slice of Life/i);
+  assert.match(longSliceOfLife.title || '', /13\+ episodes/i);
+  assert.ok(
+    longSliceOfLife.items.every((item) =>
+      (item.genres || []).some((genre) => String(genre).toLowerCase() === 'slice of life')
+      && Number(item.episodeCount || item.episodes || 0) > 12
+    ),
+    'Slice of Life over 12 must enforce both the genre and lower episode bound'
+  );
+  assert.ok(
+    longSliceOfLife.items.every((item) => item.id !== 'action-decoy-25' && item.id !== 'sol-12'),
+    'Wrong-genre and 12-episode decoys must not leak into hard-constrained results'
+  );
+
+  const comedyUnder24 = recommendationModule.routeJoeAIRecommendation(
+    'recommend comedy under 24 episodes',
+    [],
+    hardConstraintCatalog
+  );
+  assert.equal(comedyUnder24?.type, 'recommendationCards');
+  assert.ok(comedyUnder24.items?.some((item) => item.id === 'comedy-23'));
+  assert.ok(comedyUnder24.items?.every((item) => Number(item.episodeCount || item.episodes || 0) <= 23));
+  assert.ok(comedyUnder24.items?.every((item) => (item.genres || []).includes('Comedy')));
+
+  const fantasyAtLeast24 = recommendationModule.routeJoeAIRecommendation(
+    'recommend fantasy at least 24 episodes',
+    [],
+    hardConstraintCatalog
+  );
+  assert.equal(fantasyAtLeast24?.type, 'recommendationCards');
+  assert.ok(fantasyAtLeast24.items?.some((item) => item.id === 'fantasy-24'));
+  assert.ok(fantasyAtLeast24.items?.every((item) => Number(item.episodeCount || item.episodes || 0) >= 24));
+  assert.ok(fantasyAtLeast24.items?.every((item) => (item.genres || []).includes('Fantasy')));
+
+
+  const schoolDaysTitle = {
+    id: 'school-days-title',
+    title: 'School Days',
+    officialTitle: 'School Days',
+    genres: ['Drama', 'Romance'],
+    episodeCount: 12,
+    type: 'TV'
+  };
+  const schoolDaysAnswer = recommendationModule.routeJoeAIRecommendation(
+    'recommend School Days',
+    [],
+    [schoolDaysTitle]
+  );
+  assert.equal(schoolDaysAnswer?.type, 'text', 'Genre words inside a known title must not hijack title lookup');
+  assert.match(schoolDaysAnswer?.text || '', /School Days/);
 
   const fallbackPick = {
     id: 'fallback-card',
