@@ -21,3 +21,4 @@ dist-desktop/
 
 # Private Android release signing material
 android-signing-private/
+.env.local
