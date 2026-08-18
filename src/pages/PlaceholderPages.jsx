@@ -1927,47 +1927,64 @@ export function Assistant({
   }
 
   function buildJoeAICloudContext(prompt = '', localEvidence = null) {
+    const reflectionPrompt = isJoeAILibraryReflectionQuestion(prompt);
+    const comparisonPrompt = isJoeAIComparisonQuestion(prompt);
+    const contextMode = reflectionPrompt
+      ? 'libraryReflection'
+      : (comparisonPrompt ? 'titleComparison' : 'conversation');
+
+    const limits = reflectionPrompt
+      ? { topRated: 6, favorites: 5, rewatches: 5, genres: 6, studios: 5, recentRecommendations: 0 }
+      : comparisonPrompt
+        ? { topRated: 6, favorites: 6, rewatches: 6, genres: 6, studios: 4, recentRecommendations: 2 }
+        : { topRated: 8, favorites: 6, rewatches: 6, genres: 8, studios: 6, recentRecommendations: 4 };
+
     const scored = [...anime]
       .filter((item) => Number(item.joeScore ?? score(item) ?? 0) > 0)
       .sort((a, b) => Number(b.joeScore ?? score(b) ?? 0) - Number(a.joeScore ?? score(a) ?? 0));
 
     const favorites = anime
       .filter((item) => item.favorite)
-      .slice(0, 10)
+      .slice(0, limits.favorites)
       .map((item) => cloudCompactAnime(item, { source: 'library' }));
     const rewatches = anime
       .filter((item) => Number(item.rewatches || 0) > 0)
       .sort((a, b) => Number(b.rewatches || 0) - Number(a.rewatches || 0))
-      .slice(0, 10)
+      .slice(0, limits.rewatches)
       .map((item) => cloudCompactAnime(item, { source: 'library' }));
 
     const topGenres = countBy(anime.flatMap((item) => Array.isArray(item.genres) ? item.genres : []))
-      .slice(0, 10)
+      .slice(0, limits.genres)
       .map(([name, count]) => ({ name, count }));
     const topStudios = countBy(anime.map((item) => item.studio).filter(Boolean))
-      .slice(0, 8)
+      .slice(0, limits.studios)
       .map(([name, count]) => ({ name, count }));
 
     const titleMatches = findCloudTitleMatches(prompt).map(({ item, source }) =>
       cloudCompactAnime(item, { rich: true, source })
     );
-    const comparisonPrompt = isJoeAIComparisonQuestion(prompt);
 
-    // Comparison prompts get a tiny title/status/score index. This lets the model
-    // resolve shorthand like "JJK" without shipping the full 135-title records.
+    // Exact titleMatches carry the rich facts. The comparison index only needs
+    // names for shorthand resolution, which saves a large amount of prompt data.
     const libraryIndex = comparisonPrompt
-      ? anime.slice(0, 220).map((item) => ({
-          title: item.officialTitle || item.title || '',
-          score: Number(item.joeScore ?? score(item) ?? 0) || undefined,
-          status: item.status || undefined,
-          favorite: Boolean(item.favorite) || undefined,
-          rewatches: Number(item.rewatches || 0) || undefined
-        }))
+      ? anime
+          .slice(0, 220)
+          .map((item) => item.officialTitle || item.title || '')
+          .filter(Boolean)
+      : undefined;
+
+    const recentRecommendations = limits.recentRecommendations > 0
+      ? compactCloudValue(
+          Array.isArray(conversationContext?.lastRecommendations)
+            ? conversationContext.lastRecommendations.slice(0, limits.recentRecommendations)
+            : []
+        )
       : undefined;
 
     return {
+      contextMode,
       libraryCount: anime.length,
-      topRated: scored.slice(0, 12).map((item) => cloudCompactAnime(item, { source: 'library' })),
+      topRated: scored.slice(0, limits.topRated).map((item) => cloudCompactAnime(item, { source: 'library' })),
       favorites,
       rewatches,
       topGenres,
@@ -1978,11 +1995,7 @@ export function Assistant({
       conversation: {
         lastReferencedTitle: conversationContext?.lastReferencedTitle || '',
         lastPrompt: conversationContext?.lastPrompt || '',
-        lastRecommendations: compactCloudValue(
-          Array.isArray(conversationContext?.lastRecommendations)
-            ? conversationContext.lastRecommendations.slice(0, 8)
-            : []
-        )
+        lastRecommendations: recentRecommendations
       }
     };
   }

@@ -397,16 +397,21 @@ async function runRecommendationRerank(env, prompt, context = {}) {
   });
 }
 
-async function runFastConversationFallback(env, messages = [], reason = '') {
+async function runFastConversationFallback(env, messages = [], reason = '', maxTokens = 520) {
   try {
+    const startedAt = Date.now();
     const result = await env.AI.run(RERANK_MODEL, {
       messages,
-      max_tokens: 650,
-      temperature: 0.4
+      max_tokens: maxTokens,
+      temperature: 0.35
     });
     const text = extractText(result).trim();
     const shape = responseShape(result);
-    console.log('JoeAnime fast conversation fallback response shape:', shape, reason ? { reason } : {});
+    console.log('JoeAnime fast conversation response shape:', {
+      ...shape,
+      latencyMs: Date.now() - startedAt,
+      reason
+    });
     if (!text) return null;
     return {
       text,
@@ -419,8 +424,18 @@ async function runFastConversationFallback(env, messages = [], reason = '') {
   }
 }
 
+function conversationKind(context = {}) {
+  const explicit = String(context?.contextMode || '').trim();
+  if (explicit) return explicit;
+  const evidenceKind = String(context?.localEvidence?.kind || '').trim();
+  if (evidenceKind === 'libraryReflection') return 'libraryReflection';
+  if (evidenceKind === 'titleComparison' || context?.localEvidence?.comparisonMode) return 'titleComparison';
+  return 'conversation';
+}
+
 async function runConversation(env, prompt, context = {}) {
-  const joeAnimeContext = compactContext(context);
+  const kind = conversationKind(context);
+  const joeAnimeContext = compactContext(context, 14000);
   const messages = [
     {
       role: 'system',
@@ -433,25 +448,57 @@ async function runConversation(env, prompt, context = {}) {
         'For comparison questions, treat localEvidence.companions, metrics, and contributors as broad library signals only; never treat the user comparison phrase itself as a genre or claim that every library title matches it.',
         'For comparisons, prioritize titleMatches and libraryIndex for title-specific facts. Resolve an obvious shorthand only when it is unambiguous from the supplied titles; otherwise say which title detail is uncertain.',
         'When data is missing, say you do not have that detail instead of guessing.',
-        'Absence from the library is not proof the user dislikes or avoids something. For blind-spot, avoidance, or underrepresented-category questions, say a genre/studio/type is underrepresented or absent unless explicit negative evidence (for example dropped status, rejection feedback, or a stated dislike) is supplied. Never say the user systematically avoids a category from absence alone.',
+        'Absence from the library is not proof the user dislikes or avoids something. For blind-spot, avoidance, or underrepresented-category questions, say a genre/studio/type is underrepresented or absent unless explicit negative evidence is supplied.',
         'Do not call synopsis, Genome fields, title metadata, or inferred themes user notes. User notes are not supplied in this request unless an explicit notes field exists.',
         'Do not expose implementation details, provider names, model names, or internal routing unless the user explicitly asks.',
-        'Use light Markdown when useful. Keep most answers under 250 words, finish every sentence, and do not start a section you cannot complete.'
+        'Use light Markdown when useful. Be concise: most answers should be under 140 words, library reflections under 110 words, and comparisons under 160 words. Finish every sentence and never start a section you cannot complete.'
       ].join(' ')
     },
     {
       role: 'user',
-      content: `JOEANIMEDB CONTEXT:\n${joeAnimeContext}\n\nUSER:\n${prompt}`
+      content: `JOEANIMEDB CONTEXT:
+${joeAnimeContext}
+
+USER:
+${prompt}`
     }
   ];
 
+  console.log('JoeAnime conversation request:', {
+    kind,
+    contextChars: joeAnimeContext.length
+  });
+
+  // Library reflection is synthesis over already-computed local evidence. Use the
+  // fast model directly instead of paying reasoning-model latency for this path.
+  if (kind === 'libraryReflection') {
+    const fastReflection = await runFastConversationFallback(
+      env,
+      messages,
+      'library reflection fast path',
+      500
+    );
+    if (fastReflection) {
+      return json({
+        ok: true,
+        mode: 'conversation',
+        text: fastReflection.text,
+        model: fastReflection.model,
+        usage: fastReflection.usage,
+        fastPath: true
+      });
+    }
+  }
+
+  const maxCompletionTokens = kind === 'titleComparison' ? 1200 : 900;
   let result = null;
+  const startedAt = Date.now();
   try {
     result = await env.AI.run(CHAT_MODEL, {
       messages,
-      max_completion_tokens: 1800,
+      max_completion_tokens: maxCompletionTokens,
       reasoning_effort: 'low',
-      temperature: 0.6
+      temperature: 0.55
     });
   } catch (error) {
     console.warn('JoeAnime primary conversation model failed; trying fast fallback:', error);
@@ -470,12 +517,36 @@ async function runConversation(env, prompt, context = {}) {
   }
 
   const shape = responseShape(result);
-  console.log('JoeAnime Workers AI response shape:', shape);
-
+  console.log('JoeAnime Workers AI response shape:', {
+    ...shape,
+    kind,
+    contextChars: joeAnimeContext.length,
+    latencyMs: Date.now() - startedAt
+  });
   const text = extractText(result).trim();
+
+  if (shape.finishReason === 'length') {
+    console.warn('JoeAnime primary conversation hit its output budget; using fast concise fallback.');
+    const fallback = await runFastConversationFallback(env, messages, 'primary output limit', 520);
+    if (fallback) {
+      return json({
+        ok: true,
+        mode: 'conversation',
+        text: fallback.text,
+        model: fallback.model,
+        usage: fallback.usage,
+        fallback: true
+      });
+    }
+  }
+
   if (!text) {
     console.warn('JoeAnime Workers AI returned no final text; trying fast fallback:', shape);
-    const fallback = await runFastConversationFallback(env, messages, `empty primary response (${shape.finishReason || 'unknown'})`);
+    const fallback = await runFastConversationFallback(
+      env,
+      messages,
+      `empty primary response (${shape.finishReason || 'unknown'})`
+    );
     if (fallback) {
       return json({
         ok: true,
