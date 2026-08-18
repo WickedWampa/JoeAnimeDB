@@ -29,8 +29,8 @@ android {
         applicationId "com.joeanimedb.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 5000019
-        versionName "5.0.0-beta.18"
+        versionCode 5000020
+        versionName "5.0.0-beta.20"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
