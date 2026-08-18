@@ -31,7 +31,7 @@ import {
   wikidataRepairNeeds
 } from '../services/wikidataRepair';
 import { getAnimeStudios, getAnimeTasteSignals } from '../utils/metadataAdapters';
-import { coordinateJoeAIRecommendation } from '../ai/recommendationCoordinator';
+import { coordinateJoeAIRecommendation, enrichRecommendationItems } from '../ai/recommendationCoordinator';
 import { getTasteReadiness } from '../ai/tasteReadiness';
 import { friendlyJoeAIError } from '../ai/joeAIErrorResponse';
 import {
@@ -44,6 +44,7 @@ import {
   inferFeedbackTraits,
   recommendationKey,
   resolveJoeAIFollowUp,
+  sanitizeJoeAIConversationMessages,
   updateJoeAIConversationContext
 } from '../ai/intelligence/joeAIIntelligence';
 import {
@@ -52,6 +53,15 @@ import {
   filterContentBySafety,
   getContentRating
 } from '../services/contentSafety';
+import { askJoeAICloud, isJoeAICloudEnabled } from '../services/joeAICloud';
+import {
+  animeIdentityKeys,
+  sameAnimeIdentity,
+  titleAliases as identityTitleAliases
+} from '../services/titleIdentity';
+import { franchiseBaseTitle } from '../utils/titleAliases';
+import { getJoeAIEasterEgg } from '../ai/joeAIEasterEggs';
+import '../styles/joeai-cloud.css';
 
 function localDaySeed(date = new Date()) {
   return Number(
@@ -207,6 +217,7 @@ export function Assistant({
   anime,
   catalog: rawCatalog = [],
   updateAnime,
+  setSelected,
   joeAIState = {},
   contentSafetyMode = 'unrestricted',
   onRecommendationFeedback,
@@ -227,13 +238,20 @@ export function Assistant({
     () => createAnimeBrain(recommendationAnime, catalog, { joeAIState }),
     [recommendationAnime, catalog, joeAIState]
   );
-  const [log, setLog] = useState([
-    {
-      who: 'bot',
-      type: 'text',
-      text: 'JoeAI is wicked smaht now. Ask what I can do, tell me what you finished, bulk add titles, or ask for recommendations.'
-    }
-  ]);
+  const [log, setLog] = useState(() => {
+    const savedMessages = sanitizeJoeAIConversationMessages(
+      joeAIState?.conversation?.messages || [],
+      48
+    );
+
+    return savedMessages.length
+      ? savedMessages
+      : [{
+          who: 'bot',
+          type: 'text',
+          text: 'JoeAI is wicked smaht now. Ask what I can do, tell me what you finished, bulk add titles, or ask for recommendations.'
+        }];
+  });
   const [text, setText] = useState('');
   const [addingId, setAddingId] = useState('');
   const [pendingAction, setPendingAction] = useState(null);
@@ -244,12 +262,45 @@ export function Assistant({
       ? joeAIState.conversation.lastRecommendations.slice(0, 10)
       : [],
     lastReferencedTitle: joeAIState?.conversation?.lastReferencedTitle || '',
-    lastPrompt: joeAIState?.conversation?.lastPrompt || ''
+    lastPrompt: joeAIState?.conversation?.lastPrompt || '',
+    lastRecommendationPrompt: joeAIState?.conversation?.lastRecommendationPrompt || '',
+    recentRecommendationKeys: Array.isArray(joeAIState?.conversation?.recentRecommendationKeys)
+      ? joeAIState.conversation.recentRecommendationKeys.slice(0, 48)
+      : [],
+    lastConstraints: joeAIState?.conversation?.lastConstraints && typeof joeAIState.conversation.lastConstraints === 'object'
+      ? joeAIState.conversation.lastConstraints
+      : { exclude: [] }
   }));
   const [feedbackMenuId, setFeedbackMenuId] = useState('');
   const [feedbackStatus, setFeedbackStatus] = useState({});
+  const [cloudThinking, setCloudThinking] = useState(false);
   const lastAutoPromptRef = useRef('');
   const conversationRef = useRef(null);
+  const onJoeAIConversationRef = useRef(onJoeAIConversation);
+  const skipInitialConversationPersistRef = useRef(true);
+
+  useEffect(() => {
+    onJoeAIConversationRef.current = onJoeAIConversation;
+  }, [onJoeAIConversation]);
+
+  useEffect(() => {
+    if (skipInitialConversationPersistRef.current) {
+      skipInitialConversationPersistRef.current = false;
+      return;
+    }
+
+    const persist = onJoeAIConversationRef.current;
+    if (!persist) return;
+
+    const snapshot = {
+      ...conversationContext,
+      messages: sanitizeJoeAIConversationMessages(log, 48)
+    };
+
+    Promise.resolve(persist(snapshot)).catch((error) => {
+      console.warn('Could not persist JoeAI conversation:', error);
+    });
+  }, [log, conversationContext]);
 
   useEffect(() => {
     const refreshDailyPick = () => {
@@ -273,7 +324,7 @@ export function Assistant({
         behavior: 'smooth'
       });
     });
-  }, [log, pendingAction, expandedRecommendationIds]);
+  }, [log, pendingAction, expandedRecommendationIds, cloudThinking]);
 
   useEffect(() => {
     let storedPrompt = '';
@@ -333,6 +384,213 @@ export function Assistant({
     return String(item?.malId || item?.id || item?.title || '')
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-');
+  }
+
+  function recommendationDetailTitleKey(value = '') {
+    return String(value || '')
+      .normalize('NFKC')
+      .toLocaleLowerCase()
+      .replace(/[^\p{L}\p{N}]+/gu, ' ')
+      .trim();
+  }
+
+  function recommendationDetailTitles(item = {}) {
+    return identityTitleAliases(item)
+      .filter(Boolean)
+      .map(recommendationDetailTitleKey)
+      .filter(Boolean);
+  }
+
+  function recommendationDetailProviderId(item = {}, provider) {
+    if (provider === 'mal') {
+      const value = item.malId ?? item.mal_id;
+      return value == null || value === '' ? '' : String(value);
+    }
+
+    const value = item.kitsuId ?? item.kitsu_id;
+    return value == null || value === '' ? '' : String(value);
+  }
+
+  function recommendationDetailCandidateScore(item = {}, candidate = {}) {
+    if (!candidate || typeof candidate !== 'object') return -1;
+
+    const itemMal = recommendationDetailProviderId(item, 'mal');
+    const candidateMal = recommendationDetailProviderId(candidate, 'mal');
+    const itemKitsu = recommendationDetailProviderId(item, 'kitsu');
+    const candidateKitsu = recommendationDetailProviderId(candidate, 'kitsu');
+
+    // Conflicting provider IDs are never the same anime, even when their titles
+    // normalize to the same text.
+    if (itemMal && candidateMal && itemMal !== candidateMal) return -1;
+    if (itemKitsu && candidateKitsu && itemKitsu !== candidateKitsu) return -1;
+
+    let matchScore = 0;
+    const exactMal = Boolean(itemMal && candidateMal && itemMal === candidateMal);
+    const exactKitsu = Boolean(itemKitsu && candidateKitsu && itemKitsu === candidateKitsu);
+    const exactId = Boolean(
+      item.id != null &&
+      candidate.id != null &&
+      String(item.id) === String(candidate.id)
+    );
+
+    if (exactMal) matchScore += 1000;
+    if (exactKitsu) matchScore += 1000;
+    if (exactId) matchScore += 900;
+
+    const itemHasProviderId = Boolean(itemMal || itemKitsu);
+    const exactProviderMatch = exactMal || exactKitsu;
+
+    // If JoeAI already knows a provider ID, a title-only duplicate is not
+    // allowed to hijack the Details handoff.
+    if (itemHasProviderId && !exactProviderMatch && !exactId) return -1;
+
+    const wantedTitles = new Set(recommendationDetailTitles(item));
+    const titleMatch = recommendationDetailTitles(candidate).some((title) => wantedTitles.has(title));
+
+    if (!exactProviderMatch && !exactId) {
+      if (!titleMatch) return -1;
+
+      const itemType = recommendationDetailTitleKey(item.type || item.mediaType || '');
+      const candidateType = recommendationDetailTitleKey(candidate.type || candidate.mediaType || '');
+      if (itemType && candidateType && itemType !== candidateType) return -1;
+
+      const itemYear = Number(item.year || 0);
+      const candidateYear = Number(candidate.year || 0);
+      if (itemYear && candidateYear && itemYear !== candidateYear) return -1;
+
+      matchScore += 100;
+      if (itemType && candidateType) matchScore += 20;
+      if (itemYear && candidateYear) matchScore += 20;
+    } else if (titleMatch) {
+      matchScore += 25;
+    }
+
+    if (candidate.cover || candidate.poster || candidate.posterUrl || candidate.imageUrl || candidate.image) matchScore += 5;
+    if (candidate.synopsis || candidate.description) matchScore += 5;
+    if (Number(candidate.episodeCount || candidate.episodes || 0) > 0) matchScore += 3;
+    if (candidate.studio || candidate.studios?.length) matchScore += 3;
+    if (candidate.year) matchScore += 2;
+
+    return matchScore;
+  }
+
+  function bestRecommendationDetailCandidate(item = {}, pool = []) {
+    let best = null;
+    let bestScore = -1;
+
+    for (const candidate of Array.isArray(pool) ? pool : []) {
+      const candidateScore = recommendationDetailCandidateScore(item, candidate);
+      if (candidateScore > bestScore) {
+        best = candidate;
+        bestScore = candidateScore;
+      }
+    }
+
+    return bestScore >= 0 ? best : null;
+  }
+
+  function recommendationDetailValueMissing(value) {
+    if (value == null) return true;
+    if (typeof value === 'string') return !value.trim();
+    if (Array.isArray(value)) return value.length === 0;
+    return false;
+  }
+
+  function mergeRecommendationDetailRecord(item = {}, fallback = null) {
+    const merged = { ...item };
+
+    // The object JoeAI rendered is authoritative. A matching local/catalog row
+    // may fill holes, but it can never overwrite populated recommendation data.
+    if (fallback && typeof fallback === 'object') {
+      for (const [key, value] of Object.entries(fallback)) {
+        if (recommendationDetailValueMissing(merged[key]) && !recommendationDetailValueMissing(value)) {
+          merged[key] = value;
+        }
+      }
+    }
+
+    const cover =
+      item.cover || item.poster || item.posterUrl || item.imageUrl || item.image ||
+      fallback?.cover || fallback?.poster || fallback?.posterUrl || fallback?.imageUrl || fallback?.image || '';
+    const synopsis =
+      item.synopsis || item.description ||
+      fallback?.synopsis || fallback?.description || '';
+    const episodeCount = Number(
+      item.episodeCount || item.episodes ||
+      fallback?.episodeCount || fallback?.episodes || 0
+    );
+    const studio =
+      item.studio ||
+      item.studios?.[0]?.name || item.studios?.[0] ||
+      fallback?.studio ||
+      fallback?.studios?.[0]?.name || fallback?.studios?.[0] || '';
+
+    if (cover) {
+      merged.cover = cover;
+      merged.imageUrl = item.imageUrl || cover;
+    }
+    if (synopsis) merged.synopsis = synopsis;
+    if (episodeCount > 0) {
+      merged.episodeCount = episodeCount;
+      merged.episodes = episodeCount;
+    }
+    if (studio) merged.studio = studio;
+
+    merged.title = item.title || item.officialTitle || fallback?.title || fallback?.officialTitle || '';
+    merged.officialTitle = item.officialTitle || item.title || fallback?.officialTitle || fallback?.title || merged.title;
+    merged.type = item.type || item.mediaType || fallback?.type || fallback?.mediaType || merged.type || '';
+    merged.year = item.year || fallback?.year || merged.year || '';
+    merged.malId = item.malId ?? item.mal_id ?? fallback?.malId ?? fallback?.mal_id ?? merged.malId;
+    merged.kitsuId = item.kitsuId ?? item.kitsu_id ?? fallback?.kitsuId ?? fallback?.kitsu_id ?? merged.kitsuId;
+    merged.communityScore =
+      item.communityScore ?? item.malScore ??
+      fallback?.communityScore ?? fallback?.malScore ??
+      merged.communityScore;
+    merged.malScore = item.malScore ?? fallback?.malScore ?? merged.malScore;
+
+    return merged;
+  }
+
+  function openRecommendationDetails(item = {}) {
+    if (!setSelected || !item || typeof item !== 'object') return;
+
+    const owned = Boolean(item.owned || item.bucket === 'library');
+    const sourcePool = owned ? anime : catalog;
+    const exactCandidate = bestRecommendationDetailCandidate(item, sourcePool);
+    const detailRecord = mergeRecommendationDetailRecord(item, exactCandidate);
+
+    if (owned && exactCandidate) {
+      // Keep rich recommendation metadata while restoring the user's personal
+      // relationship fields from the actual saved library row.
+      [
+        'status',
+        'joeScore',
+        'favorite',
+        'notes',
+        'rewatches',
+        'finalRank',
+        'libraryNeedsReview',
+        'libraryReviewReason'
+      ].forEach((field) => {
+        if (exactCandidate[field] !== undefined) detailRecord[field] = exactCandidate[field];
+      });
+
+      detailRecord.id = exactCandidate.id || detailRecord.id;
+      detailRecord.catalogSource = '';
+    } else {
+      // Discoveries open the exact rich object JoeAI displayed. Matching catalog
+      // data may fill blanks only; it never replaces populated fields or identity.
+      detailRecord.id = item.id || exactCandidate?.id || detailRecord.id || item.malId || item.kitsuId || item.title;
+      detailRecord.catalogSource = item.catalogSource || exactCandidate?.catalogSource || 'joeai';
+    }
+
+    setSelected(detailRecord);
+  }
+
+  function openRecommendationDetailsFromKeyboard(event, item) {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    openRecommendationDetails(item);
   }
 
   function parseStatus(value = '') {
@@ -547,23 +805,14 @@ export function Assistant({
   function appendBotResult(result, prompt = '') {
     if (!result) return;
 
-    if (typeof result === 'string') {
-      setLog((current) => [...current, { who: 'bot', type: 'text', text: result }]);
-      return;
-    }
+    const normalizedResult = typeof result === 'string'
+      ? { type: 'text', text: result }
+      : result;
 
-    setLog((current) => [...current, { who: 'bot', ...result }]);
-    setConversationContext((current) => {
-      const next = updateJoeAIConversationContext(result, prompt, current);
-
-      if (onJoeAIConversation) {
-        Promise.resolve(onJoeAIConversation(next)).catch((error) => {
-          console.warn('Could not persist JoeAI conversation context:', error);
-        });
-      }
-
-      return next;
-    });
+    setLog((current) => [...current, { who: 'bot', ...normalizedResult }]);
+    setConversationContext((current) =>
+      updateJoeAIConversationContext(normalizedResult, prompt, current)
+    );
   }
 
   function toggleRecommendationWhy(id) {
@@ -731,20 +980,1112 @@ export function Assistant({
     }
   }
 
+  function compactCloudValue(value, depth = 0) {
+    if (value == null) return value;
+    if (depth > 4) return undefined;
+    if (typeof value === 'string') return value.length > 1600 ? `${value.slice(0, 1600)}…` : value;
+    if (typeof value === 'number' || typeof value === 'boolean') return value;
+    if (Array.isArray(value)) {
+      return value.slice(0, 14).map((item) => compactCloudValue(item, depth + 1)).filter((item) => item !== undefined);
+    }
+    if (typeof value !== 'object') return undefined;
+
+    const omittedKeys = new Set([
+      'cover', 'poster', 'posterUrl', 'imageUrl', 'image', 'banner', 'bannerImage',
+      'background', 'backgroundImage', 'notes', 'userNotes'
+    ]);
+    const entries = Object.entries(value)
+      .filter(([key]) => !omittedKeys.has(key))
+      .slice(0, 32)
+      .map(([key, item]) => [key, compactCloudValue(item, depth + 1)])
+      .filter(([, item]) => item !== undefined);
+
+    return Object.fromEntries(entries);
+  }
+
+  function cloudCompactAnime(item = {}, { rich = false, source = '' } = {}) {
+    // Never label a catalog/community score as the user's personal score. Only
+    // library/owned records are allowed to contribute a personal rating signal.
+    const isLibraryRecord = source === 'library' || Boolean(item.owned);
+    const userScore = isLibraryRecord
+      ? Number(item.joeScore ?? item.userScore ?? item.personalScore ?? item.score ?? item.rating ?? 0)
+      : 0;
+    const aliases = [
+      item.officialTitle,
+      item.englishTitle,
+      item.japaneseTitle,
+      item.shortTitle,
+      ...(Array.isArray(item.titleSynonyms) ? item.titleSynonyms : []),
+      ...(Array.isArray(item.synonyms) ? item.synonyms : []),
+      ...(Array.isArray(item.aliases) ? item.aliases : [])
+    ].filter(Boolean);
+
+    const record = {
+      title: item.officialTitle || item.title || '',
+      aliases: aliases.slice(0, 8),
+      score: userScore > 0 ? userScore : undefined,
+      communityScore: item.communityScore ?? item.malScore ?? undefined,
+      status: item.status || undefined,
+      favorite: Boolean(item.favorite) || undefined,
+      rewatches: Number(item.rewatches || 0) || undefined,
+      genres: Array.isArray(item.genres) ? item.genres.slice(0, 8) : [],
+      themes: Array.isArray(item.themes) ? item.themes.slice(0, 8) : [],
+      studio: item.studio || item.studios?.[0]?.name || item.studios?.[0] || undefined,
+      year: item.year || undefined,
+      type: item.type || item.mediaType || undefined,
+      episodes: Number(item.episodeCount || item.episodes || 0) || undefined,
+      malId: item.malId ?? item.mal_id ?? undefined,
+      kitsuId: item.kitsuId ?? item.kitsu_id ?? undefined,
+      source: source || undefined
+    };
+
+    if (rich) {
+      const synopsis = String(item.synopsis || item.description || '').trim();
+      if (synopsis) record.synopsis = synopsis.slice(0, 900);
+
+      const genome = item.genome || item.animeGenome || item.genomeCard || item.genomeData;
+      if (genome) record.genome = compactCloudValue(genome);
+    }
+
+    return record;
+  }
+
+  function cloudTitleAliases(item = {}) {
+    return [
+      ...recommendationDetailTitles(item),
+      item.shortTitle,
+      item.acronym,
+      ...(Array.isArray(item.synonyms) ? item.synonyms : []),
+      ...(Array.isArray(item.aliases) ? item.aliases : [])
+    ]
+      .filter(Boolean)
+      .map(recommendationDetailTitleKey)
+      .filter((title) => title.length >= 4);
+  }
+
+  function findCloudTitleMatches(prompt = '') {
+    const promptKey = recommendationDetailTitleKey(prompt);
+    if (!promptKey) return [];
+
+    const pool = [
+      ...anime.map((item) => ({ item, source: 'library' })),
+      ...catalog.map((item) => ({ item, source: 'catalog' }))
+    ];
+    const matches = [];
+    const seen = new Set();
+
+    for (const entry of pool) {
+      const aliases = cloudTitleAliases(entry.item);
+      const longestMatch = aliases
+        .filter((alias) => promptKey.includes(alias))
+        .sort((a, b) => b.length - a.length)[0];
+
+      if (!longestMatch) continue;
+
+      const identity = String(
+        entry.item.malId ?? entry.item.mal_id ??
+        entry.item.kitsuId ?? entry.item.kitsu_id ??
+        entry.item.id ?? entry.item.title ?? longestMatch
+      );
+      if (seen.has(identity)) continue;
+      seen.add(identity);
+      matches.push({ ...entry, matchLength: longestMatch.length });
+    }
+
+    return matches
+      .sort((a, b) => b.matchLength - a.matchLength || (a.source === 'library' ? -1 : 1))
+      .slice(0, 6);
+  }
+
+
+  function findHybridTitleByName(value = '') {
+    const key = recommendationDetailTitleKey(value);
+    if (!key) return null;
+
+    const pool = [...anime, ...catalog];
+    const exact = pool.find((item) => cloudTitleAliases(item).some((alias) => alias === key));
+    if (exact) return exact;
+
+    // Fall back to a contained alias only for reasonably descriptive names. This
+    // lets a local Genome result hand us an official title even when the prompt
+    // used a nickname such as "Slime".
+    return pool
+      .map((item) => ({
+        item,
+        alias: cloudTitleAliases(item)
+          .filter((alias) => alias.length >= 5 && (key.includes(alias) || alias.includes(key)))
+          .sort((a, b) => b.length - a.length)[0] || ''
+      }))
+      .filter((entry) => entry.alias)
+      .sort((a, b) => b.alias.length - a.alias.length)[0]?.item || null;
+  }
+
+  function resolveHybridSourceAnchor(prompt = '', localResult = null) {
+    // The local recommendation router already resolved "Slime" -> the actual
+    // source title. Prefer that authoritative resolution over re-parsing the raw
+    // prompt, which may only contain a nickname that cloudTitleAliases does not.
+    const explicitSource = String(
+      localResult?.sourceAnime ||
+      localResult?.sourceTitle ||
+      ''
+    ).trim();
+    if (explicitSource) {
+      const resolved = findHybridTitleByName(explicitSource);
+      if (resolved) return resolved;
+    }
+
+    const titleText = String(localResult?.title || '');
+    const becauseMatch = titleText.match(/because you like\s+(.+)$/i);
+    if (becauseMatch?.[1]) {
+      const resolved = findHybridTitleByName(becauseMatch[1].trim());
+      if (resolved) return resolved;
+    }
+
+    return findCloudTitleMatches(prompt)
+      .find((entry) => entry.source === 'library')?.item ||
+      findCloudTitleMatches(prompt)[0]?.item ||
+      null;
+  }
+
+  function isJoeAIComparisonQuestion(prompt = '') {
+    return /\b(vs\.?|versus|over|than|compare|comparison|between|prefer|prefers|preferred|better\s+than|more\s+than)\b/i.test(String(prompt || ''));
+  }
+
+  function isJoeAILibraryReflectionQuestion(prompt = '') {
+    const text = String(prompt || '').trim().toLowerCase();
+    if (!text) return false;
+
+    // These are questions about the user's overall taste/library, not title lookups.
+    // Catch them before the legacy title-question parser can turn phrases such as
+    // "unusual about my library" into a fake anime title.
+    return (
+      /\b(unusual|surprising|interesting|weird|unique|odd|unexpected)\b.*\b(my\s+)?(library|taste|anime)\b/i.test(text) ||
+      /\b(my\s+)?(library|taste)\b.*\b(unusual|surprising|interesting|weird|unique|odd|unexpected)\b/i.test(text) ||
+      /\b(blind\s+spot|biggest\s+blind\s+spot|weakness|strength)\b/i.test(text) ||
+      /\bwhat\s+(?:kind\s+of\s+anime\s+)?do\s+i\s+(?:seem\s+to\s+)?avoid\b/i.test(text) ||
+      /\bwhat\s+do\s+i\s+(?:seem\s+to\s+)?value\b/i.test(text) ||
+      /\bwhat\s+(?:does|do)\s+my\s+(?:anime\s+)?(?:taste|library)\s+(?:say|tell)\b/i.test(text) ||
+      /\bwhat\s+(?:patterns?|themes?)\s+(?:stand\s+out|show\s+up|define\s+me)\b/i.test(text) ||
+      /\bwhat\s+surprised\s+you\b/i.test(text) ||
+      (
+        /\b(my\s+(?:anime\s+)?(?:library|taste)|my\s+ratings|my\s+favorites|my\s+rewatches|anime\s+dna)\b/i.test(text) &&
+        /\b(what|why|how|which|tell|describe|analy[sz]e|explain|think)\b/i.test(text)
+      )
+    );
+  }
+
+  function isJoeAIRecommendationRequest(prompt = '') {
+    const text = String(prompt || '').trim();
+    if (!text) return false;
+
+    // Explanations about an existing recommendation should stay on the explanation
+    // route instead of accidentally starting a fresh recommendation run.
+    if (/\bwhy\b.{0,40}\b(?:recommend|recomend|suggest|pick|picked)\b/i.test(text)) return false;
+
+    return (
+      /\b(?:recommend|recomend|suggest)\b/i.test(text) ||
+      /\bwhat\s+should\s+i\s+watch(?:\s+next)?\b/i.test(text) ||
+      /\bwhat\s+(?:can|could)\s+i\s+watch\b/i.test(text) ||
+      /\b(?:show|give|find|pick)\s+me\b.{0,50}\b(?:anime|show|series|movie|something|hidden\s+gem|pick)\b/i.test(text) ||
+      /\b(?:something|anime|show|series|movie)\b.{0,35}\b(?:i(?:'d| would)\s+like|to\s+watch)\b/i.test(text) ||
+      /\b(?:movie|anime|show)\s+for\s+tonight\b/i.test(text) ||
+      /\bhidden\s+gem\b/i.test(text)
+    );
+  }
+
+  function buildTitleComparisonEvidence(prompt = '') {
+    const libraryMatches = findCloudTitleMatches(prompt)
+      .filter(({ source }) => source === 'library')
+      .map(({ item }) => item);
+
+    const unique = [];
+    const seen = new Set();
+    for (const item of libraryMatches) {
+      const key = String(item?.malId ?? item?.kitsuId ?? item?.id ?? item?.officialTitle ?? item?.title ?? '').toLowerCase();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      unique.push(item);
+      if (unique.length >= 2) break;
+    }
+
+    if (unique.length < 2) return null;
+
+    const [first, second] = unique;
+    const firstTitle = first.officialTitle || first.title || 'First title';
+    const secondTitle = second.officialTitle || second.title || 'Second title';
+    const firstScore = Number(first.joeScore ?? score(first) ?? 0) || 0;
+    const secondScore = Number(second.joeScore ?? score(second) ?? 0) || 0;
+    const firstRewatches = Number(first.rewatches || 0) || 0;
+    const secondRewatches = Number(second.rewatches || 0) || 0;
+    const favoriteDelta = Number(Boolean(first.favorite)) !== Number(Boolean(second.favorite)) ? 8 : 0;
+    const signalStrength = Math.max(40, Math.min(95, Math.round(
+      48 + Math.abs(firstScore - secondScore) * 10 + Math.abs(firstRewatches - secondRewatches) * 4 + favoriteDelta
+    )));
+
+    const genreCounts = countBy(anime.flatMap((item) => Array.isArray(item.genres) ? item.genres : []));
+    const comparedGenres = new Set([
+      ...(Array.isArray(first.genres) ? first.genres : []),
+      ...(Array.isArray(second.genres) ? second.genres : [])
+    ].filter(Boolean));
+    const relevantGenres = genreCounts
+      .filter(([name]) => comparedGenres.has(name))
+      .slice(0, 5);
+    const fallbackGenres = relevantGenres.length ? relevantGenres : genreCounts.slice(0, 5);
+    const maxGenreCount = Math.max(1, ...fallbackGenres.map(([, count]) => Number(count) || 0));
+
+    const prefersFirst = /\bprefer(?:s|red)?\b/i.test(prompt) || /\bmore\s+than\b/i.test(prompt) || /\bover\b/i.test(prompt);
+
+    return {
+      type: 'genreDNAExplanation',
+      title: prefersFirst
+        ? `Why you prefer ${firstTitle} to ${secondTitle}`
+        : `${firstTitle} vs ${secondTitle}`,
+      summary: 'A title-to-title preference read grounded in your saved ratings, rewatches, favorites, and broader Anime DNA.',
+      strength: signalStrength,
+      metrics: [
+        { label: `${firstTitle} score`, value: firstScore ? firstScore.toFixed(1).replace(/\.0$/, '') : '—' },
+        { label: `${secondTitle} score`, value: secondScore ? secondScore.toFixed(1).replace(/\.0$/, '') : '—' },
+        { label: `${firstTitle} rewatches`, value: firstRewatches },
+        { label: `${secondTitle} rewatches`, value: secondRewatches },
+        { label: `${firstTitle} favorite`, value: first.favorite ? 'Yes' : 'No' },
+        { label: `${secondTitle} favorite`, value: second.favorite ? 'Yes' : 'No' }
+      ],
+      contributors: [first, second],
+      companions: fallbackGenres.map(([name, count]) => ({
+        name,
+        percent: Math.max(8, Math.round((Number(count) / maxGenreCount) * 100))
+      })),
+      comparedTitles: [
+        cloudCompactAnime(first, { rich: true, source: 'library' }),
+        cloudCompactAnime(second, { rich: true, source: 'library' })
+      ]
+    };
+  }
+
+  function cloudRecommendationCandidateKey(item = {}, index = 0) {
+    const stable = recommendationKey(item);
+    if (stable) return String(stable);
+
+    const providerId = item.malId ?? item.mal_id ?? item.kitsuId ?? item.kitsu_id ?? item.id;
+    if (providerId !== undefined && providerId !== null && String(providerId).trim()) {
+      return `candidate:${String(providerId).trim().toLowerCase()}`;
+    }
+
+    return `title:${recommendationDetailTitleKey(item.officialTitle || item.title || `candidate-${index}`)}`;
+  }
+
+  function compactHybridGenome(item = {}) {
+    const genome = item.genome || item.animeGenome || item.genomeCard || item.genomeData;
+    if (!genome || typeof genome !== 'object') return undefined;
+
+    const usefulKey = /(tone|theme|motivation|fantasy|atmosphere|emotion|pacing|comedy|world|character|setting|story|appeal|genre|trait|conflict|stakes)/i;
+    const entries = Object.entries(genome)
+      .filter(([key]) => usefulKey.test(key))
+      .slice(0, 14)
+      .map(([key, value]) => [key, compactCloudValue(value, 1)])
+      .filter(([, value]) => value !== undefined);
+
+    return entries.length ? Object.fromEntries(entries) : undefined;
+  }
+
+  function hybridCandidateRecord(item = {}, index = 0) {
+    // Keep the second-pass prompt compact enough to be reliable. The first POC
+    // sent entire Genome objects and ~900-character synopses for every candidate,
+    // which pushed the reranker into long/truncated JSON responses. The reviewer
+    // only needs the strongest taste evidence, not a second copy of the database.
+    const rich = cloudCompactAnime(item, {
+      rich: false,
+      source: item.owned ? 'library' : 'catalog'
+    });
+    const synopsis = String(item.synopsis || item.description || '').trim();
+    const genome = compactHybridGenome(item);
+
+    const extraSignals = {
+      tags: Array.isArray(item.tags) ? item.tags.slice(0, 6) : [],
+      viewerMotivations: Array.isArray(item.viewerMotivations) ? item.viewerMotivations.slice(0, 6) : [],
+      fantasyPillars: Array.isArray(item.fantasyPillars) ? item.fantasyPillars.slice(0, 6) : [],
+      atmosphere: Array.isArray(item.atmosphere) ? item.atmosphere.slice(0, 5) : [],
+      emotionalProfile: Array.isArray(item.emotionalProfile) ? item.emotionalProfile.slice(0, 5) : [],
+      genomeTraits: Array.isArray(item.genomeTraits) ? item.genomeTraits.slice(0, 6) : []
+    };
+
+    return {
+      key: cloudRecommendationCandidateKey(item, index),
+      localRank: index + 1,
+      localMatch: Math.max(0, Math.min(100, Number(item.match || 0))),
+      sourceSimilarity: Math.max(0, Math.min(100, Number(item.sourceSimilarity || 0))),
+      localReasons: Array.isArray(item.reasons) ? item.reasons.slice(0, 5) : [],
+      localWarnings: Array.isArray(item.warnings) ? item.warnings.slice(0, 3) : [],
+      ...rich,
+      ...(synopsis ? { synopsis: synopsis.slice(0, 420) } : {}),
+      ...(genome ? { genome } : {}),
+      ...extraSignals
+    };
+  }
+
+  function hybridLibraryIdentityIndex() {
+    const identityKeys = new Set();
+
+    for (const item of anime) {
+      animeIdentityKeys(item).forEach((key) => identityKeys.add(key));
+      if (item?.id !== undefined && item?.id !== null && String(item.id).trim()) {
+        identityKeys.add(`id:${String(item.id).trim().toLowerCase()}`);
+      }
+    }
+
+    return { identityKeys, items: anime };
+  }
+
+  function hybridIdentityKeys(item = {}) {
+    const keys = new Set(animeIdentityKeys(item));
+    if (item?.id !== undefined && item?.id !== null && String(item.id).trim()) {
+      keys.add(`id:${String(item.id).trim().toLowerCase()}`);
+    }
+    return keys;
+  }
+
+  function isHybridCandidateOwned(item = {}, libraryIndex = hybridLibraryIdentityIndex()) {
+    if (item.owned || item.bucket === 'library') return true;
+
+    const keys = hybridIdentityKeys(item);
+    for (const key of keys) {
+      if (libraryIndex.identityKeys.has(key)) return true;
+    }
+
+    // Last-resort structural comparison catches provider-less aliases while still
+    // respecting season/year/episode distinctions in the shared identity service.
+    return (libraryIndex.items || []).some((libraryItem) => sameAnimeIdentity(item, libraryItem));
+  }
+
+  function hybridFranchiseKeys(item = {}) {
+    const explicit = item.franchise || item.franchiseTitle || item.seriesTitle || item.parentTitle || '';
+    const titles = explicit ? [explicit, ...identityTitleAliases(item)] : identityTitleAliases(item);
+    const keys = new Set();
+
+    titles.filter(Boolean).forEach((value) => {
+      let title = franchiseBaseTitle(value);
+      if (!title) return;
+
+      title = title
+        .replace(/\b(?:season|series|part|cour)\s*\d+\b.*$/i, '')
+        .replace(/\b\d+(?:st|nd|rd|th)\s+season\b.*$/i, '')
+        .replace(/\s+(?:specials?|ova|ona|recaps?|picture\s+drama|mini\s+anime)\b.*$/i, '')
+        .trim();
+
+      const key = recommendationDetailTitleKey(title);
+      if (key) keys.add(key);
+    });
+
+    return keys;
+  }
+
+  function hybridContinuationInfo(item = {}) {
+    const titles = identityTitleAliases(item).map((value) => String(value || '').toLowerCase());
+    const blob = [...titles, String(item.type || item.format || '').toLowerCase()].join(' ');
+    const season = titles.map((title) => {
+      const match = title.match(/\b(?:season|series)\s*(\d+)\b|\b(\d+)(?:st|nd|rd|th)\s+season\b/);
+      return Number(match?.[1] || match?.[2] || 0);
+    }).find((value) => value > 1) || 0;
+    const part = titles.map((title) => Number(title.match(/\b(?:part|cour)\s*(\d+)\b/)?.[1] || 0)).find((value) => value > 1) || 0;
+    const companion = /\b(?:specials?|ova|ona|recap|picture\s+drama|mini\s+anime)\b/.test(blob);
+
+    return {
+      isContinuation: Boolean(season > 1 || part > 1 || companion),
+      season,
+      part,
+      companion
+    };
+  }
+
+  function hybridLibraryHasFranchise(item = {}) {
+    const candidateKeys = hybridFranchiseKeys(item);
+    if (!candidateKeys.size) return false;
+    return anime.some((libraryItem) => {
+      const libraryKeys = hybridFranchiseKeys(libraryItem);
+      for (const key of candidateKeys) {
+        if (libraryKeys.has(key)) return true;
+      }
+      return false;
+    });
+  }
+
+  function hybridAllowsContinuation(prompt = '') {
+    return /\b(?:continue|resume|watch\s+order|next\s+season|another\s+season|same\s+franchise|more\s+(?:of|from)|season\s+\d+|specials?|ova|ona)\b/i.test(String(prompt || ''));
+  }
+
+  function hybridShouldGateContinuation(item = {}, prompt = '') {
+    if (hybridAllowsContinuation(prompt)) return false;
+    const info = hybridContinuationInfo(item);
+    return info.isContinuation && !hybridLibraryHasFranchise(item);
+  }
+
+  function hybridPromptExclusions(prompt = '') {
+    const raw = String(prompt || '').toLowerCase();
+    const found = [];
+    const pattern = /(?:without|avoid|exclude|nothing\s+with|nothing\s+that\s+has|no(?!\s+(?:more|less|fewer)\s+than))\s+(?:any\s+)?([a-z0-9][a-z0-9 -]{1,32})/gi;
+    let match;
+    while ((match = pattern.exec(raw))) {
+      const phrase = String(match[1] || '')
+        .split(/\b(?:but|and|with|under|over|at\s+most|that|which|please)\b/)[0]
+        .trim();
+      if (phrase) found.push(phrase);
+    }
+    return [...new Set(found)].slice(0, 8);
+  }
+
+  function hybridCandidateText(item = {}) {
+    return recommendationDetailTitleKey([
+      item.title,
+      item.officialTitle,
+      item.synopsis,
+      item.description,
+      item.type,
+      item.format,
+      ...(Array.isArray(item.genres) ? item.genres : []),
+      ...(Array.isArray(item.themes) ? item.themes : []),
+      ...(Array.isArray(item.tags) ? item.tags : []),
+      ...getAnimeTasteSignals(item)
+    ].filter(Boolean).join(' '));
+  }
+
+  function hybridCandidateViolatesPromptExclusions(item = {}, prompt = '') {
+    const exclusions = hybridPromptExclusions(prompt);
+    if (!exclusions.length) return false;
+    const blob = ` ${hybridCandidateText(item)} `;
+    return exclusions.some((phrase) => {
+      const key = recommendationDetailTitleKey(phrase);
+      return key && blob.includes(` ${key} `);
+    });
+  }
+
+  function hybridSimilarityValues(item = {}, keys = []) {
+    const values = [];
+    for (const key of keys) {
+      const value = item?.[key];
+      if (Array.isArray(value)) values.push(...value);
+      else if (value) values.push(value);
+    }
+    return [...new Set(
+      values
+        .map((value) => String(value || '').trim().toLowerCase())
+        .filter(Boolean)
+    )];
+  }
+
+  function hybridSetOverlap(sourceValues = [], candidateValues = []) {
+    if (!sourceValues.length || !candidateValues.length) return 0;
+    const left = new Set(sourceValues);
+    const right = new Set(candidateValues);
+    let shared = 0;
+    for (const value of left) {
+      if (right.has(value)) shared += 1;
+    }
+    const union = new Set([...left, ...right]).size || 1;
+    return shared / union;
+  }
+
+  function hybridSynopsisTokens(item = {}) {
+    const stop = new Set([
+      'about', 'after', 'again', 'against', 'being', 'between', 'could', 'from',
+      'have', 'into', 'more', 'their', 'there', 'these', 'they', 'this', 'through',
+      'under', 'when', 'where', 'which', 'while', 'with', 'would', 'young'
+    ]);
+    return [...new Set(
+      String(item.synopsis || item.description || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9\s-]+/g, ' ')
+        .split(/\s+/)
+        .filter((token) => token.length >= 5 && !stop.has(token))
+    )].slice(0, 90);
+  }
+
+  function hybridSourceSimilarityScore(source = null, candidate = {}) {
+    if (!source) return 0;
+
+    const weighted = [
+      [30, hybridSimilarityValues(source, ['genres']), hybridSimilarityValues(candidate, ['genres'])],
+      [20, hybridSimilarityValues(source, ['themes', 'tags']), hybridSimilarityValues(candidate, ['themes', 'tags'])],
+      [15, hybridSimilarityValues(source, ['viewerMotivations', 'genomeTraits']), hybridSimilarityValues(candidate, ['viewerMotivations', 'genomeTraits'])],
+      [12, hybridSimilarityValues(source, ['fantasyPillars', 'rewardLoop']), hybridSimilarityValues(candidate, ['fantasyPillars', 'rewardLoop'])],
+      [9, hybridSimilarityValues(source, ['atmosphere', 'emotionalProfile']), hybridSimilarityValues(candidate, ['atmosphere', 'emotionalProfile'])],
+      [10, hybridSynopsisTokens(source), hybridSynopsisTokens(candidate)]
+    ];
+
+    let score = weighted.reduce(
+      (sum, [weight, sourceValues, candidateValues]) => sum + (hybridSetOverlap(sourceValues, candidateValues) * weight),
+      0
+    );
+
+    const sourceStudio = String(source.studio || source.studios?.[0] || '').trim().toLowerCase();
+    const candidateStudio = String(candidate.studio || candidate.studios?.[0] || '').trim().toLowerCase();
+    if (sourceStudio && candidateStudio && sourceStudio === candidateStudio) score += 2;
+
+    const sourceType = String(source.type || source.format || '').trim().toLowerCase();
+    const candidateType = String(candidate.type || candidate.format || '').trim().toLowerCase();
+    if (sourceType && candidateType && sourceType === candidateType) score += 2;
+
+    return Math.max(0, Math.min(100, Math.round(score)));
+  }
+
+  function mergeHybridCandidatePool(localResult, prompt = '', activeState = joeAIState) {
+    const baseItems = Array.isArray(localResult?.items) ? localResult.items : [];
+    const pool = [...baseItems];
+    const libraryIndex = hybridLibraryIdentityIndex();
+
+    // Recommendation prompts mean "show me something to watch" by default.
+    // Existing-library titles are evidence/anchors, not recommendation candidates,
+    // unless the user explicitly asks for a rewatch or a pick from their library.
+    const allowOwned = /\b(?:rewatch|watch\s+again|revisit|continue|resume|pick\s+from\s+my\s+library|from\s+my\s+library|already\s+(?:own|have))\b/i.test(prompt);
+
+    // We are already inside the recommendation pipeline here. Do not make the
+    // unseen/owned decision depend on perfect spelling in the raw prompt. A typo
+    // such as "recomend something like slime" can still be correctly classified
+    // by the intent parser/local router, so normal recommendation runs must remain
+    // discovery-only unless the user explicitly asked for a rewatch/library pick.
+    const discoveryMode = !allowOwned;
+    const sourceAnchor = resolveHybridSourceAnchor(prompt, localResult);
+    const sourceFranchiseKeys = sourceAnchor ? hybridFranchiseKeys(sourceAnchor) : new Set();
+
+    // For "something like X", the first gate must be similarity to X. Generic
+    // Anime-DNA recommendations are useful for "what should I watch next?" but
+    // can swamp an anchored request with titles Joe may like for unrelated reasons.
+    if (discoveryMode && sourceAnchor) {
+      const sourceDriven = catalog
+        .filter((item) => !isHybridCandidateOwned(item, libraryIndex))
+        .filter((item) => !hybridCandidateViolatesPromptExclusions(item, prompt))
+        .filter((item) => !hybridShouldGateContinuation(item, prompt))
+        .filter((item) => {
+          const candidateKeys = hybridFranchiseKeys(item);
+          for (const key of candidateKeys) {
+            if (sourceFranchiseKeys.has(key)) return false;
+          }
+          return true;
+        })
+        .map((item) => ({
+          ...item,
+          sourceSimilarity: hybridSourceSimilarityScore(sourceAnchor, item)
+        }))
+        .filter((item) => item.sourceSimilarity > 0)
+        .sort((a, b) =>
+          Number(b.sourceSimilarity || 0) - Number(a.sourceSimilarity || 0)
+          || Number(b.communityScore || b.malScore || 0) - Number(a.communityScore || a.malScore || 0)
+        )
+        .slice(0, 24);
+
+      const enrichedSourceDriven = enrichRecommendationItems({
+        type: 'recommendations',
+        items: sourceDriven
+      }, activeState)?.items || sourceDriven;
+
+      pool.push(...enrichedSourceDriven.map((item) => ({
+        ...item,
+        sourceSimilarity: Number(
+          item.sourceSimilarity
+          || sourceDriven.find((candidate) =>
+            recommendationDetailTitleKey(candidate.officialTitle || candidate.title)
+            === recommendationDetailTitleKey(item.officialTitle || item.title)
+          )?.sourceSimilarity
+          || 0
+        )
+      })));
+    }
+
+    // Add broad unseen JoeAI picks too. They are valuable for generic requests and
+    // serve as challengers on anchored requests, but source similarity gets first
+    // priority when a source title is present.
+    const currentUnownedCount = pool.filter((item) => !isHybridCandidateOwned(item, libraryIndex)).length;
+    if (discoveryMode && currentUnownedCount < 18) {
+      const extras = brain?.recommendations?.(28, {
+        prompt,
+        joeAIState: activeState
+      }) || [];
+      const enrichedExtras = enrichRecommendationItems({
+        type: 'recommendations',
+        items: extras
+      }, activeState)?.items || extras;
+      pool.push(...enrichedExtras);
+    } else if (!discoveryMode && localResult?.type === 'recommendations' && baseItems.length < 10) {
+      const extras = brain?.recommendations?.(12, { prompt, joeAIState: activeState }) || [];
+      const enrichedExtras = enrichRecommendationItems({ type: 'recommendations', items: extras }, activeState)?.items || extras;
+      pool.push(...enrichedExtras);
+    }
+
+    const seen = new Set();
+    const seenFranchises = new Set();
+    const allowSameFranchise = hybridAllowsContinuation(prompt);
+
+    let prepared = pool.map((item) => {
+      const owned = isHybridCandidateOwned(item, libraryIndex);
+      return {
+        ...item,
+        owned,
+        bucket: owned ? 'library' : (item.bucket || 'discovery'),
+        sourceSimilarity: sourceAnchor
+          ? Math.max(
+              Number(item.sourceSimilarity || 0),
+              hybridSourceSimilarityScore(sourceAnchor, item)
+            )
+          : Number(item.sourceSimilarity || 0)
+      };
+    });
+
+    if (sourceAnchor && discoveryMode) {
+      prepared = prepared.sort((a, b) =>
+        Number(b.sourceSimilarity || 0) - Number(a.sourceSimilarity || 0)
+        || Number(b.match || 0) - Number(a.match || 0)
+      );
+    }
+
+    const candidates = prepared
+      .filter((item, index) => {
+        if (discoveryMode && item.owned) return false;
+        if (discoveryMode && hybridCandidateViolatesPromptExclusions(item, prompt)) return false;
+        if (discoveryMode && hybridShouldGateContinuation(item, prompt)) return false;
+
+        const key = cloudRecommendationCandidateKey(item, index);
+        if (!key || seen.has(key)) return false;
+
+        const franchiseKeys = hybridFranchiseKeys(item);
+        if (discoveryMode && !allowSameFranchise) {
+          // A "like X" discovery request should never recommend another entry
+          // from X's own franchise unless the user explicitly asks to continue it.
+          for (const franchiseKey of franchiseKeys) {
+            if (sourceFranchiseKeys.has(franchiseKey)) return false;
+          }
+
+          for (const franchiseKey of franchiseKeys) {
+            if (seenFranchises.has(franchiseKey)) return false;
+          }
+          franchiseKeys.forEach((franchiseKey) => seenFranchises.add(franchiseKey));
+        }
+
+        seen.add(key);
+        return true;
+      })
+      .slice(0, 12);
+
+    console.log('[JoeAI] second-pass source anchor:', sourceAnchor?.officialTitle || sourceAnchor?.title || '(generic discovery)');
+    console.log('[JoeAI] second-pass candidate pool:', candidates.map((item) => ({
+      title: item.officialTitle || item.title,
+      owned: Boolean(item.owned),
+      localMatch: Number(item.match || 0),
+      sourceSimilarity: Number(item.sourceSimilarity || 0)
+    })));
+
+    return candidates;
+  }
+
+  function buildHybridRecommendationCloudContext(prompt = '', localResult = null, candidates = [], activeState = joeAIState) {
+    const scored = [...anime]
+      .filter((item) => Number(item.joeScore ?? score(item) ?? 0) > 0)
+      .sort((a, b) => Number(b.joeScore ?? score(b) ?? 0) - Number(a.joeScore ?? score(a) ?? 0));
+
+    const lowRated = [...anime]
+      .filter((item) => {
+        const userScore = Number(item.joeScore ?? score(item) ?? 0);
+        return userScore > 0 && userScore <= 7;
+      })
+      .sort((a, b) => Number(a.joeScore ?? score(a) ?? 0) - Number(b.joeScore ?? score(b) ?? 0))
+      .slice(0, 10)
+      .map((item) => cloudCompactAnime(item, { source: 'library' }));
+
+    const dropped = anime
+      .filter((item) => String(item.status || '').toLowerCase() === 'dropped')
+      .slice(0, 10)
+      .map((item) => cloudCompactAnime(item, { source: 'library' }));
+
+    const feedback = (Array.isArray(activeState?.feedback) ? activeState.feedback : [])
+      .slice(-28)
+      .map((entry) => ({
+        title: entry.title || '',
+        animeKey: entry.animeKey || '',
+        action: entry.action || '',
+        reason: entry.reason || entry.reasonCode || ''
+      }));
+
+    const preferences = (Array.isArray(activeState?.preferences) ? activeState.preferences : [])
+      .slice(-24)
+      .map((entry) => compactCloudValue(entry));
+
+    const recentRecommendations = (Array.isArray(conversationContext?.lastRecommendations)
+      ? conversationContext.lastRecommendations
+      : [])
+      .slice(0, 10)
+      .map((item, index) => ({
+        key: cloudRecommendationCandidateKey(item, index),
+        title: item.officialTitle || item.title || ''
+      }));
+
+    const sourceMatch = resolveHybridSourceAnchor(prompt, localResult);
+
+    return {
+      task: 'recommendationRerank',
+      candidates: candidates.map((item, index) => hybridCandidateRecord(item, index)),
+      sourceAnchor: sourceMatch ? cloudCompactAnime(sourceMatch, { rich: true, source: 'library' }) : undefined,
+      localRecommendation: {
+        type: localResult?.type || '',
+        title: localResult?.title || '',
+        subtitle: localResult?.subtitle || '',
+        sourceTitle: localResult?.sourceTitle || ''
+      },
+      requestConstraints: {
+        exclude: hybridPromptExclusions(prompt),
+        discoveryOnly: !/\b(?:rewatch|watch\s+again|revisit|continue|resume|from\s+my\s+library)\b/i.test(prompt)
+      },
+      tasteProfile: {
+        libraryCount: anime.length,
+        topRated: scored.slice(0, 12).map((item) => cloudCompactAnime(item, { source: 'library' })),
+        favorites: anime.filter((item) => item.favorite).slice(0, 10).map((item) => cloudCompactAnime(item, { source: 'library' })),
+        rewatches: [...anime]
+          .filter((item) => Number(item.rewatches || 0) > 0)
+          .sort((a, b) => Number(b.rewatches || 0) - Number(a.rewatches || 0))
+          .slice(0, 10)
+          .map((item) => cloudCompactAnime(item, { source: 'library' })),
+        lowRated,
+        dropped,
+        topGenres: countBy(anime.flatMap((item) => Array.isArray(item.genres) ? item.genres : []))
+          .slice(0, 10)
+          .map(([name, count]) => ({ name, count })),
+        topStudios: countBy(anime.map((item) => item.studio).filter(Boolean))
+          .slice(0, 8)
+          .map(([name, count]) => ({ name, count }))
+      },
+      feedback,
+      preferences,
+      recentRecommendations,
+      conversation: {
+        lastReferencedTitle: conversationContext?.lastReferencedTitle || '',
+        lastPrompt: conversationContext?.lastPrompt || ''
+      },
+      note: 'Candidates came from the local JoeAI engine. The cloud layer may rerank or reject them but must not invent new titles.'
+    };
+  }
+
+  function hybridRecommendationTitleKey(value = '') {
+    return recommendationDetailTitleKey(value).replace(/\s+/g, '');
+  }
+
+  function applyHybridRecommendationPlan(localResult, candidates = [], plan = null) {
+    if (!localResult || !Array.isArray(localResult.items) || !plan || !Array.isArray(plan.rankings)) return null;
+
+    const byKey = new Map();
+    const byTitle = new Map();
+    candidates.forEach((item, index) => {
+      byKey.set(cloudRecommendationCandidateKey(item, index), item);
+      [item.title, item.officialTitle].filter(Boolean).forEach((name) => {
+        byTitle.set(hybridRecommendationTitleKey(name), item);
+      });
+    });
+
+    const used = new Set();
+    const reviewed = [];
+    for (const rank of plan.rankings) {
+      const rankKey = String(rank?.key || '');
+      const titleKey = hybridRecommendationTitleKey(rank?.title || '');
+      const item = byKey.get(rankKey) || byTitle.get(titleKey);
+      if (!item) continue;
+
+      const identity = cloudRecommendationCandidateKey(item, candidates.indexOf(item));
+      if (used.has(identity)) continue;
+      used.add(identity);
+
+      const verdict = String(rank?.verdict || 'maybe').toLowerCase();
+      const cloudFit = Math.max(0, Math.min(100, Number(rank?.fit || 0)));
+      const requestFit = Math.max(0, Math.min(100, Number(rank?.requestFit || 0)));
+      const tasteFit = Math.max(0, Math.min(100, Number(rank?.tasteFit || 0)));
+      const localMatch = Math.max(0, Math.min(100, Number(item.match || 0)));
+
+      // v5: the visible score is the cloud-reviewed final fit. The old 55% local /
+      // 45% cloud blend let an inflated local 95% score overpower the reviewer,
+      // which is why nearly every card still looked like a 90%+ JoeAI match.
+      const hybridMatch = Math.round(cloudFit);
+      const shortSignals = (Array.isArray(rank?.signals) ? rank.signals : [])
+        .map((value) => String(value || '').trim())
+        .filter(Boolean)
+        .slice(0, 5);
+      const reason = String(rank?.reason || '').trim();
+      const caution = String(rank?.caution || '').trim();
+      const warnings = [...new Set([
+        ...(item.warnings || []),
+        ...(caution && !/^(none|n\/a|no caution)$/i.test(caution) ? [caution] : [])
+      ])].slice(0, 4);
+      const tags = [...new Set([
+        ...shortSignals,
+        ...(item.tags || [])
+      ])].slice(0, 7);
+      const receipt = item.confidenceReceipt || {};
+      const oldPrediction = Number(receipt.predictionConfidence || tasteFit || cloudFit || localMatch || hybridMatch);
+
+      reviewed.push({
+        item: {
+          ...item,
+          match: hybridMatch,
+          tags,
+          warnings,
+          joeAISummary: reason || item.joeAISummary || item.blurb,
+          confidenceReceipt: {
+            ...receipt,
+            tasteMatch: hybridMatch,
+            predictionConfidence: Math.round((oldPrediction * 0.6) + (cloudFit * 0.4))
+          },
+          cloudTasteReview: {
+            fit: cloudFit,
+            requestFit,
+            tasteFit,
+            verdict,
+            reason,
+            caution
+          },
+          hybridReviewed: true
+        },
+        verdict,
+        cloudFit
+      });
+    }
+
+    // Any candidate the model omitted is kept at the tail as a local-only maybe,
+    // rather than silently disappearing because of a malformed structured reply.
+    candidates.forEach((item, index) => {
+      const identity = cloudRecommendationCandidateKey(item, index);
+      if (used.has(identity)) return;
+      reviewed.push({
+        item: { ...item, hybridReviewed: false },
+        verdict: 'maybe',
+        cloudFit: Number(item.match || 0)
+      });
+    });
+
+    const accepted = reviewed
+      .filter((entry) => entry.verdict !== 'reject')
+      .sort((left, right) => {
+        const verdictWeight = { strong: 4, good: 3, maybe: 2 };
+        const verdictDelta = (verdictWeight[right.verdict] || 0) - (verdictWeight[left.verdict] || 0);
+        if (verdictDelta) return verdictDelta;
+        if (right.cloudFit !== left.cloudFit) return right.cloudFit - left.cloudFit;
+        return Number(right.item.match || 0) - Number(left.item.match || 0);
+      })
+      .slice(0, 5)
+      .map((entry) => entry.item);
+
+    if (!accepted.length) return null;
+
+    const reviewedCount = reviewed.length;
+    const filteredCount = Math.max(0, reviewedCount - accepted.length);
+    const reviewLine = `JoeAI reviewed ${reviewedCount} candidate${reviewedCount === 1 ? '' : 's'} and kept ${accepted.length}${filteredCount ? `; ${filteredCount} weaker or duplicate fit${filteredCount === 1 ? ' was' : 's were'} held back` : ''}.`;
+
+    console.log('[JoeAI] hybrid recommendation result:', {
+      reviewed: reviewedCount,
+      accepted: accepted.length,
+      filtered: filteredCount,
+      titles: accepted.map((item) => item.officialTitle || item.title)
+    });
+
+    return {
+      ...localResult,
+      // Hybrid-reviewed recommendations use the richer recommendation-card renderer
+      // even when the old fallback router originally returned the legacy type.
+      type: 'recommendationCards',
+      title: localResult.title || '🍜 JoeAI Recommendations',
+      subtitle: reviewLine,
+      items: accepted,
+      hybridReviewed: true,
+      hybridFilteredCount: filteredCount,
+      hybridReviewedCount: reviewedCount
+    };
+  }
+
+  async function tryJoeAIHybridRecommendation(prompt, localResult, activeState = joeAIState) {
+    // Empty structured recommendation shells are still useful: source-anchored
+    // constraints can filter the local Genome neighbors to zero, then the hybrid
+    // pool should widen into the unseen catalog instead of falling back to a title card.
+    if (!isJoeAICloudEnabled() || !Array.isArray(localResult?.items)) return null;
+
+    const candidates = mergeHybridCandidatePool(localResult, prompt, activeState);
+    if (!candidates.length) return null;
+
+    setCloudThinking(true);
+    try {
+      const cloudAnswer = await askJoeAICloud({
+        prompt,
+        mode: 'recommendation-rerank',
+        context: buildHybridRecommendationCloudContext(prompt, localResult, candidates, activeState)
+      });
+      if (Array.isArray(cloudAnswer.data?.rankings)) {
+        console.log('[JoeAI] second-pass recommendation review:', cloudAnswer.data.rankings.map((entry) => ({
+          title: entry.title,
+          fit: entry.fit,
+          verdict: entry.verdict
+        })));
+      }
+      return applyHybridRecommendationPlan(localResult, candidates, cloudAnswer.data);
+    } catch (error) {
+      console.warn('[JoeAI] second-pass recommendation review unavailable; using local ranking:', error);
+      return null;
+    } finally {
+      setCloudThinking(false);
+    }
+  }
+
+  function buildJoeAICloudContext(prompt = '', localEvidence = null) {
+    const scored = [...anime]
+      .filter((item) => Number(item.joeScore ?? score(item) ?? 0) > 0)
+      .sort((a, b) => Number(b.joeScore ?? score(b) ?? 0) - Number(a.joeScore ?? score(a) ?? 0));
+
+    const favorites = anime
+      .filter((item) => item.favorite)
+      .slice(0, 10)
+      .map((item) => cloudCompactAnime(item, { source: 'library' }));
+    const rewatches = anime
+      .filter((item) => Number(item.rewatches || 0) > 0)
+      .sort((a, b) => Number(b.rewatches || 0) - Number(a.rewatches || 0))
+      .slice(0, 10)
+      .map((item) => cloudCompactAnime(item, { source: 'library' }));
+
+    const topGenres = countBy(anime.flatMap((item) => Array.isArray(item.genres) ? item.genres : []))
+      .slice(0, 10)
+      .map(([name, count]) => ({ name, count }));
+    const topStudios = countBy(anime.map((item) => item.studio).filter(Boolean))
+      .slice(0, 8)
+      .map(([name, count]) => ({ name, count }));
+
+    const titleMatches = findCloudTitleMatches(prompt).map(({ item, source }) =>
+      cloudCompactAnime(item, { rich: true, source })
+    );
+    const comparisonPrompt = isJoeAIComparisonQuestion(prompt);
+
+    // Comparison prompts get a tiny title/status/score index. This lets the model
+    // resolve shorthand like "JJK" without shipping the full 135-title records.
+    const libraryIndex = comparisonPrompt
+      ? anime.slice(0, 220).map((item) => ({
+          title: item.officialTitle || item.title || '',
+          score: Number(item.joeScore ?? score(item) ?? 0) || undefined,
+          status: item.status || undefined,
+          favorite: Boolean(item.favorite) || undefined,
+          rewatches: Number(item.rewatches || 0) || undefined
+        }))
+      : undefined;
+
+    return {
+      libraryCount: anime.length,
+      topRated: scored.slice(0, 12).map((item) => cloudCompactAnime(item, { source: 'library' })),
+      favorites,
+      rewatches,
+      topGenres,
+      topStudios,
+      titleMatches,
+      libraryIndex,
+      localEvidence: compactCloudValue(localEvidence),
+      conversation: {
+        lastReferencedTitle: conversationContext?.lastReferencedTitle || '',
+        lastPrompt: conversationContext?.lastPrompt || '',
+        lastRecommendations: compactCloudValue(
+          Array.isArray(conversationContext?.lastRecommendations)
+            ? conversationContext.lastRecommendations.slice(0, 8)
+            : []
+        )
+      }
+    };
+  }
+
+  function cloudComparisonEvidence(result = {}) {
+    return {
+      kind: 'comparisonSignals',
+      metrics: Array.isArray(result.metrics) ? result.metrics : [],
+      contributors: Array.isArray(result.contributors) ? result.contributors.slice(0, 6) : [],
+      companions: Array.isArray(result.companions) ? result.companions.slice(0, 8) : [],
+      note: 'These are broad library signals only. Do not treat the comparison phrase itself as a genre, theme, or pattern, and do not claim every library title matches the comparison.'
+    };
+  }
+
+  async function tryJoeAICloud(prompt, localEvidence = null, presentation = null) {
+    if (!isJoeAICloudEnabled()) return false;
+
+    setCloudThinking(true);
+    try {
+      const cloudAnswer = await askJoeAICloud({
+        prompt,
+        context: buildJoeAICloudContext(prompt, localEvidence)
+      });
+
+      if (presentation?.type === 'dnaComparison') {
+        appendBotResult({
+          type: 'cloudDNAComparison',
+          text: cloudAnswer.text,
+          cloudAI: true,
+          evidence: presentation.evidence || null,
+          title: presentation.title || presentation.evidence?.title || ''
+        }, prompt);
+      } else {
+        appendBotResult({
+          type: 'text',
+          text: cloudAnswer.text,
+          cloudAI: true
+        }, prompt);
+      }
+      return true;
+    } catch (error) {
+      // JoeAnimeDB remains offline-first. Cloud failure is a silent enhancement
+      // failure: log it for us, then continue through the existing local answer.
+      console.warn('[JoeAI] cloud conversation unavailable; using local fallback:', error);
+      return false;
+    } finally {
+      setCloudThinking(false);
+    }
+  }
+
   async function ask(promptOverride = '') {
     const q = String(promptOverride || text).trim();
     if (!q) return;
 
     setLog((current) => [...current, { who: 'user', type: 'text', text: q }]);
+    setConversationContext((current) => ({ ...current, lastPrompt: q }));
     setText('');
 
     try {
+      // Known commands stay local; conversational AI is added below as an
+      // invisible enhancement with the existing JoeAI router as fallback.
+
     const resolved = resolveJoeAIFollowUp(q, conversationContext);
     const routedText = resolved.text || q;
     let activeJoeAIState = joeAIState;
     if (resolved.implicitFeedback) {
       activeJoeAIState = await saveFeedbackByTitle(resolved.implicitFeedback) || joeAIState;
     }
+
+    // Hidden personality layer. Easter eggs are intentionally side-effect free:
+    // they either add a one-line preface before normal routing, or answer a
+    // narrow joke/unsupported query outright. In particular, unsupported
+    // character-attribute searches stop here instead of falling through to the
+    // taste recommender and returning a confident but unrelated anime card.
+    const easterEgg = getJoeAIEasterEgg(q);
+    if (easterEgg) {
+      console.log('[JoeAI] easter egg:', easterEgg.id);
+      setLog((current) => [...current, {
+        who: 'bot',
+        type: 'text',
+        text: easterEgg.text,
+        joeAIEasterEgg: true
+      }]);
+      if (easterEgg.mode === 'reply') return;
+    }
+
+    // Reflective questions must be intercepted before the legacy intent parser.
+    // Otherwise phrases like "my biggest blind spot" or "unusual about my library"
+    // can be misclassified as anime-title questions.
+    if (isJoeAILibraryReflectionQuestion(routedText)) {
+      if (await tryJoeAICloud(routedText, {
+        kind: 'libraryReflection',
+        localStats: {
+          libraryCount: anime.length,
+          completed: joeAIStats.completed,
+          rewatches: joeAIStats.rewatches,
+          favorites: joeAIStats.favorites.length,
+          episodes: joeAIStats.episodes,
+          topGenres: joeAIStats.genreRows.slice(0, 6)
+        }
+      })) return;
+    }
+
     const intent = parseJoeAIIntent(routedText);
 
 
@@ -825,6 +2166,28 @@ export function Assistant({
       return;
     }
 
+    // Catch title-to-title comparisons before the older intent router can
+    // flatten them into a generic question or synthetic taste pattern. This keeps
+    // natural wording like "why do I prefer One Piece to Naruto?" on the same
+    // hybrid path as "Bleach more than JJK".
+    if (isJoeAIComparisonQuestion(routedText)) {
+      const comparisonEvidence = buildTitleComparisonEvidence(routedText);
+      if (comparisonEvidence) {
+        if (await tryJoeAICloud(
+          routedText,
+          {
+            kind: 'titleComparison',
+            comparedTitles: comparisonEvidence.comparedTitles
+          },
+          {
+            type: 'dnaComparison',
+            evidence: comparisonEvidence,
+            title: comparisonEvidence.title
+          }
+        )) return;
+      }
+    }
+
     if (intent.kind === 'recommendationExplanation') {
       const result = await executeJoeAICommand({
         intent,
@@ -835,11 +2198,13 @@ export function Assistant({
         joeAIState: activeJoeAIState
       });
 
+      // The local engine supplies the facts/reasons; cloud AI is only the mouth.
+      if (await tryJoeAICloud(routedText, { kind: intent.kind, result })) return;
       appendBotResult(result, routedText);
       return;
     }
 
-    if (intent.kind === 'tastePattern' || intent.kind === 'genreDNA') {
+    if ((intent.kind === 'tastePattern' || intent.kind === 'genreDNA') && !isJoeAIRecommendationRequest(routedText)) {
       const result = await executeJoeAICommand({
         intent,
         anime,
@@ -849,12 +2214,39 @@ export function Assistant({
         joeAIState: activeJoeAIState
       });
 
+      const isComparisonQuestion = isJoeAIComparisonQuestion(routedText);
+
+      // Comparisons such as "why do I like Bleach more than JJK?" use both layers:
+      // local JoeAI supplies the visual evidence card while Workers AI supplies the
+      // natural-language comparison. The synthetic comparison phrase is deliberately
+      // removed from cloud evidence so it cannot be mistaken for a real taste genre.
+      if (
+        isComparisonQuestion &&
+        await tryJoeAICloud(
+          routedText,
+          // Keep the exact comparison payload shape that already proved reliable
+          // in the plain conversational route. The local result is used as model
+          // evidence while the presentation object below controls the visual card.
+          // Those two concerns must stay separate so a prettier card cannot change
+          // whether the cloud request succeeds.
+          { kind: intent.kind, result, comparisonMode: true },
+          {
+            type: 'dnaComparison',
+            evidence: result,
+            title: result?.title || ''
+          }
+        )
+      ) return;
+
+      // Keep dedicated single-pattern Genome/DNA cards local. Broad taste questions
+      // get a conversational rendering backed by the deterministic local analysis.
+      if (intent.kind === 'tastePattern' && await tryJoeAICloud(routedText, { kind: intent.kind, result })) return;
       appendBotResult(result, routedText);
       return;
     }
 
-    if (intent.kind === 'recommendation') {
-      const result = coordinateJoeAIRecommendation({
+    if (intent.kind === 'recommendation' || isJoeAIRecommendationRequest(routedText)) {
+      let result = coordinateJoeAIRecommendation({
         text: routedText,
         anime: recommendationAnime,
         catalog,
@@ -862,19 +2254,30 @@ export function Assistant({
         joeAIState: activeJoeAIState
       });
 
-      appendBotResult(result, routedText);
-      return;
+      // Some natural recommendation phrasings historically fell through the intent
+      // parser (for example "what should I watch next?"). If the coordinator does
+      // not produce cards, recover them from the mature local recommendation router
+      // and still send that real candidate set through the cloud taste reviewer.
+      if (!Array.isArray(result?.items) || !result.items.length) {
+        result = routeJoeAIRecommendation(routedText, recommendationAnime, catalog) || result;
+      }
+
+      if (Array.isArray(result?.items)) {
+        // Local JoeAI generates the candidates and remains the source of truth for
+        // metadata, safety filters, hard recommendation logic, and saved learning.
+        // Even an empty structured shell is routed through the hybrid pool so a
+        // hard constraint like "Slime without isekai" can widen into fresh catalog
+        // candidates instead of collapsing back into the Slime title card.
+        const hybridResult = await tryJoeAIHybridRecommendation(routedText, result, activeJoeAIState);
+        appendBotResult(hybridResult || result, routedText);
+        return;
+      }
     }
 
-    // Exact known-title questions are answered before broad conversation logic.
-    // This keeps Dragon Ball separate from DBZ/Super and respects alternate titles.
+    // Build local evidence first, but let the cloud layer phrase normal
+    // conversation. If cloud is unavailable, the exact same local routing below
+    // remains the fallback, so JoeAI still works offline.
     const directTitleAnswer = routeJoeAITitleQuestion(routedText, anime, catalog);
-    if (directTitleAnswer) {
-      appendBotResult(directTitleAnswer, routedText);
-      return;
-    }
-
-    // Non-title questions continue through conversation/reasoning/memory.
     const routedQuestion = await executeJoeAICommand({
       intent: { kind: 'question', text: routedText },
       anime,
@@ -883,13 +2286,39 @@ export function Assistant({
       brain,
       joeAIState: activeJoeAIState
     });
+    const routedQuestionIsUseful = Boolean(
+      routedQuestion && (
+        routedQuestion.type !== 'text' ||
+        !String(routedQuestion.text || '').startsWith('Try asking about your Anime DNA')
+      )
+    );
+    const smartAnswer = routedQuestionIsUseful
+      ? null
+      : routeJoeAIRecommendation(routedText, recommendationAnime, catalog);
+    const localEvidence = directTitleAnswer || (routedQuestionIsUseful ? routedQuestion : null) || smartAnswer || null;
 
-    if (routedQuestion?.type !== 'text' || !String(routedQuestion?.text || '').startsWith('Try asking about your Anime DNA')) {
+    // Last-chance recommendation safety net: if any older route still produces
+    // recommendation cards here, do not bypass the second-pass cloud taste review.
+    if (Array.isArray(smartAnswer?.items) && smartAnswer.items.length) {
+      const hybridSmartAnswer = await tryJoeAIHybridRecommendation(routedText, smartAnswer, activeJoeAIState);
+      if (hybridSmartAnswer) {
+        appendBotResult(hybridSmartAnswer, routedText);
+        return;
+      }
+    }
+
+    if (await tryJoeAICloud(routedText, localEvidence)) return;
+
+    if (directTitleAnswer) {
+      appendBotResult(directTitleAnswer, routedText);
+      return;
+    }
+
+    if (routedQuestionIsUseful) {
       appendBotResult(routedQuestion, routedText);
       return;
     }
 
-    const smartAnswer = routeJoeAIRecommendation(routedText, recommendationAnime, catalog);
     if (smartAnswer) {
       appendBotResult(smartAnswer, routedText);
       return;
@@ -910,7 +2339,18 @@ export function Assistant({
 
     return (
       <article className="joeaiRecCard" key={item.title + '-' + index}>
-        <Poster anime={item} className="joeaiRecPoster" mode="thumb" />
+        <span
+          className="joeaiLegacyPosterOpen"
+          role="button"
+          tabIndex={0}
+          onClick={() => openRecommendationDetails(item)}
+          onKeyDown={(event) => openRecommendationDetailsFromKeyboard(event, item)}
+          aria-label={`Open details for ${item.officialTitle || item.title}`}
+          title={`Open ${item.officialTitle || item.title} details`}
+          style={{ cursor: 'pointer' }}
+        >
+          <Poster anime={item} className="joeaiRecPoster" mode="thumb" />
+        </span>
         <div className="joeaiRecBody">
           <div className="joeaiRecTopline">
             <span className="joeaiRecRank">#{index + 1}</span>
@@ -918,7 +2358,17 @@ export function Assistant({
             <span className="joeaiMatchLabel">{item.matchLabel || 'Match'}</span>
           </div>
 
-          <h3>{item.title}</h3>
+          <h3
+            className="joeaiTitleOpen"
+            role="button"
+            tabIndex={0}
+            onClick={() => openRecommendationDetails(item)}
+            onKeyDown={(event) => openRecommendationDetailsFromKeyboard(event, item)}
+            title={`Open ${item.officialTitle || item.title} details`}
+            style={{ cursor: 'pointer' }}
+          >
+            {item.officialTitle || item.title}
+          </h3>
 
           <div className="joeaiRecMeta">
             {item.year && <span>{item.year}</span>}
@@ -1171,6 +2621,9 @@ export function Assistant({
 
 
   function sourceTitleFromMessage(message = {}) {
+    const explicit = String(message.sourceAnime || message.sourceTitle || '').trim();
+    if (explicit) return explicit;
+
     const titleText = String(message.title || '');
     const match = titleText.match(/because you like\s+(.+)$/i);
     return match?.[1]?.trim() || 'that show';
@@ -1369,27 +2822,38 @@ export function Assistant({
     return (
       <div key={index} className="chat bot joeaiRecommendations">
         <div className="joeaiRecHeader joeaiSmartRecHeader">
-          <p className="joeaiRecEyebrow">🧬 Genome recommendation run</p>
+          <p className="joeaiRecEyebrow">{message.hybridReviewed ? '🧠 JoeAI two-pass taste review' : '🧬 Genome recommendation run'}</p>
           <h2>{heading}</h2>
           <p>{subtitle}</p>
         </div>
 
-        {message.items?.some((item) => item.bucket === 'library') && (
-          <section className="joeaiBulkSection">
-            <h3>Already in your library</h3>
+        {message.hybridReviewed && Array.isArray(message.items) && message.items.length > 0 ? (
+          <section className="joeaiBulkSection joeaiHybridPicks">
+            <h3>JoeAI's reviewed picks</h3>
             <div className="joeaiRecGrid">
-              {message.items.filter((item) => item.bucket === 'library').map((item, itemIndex) => renderCompactRecommendationCard(item, itemIndex, sourceTitle))}
+              {message.items.map((item, itemIndex) => renderCompactRecommendationCard(item, itemIndex, sourceTitle))}
             </div>
           </section>
-        )}
+        ) : (
+          <>
+            {message.items?.some((item) => item.bucket === 'library') && (
+              <section className="joeaiBulkSection">
+                <h3>Already in your library</h3>
+                <div className="joeaiRecGrid">
+                  {message.items.filter((item) => item.bucket === 'library').map((item, itemIndex) => renderCompactRecommendationCard(item, itemIndex, sourceTitle))}
+                </div>
+              </section>
+            )}
 
-        {message.items?.some((item) => item.bucket !== 'library') && (
-          <section className="joeaiBulkSection">
-            <h3>New discoveries</h3>
-            <div className="joeaiRecGrid">
-              {message.items.filter((item) => item.bucket !== 'library').map((item, itemIndex) => renderCompactRecommendationCard(item, itemIndex, sourceTitle))}
-            </div>
-          </section>
+            {message.items?.some((item) => item.bucket !== 'library') && (
+              <section className="joeaiBulkSection">
+                <h3>New discoveries</h3>
+                <div className="joeaiRecGrid">
+                  {message.items.filter((item) => item.bucket !== 'library').map((item, itemIndex) => renderCompactRecommendationCard(item, itemIndex, sourceTitle))}
+                </div>
+              </section>
+            )}
+          </>
         )}
 
         {message.fullAnalysis && (
@@ -1421,7 +2885,16 @@ export function Assistant({
 
     return (
       <article className={`joeaiRecCard joeaiPremiumRecCard ${isExpanded ? 'isExpanded' : ''}`} key={id}>
-        <div className="joeaiPosterWrap">
+        <div
+          className="joeaiPosterWrap joeaiDetailTrigger"
+          role="button"
+          tabIndex={0}
+          onClick={() => openRecommendationDetails(item)}
+          onKeyDown={(event) => openRecommendationDetailsFromKeyboard(event, item)}
+          aria-label={`Open details for ${name}`}
+          title={`Open ${name} details`}
+          style={{ cursor: 'pointer' }}
+        >
           <Poster anime={item} className="joeaiRecPoster" mode="thumb" />
           <span className="joeaiPosterMatchBadge">{confidence}%</span>
         </div>
@@ -1435,7 +2908,17 @@ export function Assistant({
             </span>
           </div>
 
-          <h3>{name}</h3>
+          <h3
+            className="joeaiTitleOpen"
+            role="button"
+            tabIndex={0}
+            onClick={() => openRecommendationDetails(item)}
+            onKeyDown={(event) => openRecommendationDetailsFromKeyboard(event, item)}
+            title={`Open ${name} details`}
+            style={{ cursor: 'pointer' }}
+          >
+            {name}
+          </h3>
 
           <div className="joeaiRecMeta">
             {item.year && <span>{item.year}</span>}
@@ -1657,7 +3140,160 @@ export function Assistant({
     void ask(prompt);
   }
 
+  function renderJoeAIInlineMarkdown(value = '', keyPrefix = 'inline') {
+    return String(value)
+      .split(/(\*\*[^*]+\*\*|\*[^*\n]+\*)/g)
+      .filter((part) => part !== '')
+      .map((part, index) => {
+        const strong = part.match(/^\*\*(.+)\*\*$/s);
+        if (strong) return <strong key={`${keyPrefix}-strong-${index}`}>{strong[1]}</strong>;
+        const emphasis = part.match(/^\*(.+)\*$/s);
+        return emphasis
+          ? <em key={`${keyPrefix}-em-${index}`}>{emphasis[1]}</em>
+          : <React.Fragment key={`${keyPrefix}-text-${index}`}>{part}</React.Fragment>;
+      });
+  }
+
+  function renderJoeAICloudText(value = '') {
+    const lines = String(value || '').replace(/\r\n/g, '\n').split('\n');
+    const nodes = [];
+    let bullets = [];
+
+    const flushBullets = () => {
+      if (!bullets.length) return;
+      const groupIndex = nodes.length;
+      nodes.push(
+        <ul key={`cloud-list-${groupIndex}`}>
+          {bullets.map((bullet, index) => (
+            <li key={`cloud-list-${groupIndex}-${index}`}>
+              {renderJoeAIInlineMarkdown(bullet, `cloud-list-${groupIndex}-${index}`)}
+            </li>
+          ))}
+        </ul>
+      );
+      bullets = [];
+    };
+
+    lines.forEach((line, lineIndex) => {
+      const bullet = line.match(/^\s*(?:[-*•])\s+(.+)$/);
+      if (bullet) {
+        bullets.push(bullet[1]);
+        return;
+      }
+
+      flushBullets();
+      const clean = line.trim();
+      if (!clean) return;
+
+      const heading = clean.match(/^#{1,3}\s+(.+)$/);
+      if (heading) {
+        nodes.push(
+          <strong key={`cloud-heading-${lineIndex}`} className="joeaiCloudHeading">
+            {renderJoeAIInlineMarkdown(heading[1], `cloud-heading-${lineIndex}`)}
+          </strong>
+        );
+        return;
+      }
+
+      nodes.push(
+        <p key={`cloud-line-${lineIndex}`}>
+          {renderJoeAIInlineMarkdown(clean, `cloud-line-${lineIndex}`)}
+        </p>
+      );
+    });
+
+    flushBullets();
+    return <div className="joeaiCloudRichText">{nodes}</div>;
+  }
+
   function renderMessage(message, index) {
+    if (message.type === 'cloudDNAComparison') {
+      const evidence = message.evidence || {};
+      const strength = Number(evidence.strength);
+      const hasStrength = Number.isFinite(strength);
+      const metrics = Array.isArray(evidence.metrics) ? evidence.metrics : [];
+      const contributors = Array.isArray(evidence.contributors) ? evidence.contributors : [];
+      const companions = Array.isArray(evidence.companions) ? evidence.companions : [];
+
+      return (
+        <div key={index} className="chat bot joeaiGenreDNAExplanation joeaiCloudDNAComparison">
+          <header className="joeaiGenreDNAHeader">
+            <p>🧬 Personal Anime DNA Comparison</p>
+            <h2>{message.title || evidence.title || 'Why these shows land differently for you'}</h2>
+            <span>JoeAI combined your local Anime DNA signals with a conversational comparison.</span>
+          </header>
+
+          {hasStrength && (
+            <section className="joeaiGenreDNAStrength">
+              <div>
+                <span>JoeAI signal strength</span>
+                <strong>{Math.max(0, Math.min(100, strength))}%</strong>
+              </div>
+              <i><b style={{ width: `${Math.max(0, Math.min(100, strength))}%` }} /></i>
+            </section>
+          )}
+
+          {metrics.length > 0 && (
+            <section className="joeaiGenreDNAMetrics">
+              {metrics.map((metric) => (
+                <div key={metric.label}>
+                  <strong>{metric.value}</strong>
+                  <small>{metric.label}</small>
+                </div>
+              ))}
+            </section>
+          )}
+
+          {contributors.length > 0 && (
+            <section className="joeaiGenreDNASection">
+              <h3>Your strongest supporting signals</h3>
+              <div className="joeaiGenreDNAContributors">
+                {contributors.map((item) => (
+                  <article key={item.id || item.title}>
+                    <strong>{item.title}</strong>
+                    <span>
+                      {[
+                        item.score ? `★ ${item.score}` : '',
+                        item.rewatches ? `${item.rewatches} rewatch${item.rewatches === 1 ? '' : 'es'}` : '',
+                        item.episodes ? `${item.episodes} episodes` : '',
+                        item.favorite ? 'Favorite' : ''
+                      ].filter(Boolean).join(' · ') || item.status || 'Library evidence'}
+                    </span>
+                  </article>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {companions.length > 0 && (
+            <section className="joeaiGenreDNASection">
+              <h3>Taste patterns involved</h3>
+              <div className="joeaiGenreDNACompanions">
+                {companions.map((item) => (
+                  <div key={item.name}>
+                    <span>{item.name}</span>
+                    <strong>{item.percent}%</strong>
+                    <i><b style={{ width: `${Math.max(0, Math.min(100, Number(item.percent) || 0))}%` }} /></i>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          <section className="joeaiCloudComparisonInsight">
+            <div className="joeaiCloudComparisonInsightHeader">
+              <span aria-hidden="true">🍜</span>
+              <div>
+                <small>JOEAI'S READ</small>
+                <strong>What the evidence means</strong>
+              </div>
+            </div>
+            {renderJoeAICloudText(message.text)}
+          </section>
+        </div>
+      );
+    }
+
     if (message.type === 'genreDNAExplanation') {
       const strength = Number(message.strength);
       const hasStrength = Number.isFinite(strength);
@@ -1785,8 +3421,8 @@ export function Assistant({
     }
 
     return (
-      <div key={index} className={'chat ' + message.who}>
-        {message.text}
+      <div key={index} className={'chat ' + message.who + (message.cloudAI ? ' joeaiCloudAnswer' : '')}>
+        {message.cloudAI ? renderJoeAICloudText(message.text) : message.text}
       </div>
     );
   }
@@ -1980,6 +3616,11 @@ export function Assistant({
         <div ref={conversationRef} className="assistant-log joeAIConversation">
           {log.length > 10 && <p className="joeAIHistoryNotice">Earlier messages are hidden to keep JoeAI responsive.</p>}
           {log.slice(-10).map((message, index) => renderMessage(message, index))}
+          {cloudThinking && (
+            <div className="chat bot joeaiCloudThinking" role="status" aria-live="polite">
+              <span aria-hidden="true">🍜</span> JoeAI is thinking…
+            </div>
+          )}
         </div>
 
         <div className="assistant-input joeaiChatInput joeAIComposer">
@@ -1987,15 +3628,16 @@ export function Assistant({
             placeholder={'Ask JoeAI anything...\nTry: recommend something dark under 24 episodes'}
             value={text}
             rows={2}
+            disabled={cloudThinking}
             onChange={(event) => setText(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === 'Enter' && !event.shiftKey) {
                 event.preventDefault();
-                ask();
+                if (!cloudThinking) ask();
               }
             }}
           />
-          <button onClick={() => ask()}>Ask JoeAI</button>
+          <button onClick={() => ask()} disabled={cloudThinking}>{cloudThinking ? 'Thinking…' : 'Ask JoeAI'}</button>
         </div>
       </section>
 

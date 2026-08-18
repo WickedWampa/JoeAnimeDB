@@ -17,6 +17,7 @@ import { createNewUserDemoDatabase } from '../services/newUserMode';
 import { auditGenomeCoverage } from '../ai/genome/runtime/autoGenomeRuntime';
 import { preservePersonalAnimeData } from '../services/personalAnimeData';
 import { promoteCatalogTitleToLibrary } from '../services/quickAdd';
+import { sanitizeJoeAIConversationMessages } from '../ai/intelligence/joeAIIntelligence';
 
 
 function hasGoodMetadata(item = {}) {
@@ -227,7 +228,11 @@ export function useAnimeLibrary() {
     conversation: {
       lastRecommendations: [],
       lastReferencedTitle: '',
-      lastPrompt: ''
+      lastPrompt: '',
+      lastRecommendationPrompt: '',
+      messages: [],
+      recentRecommendationKeys: [],
+      lastConstraints: { exclude: [] }
     }
   };
 
@@ -486,12 +491,35 @@ export function useAnimeLibrary() {
 
   async function setJoeAIConversationContext(context = {}) {
     const current = dataRef.current || data;
+    const previousConversation = current.joeAI?.conversation || {};
     const conversation = {
+      ...previousConversation,
+      ...context,
       lastRecommendations: Array.isArray(context.lastRecommendations)
         ? context.lastRecommendations.slice(0, 10)
-        : [],
-      lastReferencedTitle: String(context.lastReferencedTitle || ''),
-      lastPrompt: String(context.lastPrompt || '')
+        : Array.isArray(previousConversation.lastRecommendations)
+          ? previousConversation.lastRecommendations.slice(0, 10)
+          : [],
+      lastReferencedTitle: String(context.lastReferencedTitle ?? previousConversation.lastReferencedTitle ?? ''),
+      lastPrompt: String(context.lastPrompt ?? previousConversation.lastPrompt ?? ''),
+      lastRecommendationPrompt: String(
+        context.lastRecommendationPrompt ?? previousConversation.lastRecommendationPrompt ?? ''
+      ),
+      messages: sanitizeJoeAIConversationMessages(
+        context.messages ?? previousConversation.messages ?? [],
+        48
+      ),
+      recentRecommendationKeys: Array.isArray(context.recentRecommendationKeys)
+        ? context.recentRecommendationKeys.slice(0, 48)
+        : Array.isArray(previousConversation.recentRecommendationKeys)
+          ? previousConversation.recentRecommendationKeys.slice(0, 48)
+          : [],
+      lastConstraints: context.lastConstraints && typeof context.lastConstraints === 'object'
+        ? context.lastConstraints
+        : previousConversation.lastConstraints && typeof previousConversation.lastConstraints === 'object'
+          ? previousConversation.lastConstraints
+          : { exclude: [] },
+      updatedAt: new Date().toISOString()
     };
     const nextState = newUserMode
       ? { ...(current.joeAI || {}), conversation }
@@ -510,7 +538,11 @@ export function useAnimeLibrary() {
           conversation: {
             lastRecommendations: [],
             lastReferencedTitle: '',
-            lastPrompt: ''
+            lastPrompt: '',
+            lastRecommendationPrompt: '',
+            messages: [],
+            recentRecommendationKeys: [],
+            lastConstraints: { exclude: [] }
           }
         }
       : await animeRepository.clearJoeAIConversationContext();

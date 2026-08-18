@@ -140,13 +140,24 @@ function extractSimilarityTitle(question = '') {
     const match = raw.match(pattern);
     if (match?.[1]) {
       return match[1]
-        .replace(/\s+(?:but|and|with)\s+(?=(?:under|fewer than|less than|over|more than|greater than|longer than|at least|minimum|no fewer than|at most|no more than|up to|between|exactly|\d+\s*(?:episodes?|eps?)|a\s+(?:movie|film)|slice\s+of\s+life|sci[-\s]?fi|science fiction|action|adventure|comedy|drama|fantasy|horror|mystery|psychological|romance|sports|supernatural|thriller|mecha|isekai)\b)[\s\S]*$/i, '')
+        // Strip recommendation modifiers from the source anchor. Keep bare "no"
+        // out of this rule so real titles such as "No Game No Life" remain intact.
+        .replace(/\s+(?:(?:but|and|with)\s+)?(?:without|avoid(?:ing)?|exclude|nothing\s+with|with\s+no)\b[\s\S]*$/i, '')
+        .replace(/\s+(?:but|and|with)\s+(?=(?:under|fewer than|less than|over|more than|greater than|longer than|at least|minimum|no fewer than|at most|no more than|up to|between|exactly|shorter|longer|darker|lighter|funnier|more\s+emotional|\d+\s*(?:episodes?|eps?)|a\s+(?:movie|film)|slice\s+of\s+life|sci[-\s]?fi|science fiction|action|adventure|comedy|drama|fantasy|horror|mystery|psychological|romance|sports|supernatural|thriller|mecha|isekai)\b)[\s\S]*$/i, '')
         .replace(/[?.!]+$/g, '')
         .trim();
     }
   }
 
   return '';
+}
+
+function extractConstrainedSourceTitle(question = '') {
+  const raw = String(question || '').trim().replace(/[?.!]+$/g, '');
+  const match = raw.match(
+    /^(?:please\s+)?(?:recommend|recomend|suggest)(?:\s+me)?\s+(?!something\b|anime\b|shows?\b)(.+?)\s+(?:(?:but\s+)?without|(?:but\s+)?no|with\s+no|nothing\s+with|avoid(?:ing)?|exclude|under|fewer\s+than|less\s+than|at\s+most|no\s+more\s+than|shorter|darker|lighter|funnier|more\s+emotional)\b/i
+  );
+  return match?.[1]?.trim() || '';
 }
 
 function mentionedGenomeCard(question = '') {
@@ -275,9 +286,20 @@ const EXPLICIT_GENRE_CONSTRAINTS = [
   { label: 'Josei', aliases: ['josei'], test: /\bjosei\b/i }
 ];
 
+function extractExcludedGenreConstraints(question = '') {
+  const raw = String(question || '');
+  return EXPLICIT_GENRE_CONSTRAINTS.filter((entry) => {
+    const label = entry.aliases?.[0] || entry.label;
+    const escaped = String(label).replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\\ /g, '\\s+');
+    const negative = new RegExp(`\\b(?:without|avoid|exclude|no|not|nothing\\s+with|nothing\\s+that\\s+has)\\s+(?:any\\s+)?${escaped}\\b`, 'i');
+    return negative.test(raw);
+  });
+}
+
 function extractExplicitGenreConstraints(question = '') {
   const raw = String(question || '');
-  return EXPLICIT_GENRE_CONSTRAINTS.filter((entry) => entry.test.test(raw));
+  const excluded = new Set(extractExcludedGenreConstraints(raw).map((entry) => entry.label));
+  return EXPLICIT_GENRE_CONSTRAINTS.filter((entry) => entry.test.test(raw) && !excluded.has(entry.label));
 }
 
 function itemMatchesExplicitGenre(item = {}, constraint = {}) {
@@ -302,7 +324,8 @@ function recommendationConstraintLabel(baseLabel = 'Anime picks', intent = {}) {
   const genres = (intent.requiredGenres || []).map((entry) => entry.label);
   const primary = genres.length ? genres.join(' + ') : baseLabel;
   const length = episodeConstraintLabel(intent);
-  return length ? `${primary} • ${length}` : primary;
+  const exclusions = (intent.excludedGenres || []).map((entry) => `No ${entry.label}`).join(' + ');
+  return [primary, length, exclusions].filter(Boolean).join(' • ');
 }
 
 function matchesHardIntent(item = {}, intent = {}) {
@@ -316,6 +339,10 @@ function matchesHardIntent(item = {}, intent = {}) {
 
   for (const genre of intent.requiredGenres || []) {
     if (!itemMatchesExplicitGenre(item, genre)) return false;
+  }
+
+  for (const genre of intent.excludedGenres || []) {
+    if (itemMatchesExplicitGenre(item, genre)) return false;
   }
 
   for (const group of intent.requiredKeywordGroups || []) {
@@ -334,6 +361,7 @@ function extractBroadRecommendationIntent(question = '') {
   const studio = studioMatch?.[1]?.trim();
   const wantsMovie = /\b(movie|film)\b/.test(q);
   const requiredGenres = extractExplicitGenreConstraints(question);
+  const excludedGenres = extractExcludedGenreConstraints(question);
   const episodeConstraint = parseEpisodeConstraint(question, q);
   const hasEpisodeConstraint = Boolean(
     episodeConstraint.minEpisodes || episodeConstraint.maxEpisodes || episodeConstraint.exactEpisodes
@@ -347,6 +375,7 @@ function extractBroadRecommendationIntent(question = '') {
       format: wantsMovie ? 'movie' : null,
       ...episodeConstraint,
       requiredGenres,
+      excludedGenres,
       requiredKeywordGroups: [],
       keywords: ['underrated', 'hidden gem', 'cult', 'unique', 'original', 'mystery', 'seinen', 'adventure']
     };
@@ -407,7 +436,7 @@ function extractBroadRecommendationIntent(question = '') {
 
   const matchedProfiles = moodProfiles.filter((entry) => entry.test.test(q));
   const profile = matchedProfiles.find((entry) => entry.id !== 'movie') || matchedProfiles[0];
-  if (!profile && !studio && !requiredGenres.length && !hasEpisodeConstraint && !wantsMovie) return null;
+  if (!profile && !studio && !requiredGenres.length && !excludedGenres.length && !hasEpisodeConstraint && !wantsMovie) return null;
 
   if (profile) {
     const compoundMovieRequest = wantsMovie && profile.id !== 'movie';
@@ -417,6 +446,7 @@ function extractBroadRecommendationIntent(question = '') {
       format: wantsMovie ? 'movie' : null,
       ...episodeConstraint,
       requiredGenres,
+      excludedGenres,
       requiredKeywordGroups: matchedProfiles
         .filter((entry) => entry.id !== 'short' && entry.id !== 'movie')
         .map((entry) => entry.keywords),
@@ -438,6 +468,7 @@ function extractBroadRecommendationIntent(question = '') {
     format: wantsMovie ? 'movie' : null,
     ...episodeConstraint,
     requiredGenres,
+    excludedGenres,
     requiredKeywordGroups: [],
     keywords: requiredGenres.flatMap((entry) => entry.aliases || [])
   };
@@ -458,6 +489,7 @@ function scoreMoodItem(item = {}, intent = {}, owned = false) {
 
   if (intent.studio && getAnimeStudios(item).some((studio) => norm(studio).includes(norm(intent.studio)))) score += 45;
   if ((intent.requiredGenres || []).length) score += 30 * Math.min(2, intent.requiredGenres.length);
+  if ((intent.excludedGenres || []).length) score += 18 * Math.min(2, intent.excludedGenres.length);
   if (intent.minEpisodes || intent.maxEpisodes || intent.exactEpisodes) score += 28;
   if (intent.id === 'short') {
     const eps = Number(item.episodeCount || item.episodes || 0);
@@ -516,15 +548,15 @@ function formatMoodRecommendationCards(intent, anime = [], catalog = []) {
 
   const scored = pool
     .filter((item) => matchesHardIntent(item, intent))
+    .filter((item) => !sharesIdentity(itemIdentityKeys(item), ownedKeys))
     .filter((item) => {
       if (intent.id === 'movie' || intent.id === 'studio' || intent.id === 'genre' || intent.id === 'length' || intent.mode === 'hiddenGems') return true;
       if (!(intent.requiredKeywordGroups || []).length && (
-        intent.format || intent.minEpisodes || intent.maxEpisodes || intent.exactEpisodes || (intent.requiredGenres || []).length
+        intent.format || intent.minEpisodes || intent.maxEpisodes || intent.exactEpisodes || (intent.requiredGenres || []).length || (intent.excludedGenres || []).length
       )) return true;
       return (intent.keywords || []).some((keyword) => textBlob(item).includes(norm(keyword)));
     })
     .map((item) => {
-      const owned = sharesIdentity(itemIdentityKeys(item), ownedKeys);
       const rawScore = scoreMoodItem(item, intent, false);
       const match = Math.max(60, Math.min(98, Math.round(rawScore + 45)));
       const tags = (intent.keywords || [])
@@ -543,6 +575,7 @@ function formatMoodRecommendationCards(intent, anime = [], catalog = []) {
           intent.format === 'movie' ? 'Format filter: anime movie' : '',
           episodeConstraintLabel(intent) ? `Length filter: ${episodeConstraintLabel(intent)}` : '',
           (intent.requiredGenres || []).length ? `Genre filter: ${(intent.requiredGenres || []).map((entry) => entry.label).join(', ')}` : '',
+          (intent.excludedGenres || []).length ? `Excluded: ${(intent.excludedGenres || []).map((entry) => entry.label).join(', ')}` : '',
           intent.studio ? `Studio filter: ${intent.studio}` : '',
           `JoeAI matched this using metadata, genres, themes, studio, episode count, and library ownership.`,
           `This is a broad recommendation mode, not a title-similarity Genome match yet.`
@@ -741,6 +774,7 @@ function formatSimilarGenomeCards(sourceCard, anime = [], catalog = [], question
     format: /\b(movie|film)\b/i.test(question) ? 'movie' : null,
     ...parseEpisodeConstraint(question, norm(question)),
     requiredGenres: extractExplicitGenreConstraints(question),
+    excludedGenres: extractExcludedGenreConstraints(question),
     requiredKeywordGroups: []
   };
   const hasHardConstraint = Boolean(
@@ -749,6 +783,7 @@ function formatSimilarGenomeCards(sourceCard, anime = [], catalog = [], question
     || hardIntent.maxEpisodes
     || hardIntent.exactEpisodes
     || hardIntent.requiredGenres.length
+    || hardIntent.excludedGenres.length
   );
   const items = related
     .map((card, index) => genomeCardToRecommendationItem(card, index, sourceCard, anime, catalog))
@@ -768,7 +803,7 @@ function formatSimilarGenomeCards(sourceCard, anime = [], catalog = [], question
     items,
     subtitle: items.length
       ? subtitle
-      : `No catalog title currently matches ${sourceTitle} while satisfying every requested format or length constraint.`
+      : `No catalog title currently matches ${sourceTitle} while satisfying every requested constraint.`
   };
 }
 
@@ -985,7 +1020,7 @@ export function routeJoeAIRecommendation(question = '', anime = [], catalog = []
 
   // 1. Similarity requests need title-aware recommendation first.
   // Example: "recommend something like Higurashi"
-  const similarTitle = extractSimilarityTitle(question);
+  const similarTitle = extractSimilarityTitle(question) || extractConstrainedSourceTitle(question);
   if (similarTitle) {
     const sourceCard = findGenomeCardByTitle(similarTitle);
     if (sourceCard) return formatSimilarGenomeCards(sourceCard, anime, catalog, question);
@@ -1000,7 +1035,11 @@ export function routeJoeAIRecommendation(question = '', anime = [], catalog = []
   // guard, names such as "School Days" or a title containing "Action" could be
   // mistaken for broad genre requests after explicit genre constraints were added.
   const directTitle = cleanDirectTitleQuestion(question);
-  if (directTitle.explicit && directTitle.title) {
+  const hasRecommendationModifier = Boolean(
+    extractExcludedGenreConstraints(question).length
+    || /\b(?:without|avoid|exclude|under|fewer\s+than|less\s+than|at\s+most|no\s+more\s+than|shorter|longer|darker|lighter|funnier|more\s+emotional)\b/i.test(question)
+  );
+  if (directTitle.explicit && directTitle.title && !hasRecommendationModifier) {
     const directItem = exactLibraryTitleMatch(directTitle.title, anime, catalog);
     const directCard = findGenomeCardByTitle(directTitle.title);
     if (directItem || directCard) {

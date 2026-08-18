@@ -31,7 +31,7 @@ export function sanitizeJoeAIConversationMessages(messages = [], limit = 48) {
 
 function promptExclusions(value = '') {
   const found = [];
-  const pattern = /(?:^|\b)(?:no|without|avoid|exclude)\s+([a-z0-9][a-z0-9 -]{1,30})/gi;
+  const pattern = /(?:^|\b)(?:without|avoid|exclude|nothing\s+with|nothing\s+that\s+has|no(?!\s+(?:more|less|fewer)\s+than))\s+([a-z0-9][a-z0-9 -]{1,30})/gi;
   let match;
   while ((match = pattern.exec(String(value || '')))) {
     const phrase = lower(match[1])
@@ -468,11 +468,21 @@ export function resolveJoeAIFollowUp(text = '', context = {}) {
     };
   }
 
-  const exclusionOnly = raw.match(/^(?:no|without|avoid|exclude)\s+(.+?)[?.!]*$/i);
+  const lengthOnly = raw.match(/^(?:under|fewer\s+than|less\s+than|at\s+most|no\s+more\s+than|up\s+to)\s+\d+\s*(?:episodes?|eps?)[?.!]*$/i);
+  if (lengthOnly) {
+    const basePrompt = context.lastRecommendationPrompt || context.lastPrompt || 'recommend something';
+    return {
+      text: `${basePrompt} ${raw.replace(/[?.!]+$/g, '')}`,
+      avoidRecent: true
+    };
+  }
+
+  const exclusionOnly = raw.match(/^(?:no(?!\s+(?:more|less|fewer)\s+than)|without|avoid|exclude|nothing\s+with|nothing\s+that\s+has)\s+(.+?)[?.!]*$/i);
   if (exclusionOnly) {
     const exclude = promptExclusions(raw);
+    const basePrompt = context.lastRecommendationPrompt || context.lastPrompt || 'recommend something';
     return {
-      text: `${context.lastRecommendationPrompt || context.lastPrompt || 'recommend something'} without ${exclusionOnly[1].trim()}`,
+      text: `${basePrompt} without ${exclusionOnly[1].trim()}`,
       constraints: {
         ...(context.lastConstraints || {}),
         exclude: [...new Set([...(context.lastConstraints?.exclude || []), ...exclude])]
@@ -481,13 +491,14 @@ export function resolveJoeAIFollowUp(text = '', context = {}) {
     };
   }
 
-  const modifier = raw.match(/^(?:give me\s+)?something\s+(shorter|longer|darker|lighter|funnier|less bleak|more emotional)[?.!]*$/i);
+  const modifier = raw.match(/^(?:(?:give me|make it|make that|make them)\s+)?(?:something\s+)?(shorter|longer|darker|lighter|funnier|less bleak|more emotional|more fantasy|fantasy|more action|more comedy|less depressing)[?.!]*$/i);
   if (modifier) {
-    const title = contextTitle(context);
+    const basePrompt = context.lastRecommendationPrompt || context.lastPrompt || 'recommend something';
     return {
-      text: title
-        ? `recommend something ${modifier[1]} than ${title}`
-        : `recommend something ${modifier[1]}`
+      // Preserve the original source anchor. A follow-up like "darker" after
+      // "something like Slime" should still be Slime-like, just darker.
+      text: `${basePrompt} but ${modifier[1]}`,
+      avoidRecent: true
     };
   }
 

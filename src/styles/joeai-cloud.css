@@ -1,0 +1,102 @@
+.joeaiCloudThinking {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: fit-content;
+  opacity: 0.88;
+}
+
+.joeaiCloudRichText {
+  display: grid;
+  gap: 0.72rem;
+  white-space: normal;
+}
+
+.joeaiCloudRichText p,
+.joeaiCloudRichText ul {
+  margin: 0;
+}
+
+.joeaiCloudRichText ul {
+  display: grid;
+  gap: 0.4rem;
+  padding-left: 1.3rem;
+}
+
+.joeaiCloudRichText li {
+  padding-left: 0.15rem;
+}
+
+.joeaiCloudHeading {
+  display: block;
+  margin-top: 0.15rem;
+}
+
+.joeAIComposer textarea:disabled,
+.joeAIComposer button:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+
+/* Structured JoeAI cards can be taller than the visible chat viewport. The
+   conversation is a flex column, so messages must not shrink to fit the row;
+   the conversation itself owns vertical scrolling. */
+.joeAIConversation > .chat {
+  flex: 0 0 auto;
+  flex-shrink: 0;
+}
+
+.joeAIConversation .joeaiGenreDNAExplanation {
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+  box-sizing: border-box;
+}
+
+/* Hybrid local-DNA + cloud explanation card for comparison questions. */
+.joeaiCloudDNAComparison {
+  width: min(980px, 100%) !important;
+  max-width: min(980px, 100%) !important;
+}
+
+.joeaiCloudComparisonInsight {
+  display: grid;
+  gap: 14px;
+  padding: 22px 26px 26px;
+  border-top: 1px solid color-mix(in srgb, var(--joeai-world-accent, var(--cyan)) 34%, var(--line));
+  background:
+    radial-gradient(circle at 10% 0%, color-mix(in srgb, var(--joeai-world-accent-2, var(--pink)) 10%, transparent), transparent 42%),
+    color-mix(in srgb, var(--panel) 92%, #020711);
+}
+
+.joeaiCloudComparisonInsightHeader {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.joeaiCloudComparisonInsightHeader > span {
+  font-size: 24px;
+}
+
+.joeaiCloudComparisonInsightHeader > div {
+  display: grid;
+  gap: 2px;
+}
+
+.joeaiCloudComparisonInsightHeader small {
+  color: var(--joeai-world-accent-2, var(--pink));
+  font-size: 10px;
+  font-weight: 1000;
+  letter-spacing: .13em;
+}
+
+.joeaiCloudComparisonInsightHeader strong {
+  font-size: 16px;
+}
+
+.joeaiCloudComparisonInsight .joeaiCloudRichText {
+  gap: .8rem;
+  line-height: 1.65;
+}

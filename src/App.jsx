@@ -692,6 +692,7 @@ export function App() {
             onJoeAIPreference={setJoeAIPreference}
             onJoeAIConversation={setJoeAIConversationContext}
             contentSafetyMode={contentSafetyMode}
+            setSelected={setSelected}
           />
         )}
         {view === 'following' && (

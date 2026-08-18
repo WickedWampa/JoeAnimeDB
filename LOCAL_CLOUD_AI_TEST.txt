@@ -1,0 +1,31 @@
+JOEANIMEDB - LOCAL CLOUDFLARE WORKERS AI POC
+
+1) Drop the ZIP contents into the JoeAnimeDB project root.
+
+2) Terminal 1 - project root:
+   npm run dev
+
+3) Terminal 2:
+   cd cloudflare/joeai-worker
+   npx wrangler login
+   npx wrangler dev
+
+Wrangler should expose the local Worker at http://127.0.0.1:8787 and proxy
+its Workers AI binding to Cloudflare using your logged-in account.
+
+4) Open the local JoeAnimeDB site, go to JoeAI, and try:
+
+   /cloud Tell me what my library says about my anime taste.
+
+   /cloud Based only on my library data, what patterns stand out in what I rewatch?
+
+   /cloud Talk to me about my strongest anime preferences like a real assistant.
+
+The /cloud prefix is intentionally temporary. It proves the Cloudflare AI path
+without replacing or destabilizing JoeAI's existing recommendation/command router.
+
+Optional: if Wrangler uses another port, create .env.local in the project root:
+
+   VITE_JOEAI_CLOUD_URL=http://127.0.0.1:YOUR_PORT/api/joeai
+
+Then restart npm run dev.

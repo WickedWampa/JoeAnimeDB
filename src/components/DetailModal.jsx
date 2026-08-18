@@ -82,6 +82,15 @@ export function DetailModal({
   const canGoPrevious = !navigationLocked && typeof onPrevious === 'function' && navigationIndex > 0;
   const canGoNext = !navigationLocked && typeof onNext === 'function' && navigationIndex >= 0 && navigationIndex < navigationCount - 1;
   const needsMetadataReview = Boolean(anime.metadataNeedsReview || anime.metadataNeedsRefresh);
+  const displayStudio =
+    anime.studio ||
+    anime.studios?.[0]?.name || anime.studios?.[0] ||
+    anime.productionStudios?.[0]?.name || anime.productionStudios?.[0] || '';
+  const displayType = anime.type || anime.mediaType || '';
+  const displayYear = anime.year || '';
+  const displayEpisodeCount = Number(anime.episodeCount || anime.episodes || 0);
+  const displayCommunityScore = anime.communityScore ?? anime.malScore ?? anime.score ?? null;
+  const displayMetadataLine = [displayStudio, displayType, displayYear].filter(Boolean).join(' · ');
 
   useEffect(() => {
     setScoreDraft(Number(anime.joeScore ?? score(anime) ?? 0));
@@ -509,7 +518,7 @@ export function DetailModal({
             </button>
           </div>
           <h1>{anime.title}</h1>
-          <p className="muted">{anime.studio} · {anime.type || 'TV'} · {anime.year || ''}</p>
+          <p className="muted">{displayMetadataLine || 'Metadata pending'}</p>
 
           {needsMetadataReview && (
             <section className={`detailMetadataReview ${anime.metadataNeedsReview ? 'identityReview' : ''}`} role="status">
@@ -557,8 +566,8 @@ export function DetailModal({
 
           <div className="detailStats">
             <div><strong>{currentScore.toFixed(1)}</strong><span>My Score</span></div>
-            <div><strong>{anime.communityScore || '—'}</strong><span>Community</span></div>
-            <div><strong>{anime.episodeCount || '—'}</strong><span>Episodes</span></div>
+            <div><strong>{displayCommunityScore ?? '—'}</strong><span>Community</span></div>
+            <div><strong>{displayEpisodeCount || '—'}</strong><span>Episodes</span></div>
             <div><strong>{anime.rewatches || 0}</strong><span>Rewatches</span></div>
           </div>
 

@@ -10,6 +10,7 @@ import {
   buildLibraryGenomeProfile,
   scoreGenomeFit
 } from '../ai/intelligence/genomeRecommendationSignals';
+import { sameAnimeIdentity } from '../services/titleIdentity';
 
 const SERIES_STOP_WORDS = new Set([
   'the', 'a', 'an', 'season', 'part', 'final', 'arc', 'episode', 'episodes',
@@ -69,6 +70,7 @@ function hasSameMalId(candidate, libraryItem) {
 
 function isLikelyWatched(candidate, libraryItem, joeAIState = {}) {
   if (!candidate?.title || !libraryItem?.title) return false;
+  if (sameAnimeIdentity(candidate, libraryItem)) return true;
   if (hasSameMalId(candidate, libraryItem)) return true;
   if (hasSavedTitleDistinction(candidate.title, libraryItem.title, joeAIState)) return false;
 
@@ -235,6 +237,20 @@ function matchLabel(match) {
   return 'Catalog Match';
 }
 
+function requestExclusions(prompt = '') {
+  const raw = String(prompt || '').toLowerCase();
+  const found = [];
+  const pattern = /(?:without|avoid|exclude|nothing\s+with|nothing\s+that\s+has|no(?!\s+(?:more|less|fewer)\s+than))\s+(?:any\s+)?([a-z0-9][a-z0-9 -]{1,32})/gi;
+  let match;
+  while ((match = pattern.exec(raw))) {
+    const phrase = String(match[1] || '')
+      .split(/\b(?:but|and|with|under|over|at\s+most|that|which|please)\b/)[0]
+      .trim();
+    if (phrase) found.push(phrase);
+  }
+  return [...new Set(found)].slice(0, 8);
+}
+
 function requestConstraints(prompt = '', library = [], catalog = []) {
   const text = String(prompt || '').toLowerCase();
   const episodeLimit = text.match(/\b(?:under|less than|fewer than)\s+(\d+)\s*(?:episodes?|eps?)\b/);
@@ -257,7 +273,8 @@ function requestConstraints(prompt = '', library = [], catalog = []) {
     wantsFunny: /\b(funnier|funny|comedy|make me laugh|hilarious)\b/.test(text),
     wantsSad: /\b(sad|emotional|tearjerker|heartbreaking|make me cry|tragedy)\b/.test(text),
     wantsMovie: /\b(movie|film)\b/.test(text),
-    excludeHorror: /\b(?:not|without|no)\s+horror\b/.test(text)
+    excludeHorror: /\b(?:not|without|no)\s+horror\b/.test(text),
+    excludedTerms: requestExclusions(prompt)
   };
 }
 
@@ -271,9 +288,15 @@ function requestAdjustment(candidate = {}, constraints = {}) {
   ].filter(Boolean).join(' ')).toLowerCase();
   const episodes = getEpisodes(candidate);
   const type = String(candidate.type || candidate.format || '').toLowerCase();
+  const normalizedCandidateText = ` ${normalizeText(text).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()} `;
   let adjustment = 0;
   let excluded = false;
   const reasons = [];
+
+  for (const exclusion of constraints.excludedTerms || []) {
+    const key = normalizeText(exclusion).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    if (key && normalizedCandidateText.includes(` ${key} `)) excluded = true;
+  }
 
   if (constraints.maxEpisodes && episodes && episodes > constraints.maxEpisodes) excluded = true;
   if (constraints.maxEpisodes && !episodes) excluded = true;

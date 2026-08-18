@@ -61,20 +61,68 @@ export function parseTitleIdentity(value = '') {
   };
 }
 
+function subtitleAcronymAlias(value = '') {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+
+  const split = raw.match(/^(.{3,}?)\s*[:：]\s*(.+)$/);
+  if (!split) return '';
+
+  const base = split[1].trim();
+  const subtitle = split[2].trim();
+  const stopWords = new Set(['a', 'an', 'and', 'at', 'by', 'for', 'from', 'in', 'of', 'on', 'the', 'to', 'with']);
+  const initials = subtitle
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/gi, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .filter((word) => !stopWords.has(word.toLowerCase()))
+    .map((word) => word[0])
+    .join('')
+    .toUpperCase();
+
+  if (initials.length < 2 || initials.length > 8) return '';
+  return `${base} ${initials}`;
+}
+
+function uniqueTitleAliases(values = []) {
+  const seen = new Set();
+  return values.filter(Boolean).filter((value) => {
+    const key = foldText(value);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 export function titleAliases(item = {}) {
-  return [
+  const direct = [
     item.title,
     item.officialTitle,
     item.englishTitle,
+    item.canonicalTitle,
     item.romajiTitle,
     item.japaneseTitle,
-    ...(Array.isArray(item.titleSynonyms) ? item.titleSynonyms : [])
+    item.shortTitle,
+    item.name,
+    ...(Array.isArray(item.titleSynonyms) ? item.titleSynonyms : []),
+    ...(Array.isArray(item.synonyms) ? item.synonyms : []),
+    ...(Array.isArray(item.aliases) ? item.aliases : [])
   ].filter(Boolean);
+
+  // Generic subtitle-acronym aliases let identity matching connect local shorthand
+  // such as "Bleach TYBW" with metadata titles such as
+  // "BLEACH: Thousand-Year Blood War" without hard-coding one franchise.
+  const acronymAliases = direct.map(subtitleAcronymAlias).filter(Boolean);
+  return uniqueTitleAliases([...direct, ...acronymAliases]);
 }
 
 export function animeIdentityKeys(item = {}) {
   const keys = new Set();
-  if (item.kitsuId) keys.add(`kitsu:${item.kitsuId}`);
+  const kitsuId = item.kitsuId || item.kitsu_id;
+  if (kitsuId) keys.add(`kitsu:${kitsuId}`);
   const malId = item.malId || item.mal_id;
   if (malId) keys.add(`mal:${malId}`);
 
@@ -88,8 +136,10 @@ export function animeIdentityKeys(item = {}) {
 }
 
 export function sameAnimeIdentity(a = {}, b = {}) {
-  if (a.kitsuId && b.kitsuId) {
-    return String(a.kitsuId) === String(b.kitsuId);
+  const aKitsu = a.kitsuId || a.kitsu_id;
+  const bKitsu = b.kitsuId || b.kitsu_id;
+  if (aKitsu && bKitsu) {
+    return String(aKitsu) === String(bKitsu);
   }
 
   const aMal = a.malId || a.mal_id;
