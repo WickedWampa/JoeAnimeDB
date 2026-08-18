@@ -1,0 +1,11 @@
+JoeAnimeDB Beta 20 release-gate routing fix
+
+Replace this file in your repo:
+  src/ai/joeAIRecommendationRouter.js
+
+This fixes broad hard-constraint prompts like:
+  recommend comedy under 24 episodes
+without breaking source-anchored prompts like:
+  recommend Slime without isekai
+
+After copying, run: npm run test:release

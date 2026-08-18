@@ -1020,7 +1020,37 @@ export function routeJoeAIRecommendation(question = '', anime = [], catalog = []
 
   // 1. Similarity requests need title-aware recommendation first.
   // Example: "recommend something like Higurashi"
-  const similarTitle = extractSimilarityTitle(question) || extractConstrainedSourceTitle(question);
+  const explicitSimilarityTitle = extractSimilarityTitle(question);
+  const constrainedSourceTitle = extractConstrainedSourceTitle(question);
+
+  // A constrained recommendation such as "recommend Slime without isekai"
+  // should stay source-anchored, but broad requests such as
+  // "recommend comedy under 24 episodes" must NOT treat "comedy" as an anime title.
+  // Only promote the constrained prefix to a source title when it resolves to an
+  // exact local/catalog identity or an exact Genome-card name/alias.
+  let similarTitle = explicitSimilarityTitle;
+
+  if (!similarTitle && constrainedSourceTitle) {
+    const constrainedItem = exactLibraryTitleMatch(constrainedSourceTitle, anime, catalog);
+    const constrainedCard = findGenomeCardByTitle(constrainedSourceTitle);
+    const constrainedCardNames = constrainedCard
+      ? [
+          constrainedCard.id,
+          constrainedCard.title,
+          ...(constrainedCard.titles || []),
+          ...(constrainedCard.aliases || [])
+        ].filter(Boolean)
+      : [];
+
+    const exactGenomeMatch = constrainedCardNames.some(
+      (name) => norm(name) === norm(constrainedSourceTitle)
+    );
+
+    if (constrainedItem || exactGenomeMatch) {
+      similarTitle = constrainedSourceTitle;
+    }
+  }
+
   if (similarTitle) {
     const sourceCard = findGenomeCardByTitle(similarTitle);
     if (sourceCard) return formatSimilarGenomeCards(sourceCard, anime, catalog, question);
