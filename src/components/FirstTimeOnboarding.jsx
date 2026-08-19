@@ -41,8 +41,8 @@ const PAGE_TIPS = {
   assistant: {
     icon: '🧠',
     eyebrow: 'JoeAI tip',
-    title: 'JoeAI can update your library too.',
-    body: 'Try “add Frieren as completed” or “add Bleach, One Piece, Initial D as completed.” JoeAI asks you to choose when a title is ambiguous.'
+    title: 'Ask naturally — then keep steering.',
+    body: 'JoeAI can recommend what to watch, compare titles you own or have never seen, explain your Anime DNA, and make confirmed library changes. Follow up with things like “darker,” “no school,” “under 24 episodes,” “another one,” or “why that one?”'
   },
   discover: {
     icon: '✦',
@@ -59,8 +59,8 @@ const PAGE_TIPS = {
   settings: {
     icon: '⚙',
     eyebrow: 'Settings tip',
-    title: 'Import, back up, and maintain your library.',
-    body: 'Import Library List accepts MyAnimeList XML/XML.GZ, AniList JSON/CSV, and JoeAnimeDB CSV, plain-text, or ranked-list exports. Imports run locally and carry over supported personal list data.'
+    title: 'Backup, import, and export do different jobs.',
+    body: 'Full Backup creates a recovery copy of JoeAnimeDB. Restore Full Backup replaces the current database from that copy. Import Library List merges supported MAL, AniList, or JoeAnimeDB list data into your current library. TXT, CSV, ranked-list, MAL, and AniList exports are portable list files — not full backups.'
   },
   about: {
     icon: '?',
@@ -514,7 +514,7 @@ export function FirstTimeOnboarding({
             <>
               <p className="firstLaunchBody">
                 {nameDraft.trim() ? `Welcome, ${nameDraft.trim()}. ` : ''}
-                JoeAI will keep learning as your real library grows.
+                Your library is ready, and JoeAI can start using it immediately. The more you rate, favorite, rewatch, and teach it, the sharper its recommendations and Anime DNA become.
               </p>
               <section className="firstLaunchBuildGuide" aria-labelledby="first-launch-build-title">
                 <div className="firstLaunchBuildHeading">
@@ -552,19 +552,108 @@ export function FirstTimeOnboarding({
                   <article>
                     <b>4</b>
                     <div>
-                      <strong>Import a saved file</strong>
+                      <strong>Import a library list (merge)</strong>
                       <span className="firstLaunchPath">Settings <i>›</i> Library <i>›</i> Import Library List</span>
-                      <p>Choose a MyAnimeList XML/XML.GZ export, an AniList JSON/CSV export, or a JoeAnimeDB CSV, TXT, or ranked list. Scores, watch status, episode progress, rewatches, dates, and notes are carried over when present; existing titles receive the personal data without replacing their metadata.</p>
+                      <p>Use this for MyAnimeList XML/XML.GZ, AniList JSON/CSV, or JoeAnimeDB TXT/CSV/ranked lists. Import adds or updates supported personal list data inside your current library. It does not replace the whole JoeAnimeDB database like Restore Full Backup does.</p>
                     </div>
                   </article>
                 </div>
               </section>
+
+              <section className="firstLaunchBuildGuide" aria-labelledby="first-launch-joeai-title">
+                <div className="firstLaunchBuildHeading">
+                  <span>🧠</span>
+                  <div>
+                    <strong id="first-launch-joeai-title">Meet the current JoeAI</strong>
+                    <small>It is more than a search box — ask naturally, then steer the conversation.</small>
+                  </div>
+                </div>
+                <div className="firstLaunchBuildSteps">
+                  <article>
+                    <b>1</b>
+                    <div>
+                      <strong>Get a recommendation built around you</strong>
+                      <span className="firstLaunchPath">JoeAI <i>›</i> “what should I watch next?”</span>
+                      <p>JoeAI uses your Anime DNA, ratings, favorites, rewatches, Genome signals, and the exact request you make. Try “recommend something like Bleach but shorter” or “recommend Slime without isekai.”</p>
+                    </div>
+                  </article>
+                  <article>
+                    <b>2</b>
+                    <div>
+                      <strong>Compare anime before you commit</strong>
+                      <span className="firstLaunchPath">JoeAI <i>›</i> “which would I like better, Banana Fish or Gintama?”</span>
+                      <p>If both titles are in your library, JoeAI uses your saved receipts. If one or both are unseen, it can compare predicted taste fit instead — without pretending you already rated them.</p>
+                    </div>
+                  </article>
+                  <article>
+                    <b>3</b>
+                    <div>
+                      <strong>Keep steering without starting over</strong>
+                      <span className="firstLaunchPath">JoeAI <i>›</i> “darker” <i>›</i> “no school” <i>›</i> “another one”</span>
+                      <p>Recommendation follow-ups keep the original request in context. Add or remove constraints, ask for another pick, or ask “why that one?” without rewriting the whole prompt.</p>
+                    </div>
+                  </article>
+                  <article>
+                    <b>4</b>
+                    <div>
+                      <strong>Ask what JoeAI has learned about you</strong>
+                      <span className="firstLaunchPath">JoeAI <i>›</i> “what is unusual about my library?”</span>
+                      <p>Ask why you like a title, what changed in your Anime DNA, what surprised JoeAI about your ratings, or what assumptions about your taste would probably be wrong.</p>
+                    </div>
+                  </article>
+                </div>
+              </section>
+
+              <section className="firstLaunchBuildGuide" aria-labelledby="first-launch-backup-title">
+                <div className="firstLaunchBuildHeading">
+                  <span>🛟</span>
+                  <div>
+                    <strong id="first-launch-backup-title">Backup, restore, import, or export?</strong>
+                    <small>They sound similar, but they are meant for different jobs.</small>
+                  </div>
+                </div>
+                <div className="firstLaunchBuildSteps">
+                  <article>
+                    <b>1</b>
+                    <div>
+                      <strong>Full Backup = recovery copy</strong>
+                      <span className="firstLaunchPath">Settings <i>›</i> Library <i>›</i> Update Rolling Backup / Save Backup As...</span>
+                      <p>Creates a JoeAnimeDB JSON backup containing the database plus supported app preferences and JoeAI memory. Use this before resets, browser cleanup, or moving to another device.</p>
+                    </div>
+                  </article>
+                  <article>
+                    <b>2</b>
+                    <div>
+                      <strong>Restore Full Backup = replace current data</strong>
+                      <span className="firstLaunchPath">Settings <i>›</i> Library <i>›</i> Restore Full Backup</span>
+                      <p>Loads a JoeAnimeDB full-backup JSON and replaces the current database with that saved copy. Use it for recovery — not for importing a MAL or AniList watch list.</p>
+                    </div>
+                  </article>
+                  <article>
+                    <b>3</b>
+                    <div>
+                      <strong>Import Library List = merge titles</strong>
+                      <span className="firstLaunchPath">Settings <i>›</i> Library <i>›</i> Import Library List</span>
+                      <p>Merges supported watch-list data into the library you already have. This is the option for MAL, AniList, TXT, CSV, and ranked-list imports.</p>
+                    </div>
+                  </article>
+                  <article>
+                    <b>4</b>
+                    <div>
+                      <strong>Export = portable/shareable list</strong>
+                      <span className="firstLaunchPath">Settings <i>›</i> Library <i>›</i> Export...</span>
+                      <p>TXT, ranked list, CSV, MAL, and AniList exports are for sharing or moving list data. They do not contain everything needed to fully restore JoeAnimeDB.</p>
+                    </div>
+                  </article>
+                </div>
+              </section>
+
               <div className="firstLaunchReadyGrid">
                 <button type="button" onClick={() => onComplete?.('library')}>
                   <span>▤</span><strong>Library</strong><small>Add, rate, favorite, and rewatch</small>
                 </button>
                 <button type="button" onClick={() => onComplete?.('assistant')}>
-                  <span>🧠</span><strong>JoeAI</strong><small>Ask about titles and your taste</small>
+                  <span>🧠</span><strong>JoeAI</strong><small>Recommendations, comparisons & Anime DNA</small>
                 </button>
                 <button type="button" onClick={() => onComplete?.('discover')}>
                   <span>✦</span><strong>Discover</strong><small>Find unseen Anime DNA matches</small>

@@ -683,17 +683,28 @@ export function Assistant({
     return {
       type: 'helpCard',
       title: '🍜 JoeAI Guide',
-      subtitle: 'I can manage your library, explain your Anime DNA, recommend shows with reasons, and remember how your taste evolves.',
+      subtitle: 'Ask naturally. I can recommend what to watch, compare titles you own or have never seen, explain your Anime DNA, manage your library with confirmation, remember taste signals, and talk anime with you.',
       sections: [
         {
           icon: '🎯',
           title: 'Recommendations',
           items: [
-            'recommend something like Slime',
-            'recommend something like Bleach',
-            'recommend something darker',
             'what should I watch next?',
-            'surprise me'
+            'recommend something like Bleach',
+            'recommend something like Bleach but shorter',
+            'recommend Slime without isekai',
+            'show me a hidden gem'
+          ]
+        },
+        {
+          icon: '⚖️',
+          title: 'Compare & Decide',
+          items: [
+            'which fits my taste better, Bleach or JJK?',
+            'which would I like better, Banana Fish or Gintama?',
+            'which would I like better, Bleach or Banana Fish?',
+            'compare Hunter x Hunter and Bleach',
+            'compare Slime and Overlord'
           ]
         },
         {
@@ -701,10 +712,21 @@ export function Assistant({
           title: 'Anime DNA',
           items: [
             'explain my Anime DNA',
-            'explain worldbuilding',
-            'why do I like Bleach?',
-            'how has my taste changed?',
-            'prediction accuracy'
+            'why do I like long adventures?',
+            'what is unusual about my library?',
+            'what assumption about my taste would be wrong?',
+            'what changed in my Anime DNA?'
+          ]
+        },
+        {
+          icon: '💬',
+          title: 'Keep the Conversation Going',
+          items: [
+            'darker',
+            'no school',
+            'under 24 episodes',
+            'another one',
+            'why that one?'
           ]
         },
         {
@@ -714,8 +736,8 @@ export function Assistant({
             'what did you learn?',
             'what changed recently?',
             'what surprised you most?',
-            'when did you learn worldbuilding?',
-            'daily thought'
+            'what are your strongest signals?',
+            'what are you least certain about?'
           ]
         },
         {
@@ -725,7 +747,8 @@ export function Assistant({
             'I liked One Piece for the crew',
             "I don't care about studio",
             'Long anime are not a problem',
-            "Don't recommend recap movies"
+            "Don't recommend recap movies",
+            'I want more kingdom building'
           ]
         },
         {
@@ -741,7 +764,7 @@ export function Assistant({
         },
         {
           icon: '📊',
-          title: 'Stats',
+          title: 'Stats & Quick Questions',
           items: [
             'library stats',
             'top genres',
@@ -749,20 +772,9 @@ export function Assistant({
             'top rated anime',
             'show me unrated anime'
           ]
-        },
-        {
-          icon: '🎲',
-          title: 'No idea what to ask?',
-          items: [
-            'what are your strongest signals?',
-            'what are you least certain about?',
-            'recommend a hidden gem',
-            'compare Slime and Overlord',
-            'predict my next favorite anime'
-          ]
         }
       ],
-      footer: 'Click any prompt to load it, then hit Ask — or just type naturally. JoeAI will route it.'
+      footer: 'Click a prompt to load it, or just talk naturally. JoeAI can carry recommendation follow-ups, use saved receipts when they exist, and predict taste fit when they do not.'
     };
   }
 
@@ -6294,7 +6306,7 @@ export function SettingsPage({
           </header>
 
           <p className="settingsWorkshopDescription">
-            Back up the full database or export clean lists that are easy to share.
+            <strong>Full Backup</strong> is for complete JoeAnimeDB recovery. <strong>Import Library List</strong> merges outside watch-list data into what you already have. <strong>Export</strong> creates portable/shareable lists and is not a full backup.
           </p>
 
           {document.documentElement.dataset.platform === 'web' && (
@@ -6322,13 +6334,13 @@ export function SettingsPage({
             <button type="button" className="settingsPrimaryBackup" onClick={handleRollingBackup}>
               <span>📦</span>
               <strong>Update Rolling Backup</strong>
-              <small>Updates JoeAnimeDB-backup.json when supported</small>
+              <small>FULL BACKUP · Update the main JoeAnimeDB recovery JSON</small>
             </button>
 
             <button type="button" onClick={handleBackupAs}>
               <span>＋</span>
               <strong>Save Backup As...</strong>
-              <small>Create a separate dated snapshot</small>
+              <small>FULL BACKUP · Create a separate dated recovery snapshot</small>
             </button>
 
             <input
@@ -6346,37 +6358,37 @@ export function SettingsPage({
             >
               <span>♻️</span>
               <strong>Restore Full Backup</strong>
-              <small>Replace the current database from a JoeAnimeDB JSON backup</small>
+              <small>RESTORE · Replaces current data from a JoeAnimeDB full-backup JSON</small>
             </button>
 
             <button type="button" onClick={() => exportLibraryList(data)}>
               <span>📄</span>
               <strong>Export Library List</strong>
-              <small>Alphabetical plain-text title list</small>
+              <small>EXPORT ONLY · Alphabetical title list; not a full backup</small>
             </button>
 
             <button type="button" onClick={() => exportRankedLibraryList(data)}>
               <span>⭐</span>
               <strong>Export Ranked List</strong>
-              <small>Titles with score and watch status</small>
+              <small>EXPORT ONLY · Titles with score/status; not a full backup</small>
             </button>
 
             <button type="button" onClick={() => exportLibraryCsv(data)}>
               <span>📊</span>
               <strong>Export CSV</strong>
-              <small>Spreadsheet-ready library data</small>
+              <small>EXPORT ONLY · Spreadsheet-ready list data; not a full backup</small>
             </button>
 
             <button type="button" onClick={() => handleMalCompatibleExport('mal')}>
               <span>🔷</span>
               <strong>Export for MyAnimeList</strong>
-              <small>MAL-compatible XML with status, scores, and progress</small>
+              <small>EXPORT ONLY · MAL-compatible list XML; not a full backup</small>
             </button>
 
             <button type="button" onClick={() => handleMalCompatibleExport('anilist')}>
               <span>🔹</span>
               <strong>Export for AniList</strong>
-              <small>MAL XML accepted by AniList's list importer</small>
+              <small>EXPORT ONLY · AniList-importable list XML; not a full backup</small>
             </button>
 
             <input
@@ -6399,7 +6411,7 @@ export function SettingsPage({
                   : 'Import Library List'}
               </strong>
               <small>
-                {libraryImportProgress?.title || 'MAL XML · AniList JSON/CSV · JoeAnimeDB TXT/CSV'}
+                {libraryImportProgress?.title || 'MERGES INTO CURRENT LIBRARY · MAL XML · AniList JSON/CSV · JoeAnimeDB TXT/CSV'}
               </small>
             </button>
           </div>
