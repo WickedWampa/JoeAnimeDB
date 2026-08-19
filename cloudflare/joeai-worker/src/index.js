@@ -441,7 +441,11 @@ function comparisonReceiptLines(context = {}) {
       : []);
 
   return targets
-    .filter(Boolean)
+    .filter((item) => Boolean(item) && (
+      item.owned === true ||
+      item.inLibrary === true ||
+      String(item.source || '').toLowerCase() === 'library'
+    ))
     .map((item) => {
       const title = String(item.title || 'Unknown title').trim();
       const score = Number(item.score);
@@ -490,12 +494,12 @@ async function runConversation(env, prompt, context = {}) {
         'Never invent a title as being in the user library, never invent a user score or rewatch count, and never claim you changed the library.',
         'If localEvidence is present, preserve its reliable facts while making the answer natural and conversational.',
         'For comparison questions, treat localEvidence.companions, metrics, and contributors as broad library signals only; never treat the user comparison phrase itself as a genre or claim that every library title matches it.',
-        'For title comparisons, comparisonTargets and localEvidence.comparedTitles are the authoritative resolved user-library records. Use their score, rewatches, favorite, status, genres, and ownership exactly as supplied.',
-        'For a title comparison, the local JoeAnimeDB comparison card has ALREADY printed the authoritative saved score, rewatches, favorite status, ownership, and watch status before your prose appears. Do NOT repeat or restate any numeric/state facts.',
-        'Your comparison prose is commentary only: explain qualitative differences in themes, tone, pacing, character focus, worldbuilding, comedy, stakes, or story structure. Never invent or infer a score, rating, rewatch count, favorite state, ownership state, or watch status.',
-        'If a title appears in comparisonTargets or localEvidence.comparedTitles, it is already in the user library. Never tell the user to check it out, watch it, add it, or imply they have not seen/owned it.',
-        'If a resolved comparison record contains a score, never claim that title has no direct user score. If its score is absent, say the saved score is unavailable rather than guessing from communityScore.',
-        'For comparisons, use comparisonTargets first, then titleMatches and libraryIndex for title-specific facts. Resolve an obvious shorthand only when it is unambiguous from the supplied titles; otherwise say which title detail is uncertain.',
+        'For title comparisons, comparisonTargets and localEvidence.comparedTitles are authoritative resolved targets. A target with source library / owned true contains saved user evidence. A target with source catalog / owned false is predictive evidence and must never be described as watched, owned, rated, favorited, or rewatched.',
+        'For a title comparison, the local JoeAnimeDB comparison card has ALREADY printed any saved receipts and any predictive-fit numbers before your prose appears. Do NOT repeat or restate numeric/state facts.',
+        'Your comparison prose is commentary only: explain qualitative differences in themes, tone, pacing, character focus, worldbuilding, comedy, stakes, or story structure. Never invent or infer a user score, rating, rewatch count, favorite state, ownership state, or watch status. predictedFit is a JoeAI estimate, never a saved user rating.',
+        'Ownership is explicit per comparison target. For owned/library targets, never imply they are unseen. For catalog/unowned targets, never imply the user has watched or rated them; it is fine to discuss them as something the user may like.',
+        'If an owned resolved comparison record contains a score, never claim that title has no direct user score. If an owned score is absent, treat it as unavailable. For an unowned target, do not look for or invent a saved score; use predictedFit and predictionReasons only as prediction evidence.',
+        'For comparisons, use comparisonTargets first, then titleMatches and libraryIndex for title-specific facts. localEvidence.comparisonMode may be saved, mixed, or predictive. When localEvidence.decision.winnerTitle is supplied, that is the deterministic JoeAI verdict; explain why it makes sense rather than overriding it. If decision.close is true, describe the choice as close instead of forcing a winner.',
         'When data is missing, say you do not have that detail instead of guessing.',
         'Do not compare the user to an average viewer, typical viewer, population, norm, or benchmark unless an explicit comparison baseline is supplied in the context.',
         'Treat rewatches as recorded rewatch events/counts. Do not turn a total rewatch count into a claim about how many distinct titles were rewatched unless the context explicitly gives a distinct-title count.',

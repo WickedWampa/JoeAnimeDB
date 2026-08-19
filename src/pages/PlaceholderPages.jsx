@@ -23,7 +23,7 @@ import {
   readLastBackupRecord
 } from '../services/storage';
 import { checkMetadataProviders } from '../services/providerHealth';
-import { createAnimeBrain } from '../engine/animeBrain'; import { fetchMetadata } from '../services/metadata'; import { maybeKnowledgeFirstRecommendation } from '../ai/knowledgeFirstRecommender'; import { parseJoeAIIntent } from '../ai/intentParser'; import { executeJoeAICommand } from '../ai/commandExecutor'; import { routeJoeAIRecommendation, routeJoeAITitleQuestion } from '../ai/joeAIRecommendationRouter';
+import { createAnimeBrain } from '../engine/animeBrain'; import { recommendAnime } from '../engine/recommendationEngine'; import { fetchMetadata } from '../services/metadata'; import { maybeKnowledgeFirstRecommendation } from '../ai/knowledgeFirstRecommender'; import { parseJoeAIIntent } from '../ai/intentParser'; import { executeJoeAICommand } from '../ai/commandExecutor'; import { routeJoeAIRecommendation, routeJoeAITitleQuestion } from '../ai/joeAIRecommendationRouter';
 import { buildTonightsWatch } from '../ai/tonightsWatch'; import { importAnimeByTitle, mergeAnimeMetadata, searchAnimeCandidates } from '../services/animeImporter';
 import {
   fetchWikidataRepair,
@@ -61,6 +61,7 @@ import {
 } from '../services/titleIdentity';
 import { franchiseBaseTitle } from '../utils/titleAliases';
 import { getJoeAIEasterEgg } from '../ai/joeAIEasterEggs';
+import { findGenomeCardByTitle } from '../ai/genome/genomeRegistry';
 import '../styles/joeai-cloud.css';
 
 function localDaySeed(date = new Date()) {
@@ -1519,6 +1520,420 @@ export function Assistant({
     return picked;
   }
 
+  function comparisonGenomeFallback(value = '') {
+    const query = cleanComparisonTarget(value);
+    if (!query) return null;
+
+    const card = findGenomeCardByTitle(query);
+    if (!card) return null;
+
+    const canonicalTitle =
+      (Array.isArray(card.titles) ? card.titles[0] : '') ||
+      card.title ||
+      query;
+
+    return {
+      id: `genome:${card.id || recommendationDetailTitleKey(canonicalTitle)}`,
+      title: canonicalTitle,
+      officialTitle: canonicalTitle,
+      titleSynonyms: Array.isArray(card.titles) ? card.titles.slice(1, 8) : [],
+      aliases: Array.isArray(card.aliases) ? card.aliases.slice(0, 8) : [],
+      themes: Array.isArray(card.themes) ? card.themes.slice(0, 10) : [],
+      tags: Array.isArray(card.tags) ? card.tags.slice(0, 10) : [],
+      viewerMotivations: Array.isArray(card.viewerMotivations) ? card.viewerMotivations.slice(0, 10) : [],
+      fantasyPillars: Array.isArray(card.fantasyPillars) ? card.fantasyPillars.slice(0, 10) : [],
+      atmosphere: Array.isArray(card.atmosphere) ? card.atmosphere.slice(0, 8) : [],
+      emotionalProfile: Array.isArray(card.emotionalProfile) ? card.emotionalProfile.slice(0, 8) : [],
+      synopsis: card.signature || card.coreFantasy || '',
+      genome: card,
+      metadataReady: true,
+      owned: false,
+      catalogSource: 'genome-registry'
+    };
+  }
+
+  function resolveComparisonCatalogTarget(value = '', excluded = []) {
+    const query = cleanComparisonTarget(value);
+    const queryKey = recommendationDetailTitleKey(query);
+    if (!queryKey) return null;
+
+    const requestedContinuation = comparisonTargetContinuation(query);
+    const wantsContinuation = Boolean(
+      requestedContinuation.season || requestedContinuation.part || requestedContinuation.special
+    );
+
+    const shorthandEntry = [...COMMON_CLOUD_TITLE_SHORTHANDS.entries()]
+      .find(([short]) => queryKey === short || queryKey.startsWith(`${short} `));
+    const shorthandTargets = shorthandEntry?.[1] || [];
+
+    const candidates = catalog
+      .map((item, index) => {
+        if (excluded.some((other) => other && sameAnimeIdentity(item, other))) return null;
+
+        const aliases = cloudTitleAliases(item);
+        const displayAliases = [
+          item.title,
+          item.officialTitle,
+          item.englishTitle,
+          item.canonicalTitle
+        ]
+          .filter(Boolean)
+          .map(recommendationDetailTitleKey)
+          .filter(Boolean);
+
+        let matchScore = 0;
+
+        if (displayAliases.includes(queryKey)) {
+          matchScore = 5000;
+        } else if (aliases.includes(queryKey)) {
+          matchScore = 4500;
+        }
+
+        for (const target of shorthandTargets) {
+          const targetKey = recommendationDetailTitleKey(target);
+          if (!targetKey) continue;
+
+          if (displayAliases.includes(targetKey)) {
+            matchScore = Math.max(matchScore, 4900);
+          } else if (displayAliases.some((alias) => alias.startsWith(`${targetKey} `))) {
+            matchScore = Math.max(matchScore, 3600);
+          } else if (aliases.includes(targetKey)) {
+            matchScore = Math.max(matchScore, 3300);
+          }
+        }
+
+        if (queryKey.length >= 5) {
+          for (const alias of aliases) {
+            if (alias === queryKey) continue;
+            if (alias.startsWith(`${queryKey} `) || queryKey.startsWith(`${alias} `)) {
+              matchScore = Math.max(
+                matchScore,
+                2600 + Math.min(200, Math.min(alias.length, queryKey.length))
+              );
+            }
+          }
+        }
+
+        if (!matchScore) return null;
+
+        if (wantsContinuation) {
+          if (comparisonCandidateMatchesContinuation(item, requestedContinuation)) matchScore += 1200;
+          else matchScore -= 900;
+        } else {
+          matchScore -= comparisonContinuationPenalty(item);
+
+          const displayBases = displayAliases.map((alias) =>
+            recommendationDetailTitleKey(franchiseBaseTitle(alias))
+          );
+          if (displayBases.includes(queryKey) && !displayAliases.includes(queryKey)) {
+            matchScore -= 500;
+          }
+        }
+
+        return { item, index, matchScore };
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.matchScore - a.matchScore || a.index - b.index);
+
+    if (candidates[0]?.item) return candidates[0].item;
+
+    // The Genome registry is JoeAI's last local identity fallback. This lets a
+    // known title participate in a predictive comparison even when the catalog
+    // row is missing or has not been enriched yet.
+    const genomeItem = comparisonGenomeFallback(query);
+    if (
+      genomeItem &&
+      !excluded.some((other) => other && sameAnimeIdentity(genomeItem, other))
+    ) return genomeItem;
+
+    return null;
+  }
+
+  function resolveFlexibleComparisonTargets(prompt = '') {
+    const explicitTargets = extractComparisonTitleQueries(prompt);
+    if (explicitTargets.length !== 2) return [];
+
+    const resolved = [];
+    for (const query of explicitTargets) {
+      const libraryItem = resolveComparisonLibraryTarget(query, resolved.map((entry) => entry.item));
+      if (libraryItem) {
+        resolved.push({ item: libraryItem, source: 'library', query });
+        continue;
+      }
+
+      const catalogItem = resolveComparisonCatalogTarget(query, resolved.map((entry) => entry.item));
+      if (catalogItem) {
+        resolved.push({ item: catalogItem, source: 'catalog', query });
+        continue;
+      }
+
+      return [];
+    }
+
+    return resolved;
+  }
+
+  function comparisonPrediction(item = {}, source = 'catalog', activeState = joeAIState) {
+    const targetTitle = item.officialTitle || item.title || '';
+    const targetBase = recommendationDetailTitleKey(franchiseBaseTitle(targetTitle));
+
+    // When predicting an owned title, remove that franchise from the taste-profile
+    // input so the recommendation engine can score the target as if it were unseen
+    // instead of rejecting it as already watched.
+    const tasteLibrary = anime.filter((libraryItem) => {
+      if (sameAnimeIdentity(libraryItem, item)) return false;
+      if (source !== 'library') return true;
+
+      const libraryBase = recommendationDetailTitleKey(
+        franchiseBaseTitle(libraryItem.officialTitle || libraryItem.title || '')
+      );
+      return !targetBase || libraryBase !== targetBase;
+    });
+
+    const candidate = {
+      ...item,
+      owned: false,
+      inLibrary: false
+    };
+
+    const predicted = recommendAnime(tasteLibrary, [candidate], {
+      limit: 1,
+      joeAIState: activeState || joeAIState,
+      prompt: ''
+    })?.[0] || null;
+
+    if (!predicted) {
+      return {
+        match: null,
+        dataConfidence: null,
+        predictionConfidence: null,
+        reasons: [],
+        genomeTraits: []
+      };
+    }
+
+    return {
+      match: Number.isFinite(Number(predicted.match)) ? Number(predicted.match) : null,
+      dataConfidence: Number.isFinite(Number(predicted.confidenceReceipt?.dataConfidence))
+        ? Number(predicted.confidenceReceipt.dataConfidence)
+        : null,
+      predictionConfidence: Number.isFinite(Number(predicted.confidenceReceipt?.predictionConfidence))
+        ? Number(predicted.confidenceReceipt.predictionConfidence)
+        : null,
+      reasons: Array.isArray(predicted.reasons) ? predicted.reasons.slice(0, 4) : [],
+      genomeTraits: Array.isArray(predicted.genomeTraits) ? predicted.genomeTraits.slice(0, 6) : []
+    };
+  }
+
+  function comparisonDecisionFit(entry = {}, prediction = {}) {
+    if (entry.source === 'library') {
+      const receipt = cloudComparisonRecord(entry.item);
+      const savedScore = Number(receipt.score || 0);
+      if (savedScore > 0) {
+        return Math.max(1, Math.min(
+          100,
+          Math.round(
+            (savedScore * 10) +
+            (receipt.favorite ? 3 : 0) +
+            Math.min(4, Number(receipt.rewatches || 0))
+          )
+        ));
+      }
+    }
+
+    const predicted = Number(prediction.match);
+    return Number.isFinite(predicted) && predicted > 0 ? Math.round(predicted) : null;
+  }
+
+  function cloudFlexibleComparisonRecord(entry = {}, prediction = {}) {
+    const item = entry.item || {};
+    const owned = entry.source === 'library';
+    const base = owned
+      ? cloudComparisonRecord(item)
+      : cloudCompactAnime(item, { rich: true, source: 'catalog' });
+
+    return {
+      ...base,
+      source: owned ? 'library' : 'catalog',
+      owned,
+      inLibrary: owned,
+      comparisonBasis: owned ? 'saved-library-evidence' : 'anime-dna-prediction',
+      predictedFit: Number.isFinite(Number(prediction.match)) ? Number(prediction.match) : null,
+      dataConfidence: Number.isFinite(Number(prediction.dataConfidence)) ? Number(prediction.dataConfidence) : null,
+      predictionConfidence: Number.isFinite(Number(prediction.predictionConfidence)) ? Number(prediction.predictionConfidence) : null,
+      predictionReasons: Array.isArray(prediction.reasons) ? prediction.reasons.slice(0, 4) : [],
+      genomeTraits: Array.isArray(prediction.genomeTraits) ? prediction.genomeTraits.slice(0, 6) : []
+    };
+  }
+
+  function buildPredictiveComparisonEvidence(prompt = '', activeState = joeAIState) {
+    const targets = resolveFlexibleComparisonTargets(prompt);
+    if (targets.length !== 2) return null;
+
+    const predictions = targets.map((entry) =>
+      comparisonPrediction(entry.item, entry.source, activeState)
+    );
+    const records = targets.map((entry, index) =>
+      cloudFlexibleComparisonRecord(entry, predictions[index])
+    );
+
+    const ownedCount = targets.filter((entry) => entry.source === 'library').length;
+    const comparisonMode = ownedCount === 2
+      ? 'saved'
+      : ownedCount === 1
+        ? 'mixed'
+        : 'predictive';
+
+    // The existing receipt path remains untouched for two owned titles.
+    if (comparisonMode === 'saved') {
+      const savedEvidence = buildTitleComparisonEvidence(prompt);
+      return savedEvidence ? { ...savedEvidence, comparisonMode: 'saved' } : null;
+    }
+
+    const [firstEntry, secondEntry] = targets;
+    const [firstPrediction, secondPrediction] = predictions;
+    const [firstRecord, secondRecord] = records;
+    const firstTitle = firstEntry.item.officialTitle || firstEntry.item.title || firstEntry.query;
+    const secondTitle = secondEntry.item.officialTitle || secondEntry.item.title || secondEntry.query;
+
+    const firstFit = comparisonDecisionFit(firstEntry, firstPrediction);
+    const secondFit = comparisonDecisionFit(secondEntry, secondPrediction);
+    const bothFits = Number.isFinite(firstFit) && Number.isFinite(secondFit);
+    const fitGap = bothFits ? Math.abs(firstFit - secondFit) : 0;
+    const winnerTitle = bothFits && fitGap > 2
+      ? (firstFit > secondFit ? firstTitle : secondTitle)
+      : '';
+
+    const confidenceValues = [
+      firstPrediction.predictionConfidence,
+      secondPrediction.predictionConfidence
+    ].map(Number).filter(Number.isFinite);
+    const averageConfidence = confidenceValues.length
+      ? confidenceValues.reduce((sum, value) => sum + value, 0) / confidenceValues.length
+      : 64;
+    const signalStrength = Math.max(
+      45,
+      Math.min(94, Math.round(averageConfidence + Math.min(10, fitGap / 2)))
+    );
+
+    const metrics = [];
+    const contributors = [];
+
+    targets.forEach((entry, index) => {
+      const item = entry.item;
+      const record = records[index];
+      const prediction = predictions[index];
+      const title = item.officialTitle || item.title || entry.query;
+
+      if (entry.source === 'library') {
+        const savedScore = Number(record.score || 0);
+        metrics.push({
+          label: `${title} saved score`,
+          value: savedScore > 0 ? savedScore.toFixed(1).replace(/\.0$/, '') : '—'
+        });
+        metrics.push({
+          label: `${title} favorite`,
+          value: record.favorite ? 'Yes' : 'No'
+        });
+
+        contributors.push({
+          ...item,
+          title,
+          score: savedScore || null,
+          rewatches: Number(record.rewatches || 0),
+          favorite: Boolean(record.favorite),
+          status: record.status || item.status || '',
+          comparisonSummary: [
+            savedScore > 0 ? `★ ${savedScore.toFixed(1).replace(/\.0$/, '')}` : 'No saved score',
+            Number(record.rewatches || 0) > 0
+              ? `${Number(record.rewatches)} rewatch${Number(record.rewatches) === 1 ? '' : 'es'}`
+              : '',
+            record.favorite ? 'Favorite' : '',
+            'Library evidence'
+          ].filter(Boolean).join(' · ')
+        });
+      } else {
+        const predictedFit = Number(prediction.match);
+        const predictionConfidence = Number(prediction.predictionConfidence);
+
+        metrics.push({
+          label: `${title} predicted fit`,
+          value: Number.isFinite(predictedFit) ? `${Math.round(predictedFit)}%` : '—'
+        });
+        metrics.push({
+          label: `${title} prediction confidence`,
+          value: Number.isFinite(predictionConfidence) ? `${Math.round(predictionConfidence)}%` : '—'
+        });
+
+        contributors.push({
+          ...item,
+          title,
+          score: null,
+          rewatches: 0,
+          favorite: false,
+          status: '',
+          comparisonSummary: [
+            Number.isFinite(predictedFit) ? `${Math.round(predictedFit)}% predicted taste fit` : 'Predictive comparison',
+            Number.isFinite(predictionConfidence) ? `${Math.round(predictionConfidence)}% confidence` : '',
+            'Not in library'
+          ].filter(Boolean).join(' · ')
+        });
+      }
+    });
+
+    const genreCounts = countBy(
+      anime.flatMap((item) => Array.isArray(item.genres) ? item.genres : [])
+    );
+    const targetSignals = new Set(
+      targets.flatMap(({ item }, index) => [
+        ...(Array.isArray(item.genres) ? item.genres : []),
+        ...(Array.isArray(item.themes) ? item.themes : []),
+        ...(Array.isArray(predictions[index].genomeTraits) ? predictions[index].genomeTraits : [])
+      ]).filter(Boolean)
+    );
+    const relevantSignals = genreCounts
+      .filter(([name]) => targetSignals.has(name))
+      .slice(0, 5);
+    const fallbackSignals = relevantSignals.length ? relevantSignals : genreCounts.slice(0, 5);
+    const maxSignalCount = Math.max(
+      1,
+      ...fallbackSignals.map(([, count]) => Number(count) || 0)
+    );
+
+    const summary = comparisonMode === 'mixed'
+      ? 'A mixed taste comparison using saved library evidence for the title you know and an Anime DNA prediction for the unseen title.'
+      : 'A predictive taste comparison using your Anime DNA, Genome evidence, and available title metadata. Predicted fit is not a saved rating.';
+
+    return {
+      type: 'genreDNAExplanation',
+      title: `${firstTitle} vs ${secondTitle}`,
+      summary,
+      strength: signalStrength,
+      metrics,
+      contributors,
+      contributorsHeading: comparisonMode === 'mixed'
+        ? 'Saved + predictive evidence'
+        : 'Predictive evidence',
+      companions: fallbackSignals.map(([name, count]) => ({
+        name,
+        percent: Math.max(8, Math.round((Number(count) / maxSignalCount) * 100))
+      })),
+      comparedTitles: records,
+      comparisonMode,
+      decision: {
+        winnerTitle,
+        close: !winnerTitle,
+        firstTitle,
+        secondTitle,
+        firstFit,
+        secondFit,
+        rule: comparisonMode === 'mixed'
+          ? 'Saved personal evidence outranks prediction when a direct user score exists; unseen-title fit comes from local Anime DNA prediction.'
+          : 'Both fits are local Anime DNA predictions, not user ratings.'
+      }
+    };
+  }
+
   function buildTitleComparisonEvidence(prompt = '') {
     const unique = resolveComparisonLibraryTitles(prompt);
 
@@ -2308,7 +2723,7 @@ export function Assistant({
       ? compactCloudValue(
           Array.isArray(localEvidence?.comparedTitles) && localEvidence.comparedTitles.length
             ? localEvidence.comparedTitles.slice(0, 2)
-            : titleMatches.filter((item) => item.source === 'library').slice(0, 2)
+            : titleMatches.slice(0, 2)
         )
       : undefined;
 
@@ -2533,7 +2948,7 @@ export function Assistant({
     // natural wording like "why do I prefer One Piece to Naruto?" on the same
     // hybrid path as "Bleach more than JJK".
     if (isJoeAIComparisonQuestion(routedText)) {
-      const comparisonEvidence = buildTitleComparisonEvidence(routedText);
+      const comparisonEvidence = buildPredictiveComparisonEvidence(routedText, activeJoeAIState);
       if (comparisonEvidence) {
         // Keep comparison receipts and cloud commentary in ONE rendered card.
         // The evidence object is fully local/deterministic; Workers AI only writes
@@ -2543,10 +2958,12 @@ export function Assistant({
           routedText,
           {
             kind: 'titleComparison',
+            comparisonMode: comparisonEvidence.comparisonMode || 'saved',
             comparedTitles: comparisonEvidence.comparedTitles,
+            decision: comparisonEvidence.decision || null,
             metrics: comparisonEvidence.metrics,
             summary: comparisonEvidence.summary,
-            rule: 'The comparison card renders authoritative local score, rewatch, favorite, status, and ownership facts. Do not repeat or invent those facts. Add only concise qualitative interpretation about tone, themes, pacing, characters, worldbuilding, comedy, stakes, or story structure.'
+            rule: 'Respect each target source exactly. Library targets contain saved receipts; catalog targets contain Anime DNA predictions. A predicted fit is not a saved rating. The local decision is authoritative when present. Do not invent ownership, ratings, rewatches, or favorites. Add concise qualitative interpretation only.'
           },
           {
             type: 'dnaComparison',
@@ -2561,7 +2978,7 @@ export function Assistant({
 
       appendBotResult({
         type: 'text',
-        text: 'I can compare those safely once I can resolve both titles to exact library entries. Try the exact library names so I do not guess at your saved scores.'
+        text: 'I can compare those once I can resolve both titles from your library, catalog, or local Genome registry. Try the exact anime names so I do not guess which entries you mean.'
       }, routedText);
       return;
     }
@@ -3624,18 +4041,18 @@ export function Assistant({
 
           {contributors.length > 0 && (
             <section className="joeaiGenreDNASection">
-              <h3>Your strongest supporting signals</h3>
+              <h3>{evidence.contributorsHeading || 'Your strongest supporting signals'}</h3>
               <div className="joeaiGenreDNAContributors">
                 {contributors.map((item) => (
                   <article key={item.id || item.title}>
                     <strong>{item.title}</strong>
                     <span>
-                      {[
+                      {item.comparisonSummary || [
                         item.score ? `★ ${item.score}` : '',
                         item.rewatches ? `${item.rewatches} rewatch${item.rewatches === 1 ? '' : 'es'}` : '',
                         item.episodes ? `${item.episodes} episodes` : '',
                         item.favorite ? 'Favorite' : ''
-                      ].filter(Boolean).join(' · ') || item.status || 'Library evidence'}
+                      ].filter(Boolean).join(' · ') || item.status || 'Comparison evidence'}
                     </span>
                   </article>
                 ))}
