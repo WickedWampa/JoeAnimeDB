@@ -1008,7 +1008,14 @@ export function Assistant({
     // library/owned records are allowed to contribute a personal rating signal.
     const isLibraryRecord = source === 'library' || Boolean(item.owned);
     const userScore = isLibraryRecord
-      ? Number(item.joeScore ?? item.userScore ?? item.personalScore ?? item.score ?? item.rating ?? 0)
+      ? Number(
+          item.joeScore ??
+          item.userScore ??
+          item.personalScore ??
+          item.myScore ??
+          item.rating ??
+          0
+        )
       : 0;
     const aliases = [
       item.officialTitle,
@@ -1036,7 +1043,9 @@ export function Assistant({
       episodes: Number(item.episodeCount || item.episodes || 0) || undefined,
       malId: item.malId ?? item.mal_id ?? undefined,
       kitsuId: item.kitsuId ?? item.kitsu_id ?? undefined,
-      source: source || undefined
+      source: source || undefined,
+      owned: isLibraryRecord || undefined,
+      inLibrary: isLibraryRecord || undefined
     };
 
     if (rich) {
@@ -1049,6 +1058,42 @@ export function Assistant({
 
     return record;
   }
+
+  function cloudComparisonRecord(item = {}) {
+    const userScore = Number(
+      item.joeScore ??
+      item.userScore ??
+      item.personalScore ??
+      item.myScore ??
+      item.rating ??
+      0
+    );
+
+    return {
+      ...cloudCompactAnime(item, { rich: true, source: 'library' }),
+      score: userScore > 0 ? userScore : null,
+      rewatches: Number(item.rewatches || 0) || 0,
+      favorite: Boolean(item.favorite),
+      status: item.status || '',
+      owned: true,
+      inLibrary: true
+    };
+  }
+
+  const COMMON_CLOUD_TITLE_SHORTHANDS = new Map([
+    ['jjk', ['jujutsu kaisen']],
+    ['hxh', ['hunter x hunter']],
+    ['op', ['one piece']],
+    ['aot', ['attack on titan', 'shingeki no kyojin']],
+    ['mha', ['my hero academia']],
+    ['bnha', ['boku no hero academia']],
+    ['fma', ['fullmetal alchemist']],
+    ['fmab', ['fullmetal alchemist brotherhood']],
+    ['sao', ['sword art online']],
+    ['slime', ['that time i got reincarnated as a slime', 'tensei shitara slime datta ken']],
+    ['kny', ['kimetsu no yaiba', 'demon slayer']],
+    ['tensura', ['that time i got reincarnated as a slime', 'tensei shitara slime datta ken']]
+  ]);
 
   function cloudTitleAliases(item = {}) {
     return [
@@ -1063,9 +1108,49 @@ export function Assistant({
       .filter((title) => title.length >= 4);
   }
 
+  function cloudShortTitleAliases(item = {}) {
+    const fullAliases = [
+      ...recommendationDetailTitles(item),
+      item.shortTitle,
+      item.acronym,
+      ...(Array.isArray(item.synonyms) ? item.synonyms : []),
+      ...(Array.isArray(item.aliases) ? item.aliases : [])
+    ]
+      .filter(Boolean)
+      .map(recommendationDetailTitleKey)
+      .filter(Boolean);
+
+    const short = new Set(
+      [item.shortTitle, item.acronym]
+        .filter(Boolean)
+        .map(recommendationDetailTitleKey)
+        .filter((alias) => alias.length >= 2 && alias.length <= 10 && !alias.includes(' '))
+    );
+
+    // Generate ordinary initialisms deterministically (Hunter x Hunter -> HxH,
+    // One Piece -> OP, Sword Art Online -> SAO) and supplement the handful of
+    // fandom shorthands that cannot be derived from word initials (JJK, FMAB).
+    for (const title of fullAliases) {
+      const words = title.split(/\s+/).filter(Boolean);
+      if (words.length >= 2 && words.length <= 8) {
+        const initials = words.map((word) => word[0]).join('');
+        if (initials.length >= 2 && initials.length <= 8) short.add(initials);
+      }
+    }
+
+    for (const [alias, targets] of COMMON_CLOUD_TITLE_SHORTHANDS.entries()) {
+      if (targets.some((target) => fullAliases.some((title) => title === target || title.includes(target)))) {
+        short.add(alias);
+      }
+    }
+
+    return [...short];
+  }
+
   function findCloudTitleMatches(prompt = '') {
     const promptKey = recommendationDetailTitleKey(prompt);
     if (!promptKey) return [];
+    const promptTokens = new Set(promptKey.split(/\s+/).filter(Boolean));
 
     const pool = [
       ...anime.map((item) => ({ item, source: 'library' })),
@@ -1078,18 +1163,21 @@ export function Assistant({
       const aliases = cloudTitleAliases(entry.item);
       const longestMatch = aliases
         .filter((alias) => promptKey.includes(alias))
-        .sort((a, b) => b.length - a.length)[0];
+        .sort((a, b) => b.length - a.length)[0] || '';
+      const shortMatch = cloudShortTitleAliases(entry.item)
+        .filter((alias) => promptTokens.has(alias))
+        .sort((a, b) => b.length - a.length)[0] || '';
 
-      if (!longestMatch) continue;
+      if (!longestMatch && !shortMatch) continue;
 
       const identity = String(
         entry.item.malId ?? entry.item.mal_id ??
         entry.item.kitsuId ?? entry.item.kitsu_id ??
-        entry.item.id ?? entry.item.title ?? longestMatch
+        entry.item.id ?? entry.item.title ?? (longestMatch || shortMatch)
       );
       if (seen.has(identity)) continue;
       seen.add(identity);
-      matches.push({ ...entry, matchLength: longestMatch.length });
+      matches.push({ ...entry, matchLength: Math.max(longestMatch.length, shortMatch.length) });
     }
 
     return matches
@@ -1148,12 +1236,24 @@ export function Assistant({
   }
 
   function isJoeAIComparisonQuestion(prompt = '') {
-    return /\b(vs\.?|versus|over|than|compare|comparison|between|prefer|prefers|preferred|better\s+than|more\s+than)\b/i.test(String(prompt || ''));
+    const text = String(prompt || '').trim();
+    if (!text) return false;
+
+    return (
+      /\b(vs\.?|versus|over|than|compare|comparison|between|prefer|prefers|preferred|better\s+than|more\s+than)\b/i.test(text) ||
+      /\b(?:which|what)\b.{0,70}\b(?:fits?|suits?|matches?)\b.{0,45}\bbetter\b/i.test(text) ||
+      /\bbetter\b.{0,50}\b(?:or|between)\b/i.test(text)
+    );
   }
 
   function isJoeAILibraryReflectionQuestion(prompt = '') {
     const text = String(prompt || '').trim().toLowerCase();
     if (!text) return false;
+
+    // A title-to-title comparison can contain phrases like "my taste" + "which",
+    // which previously made the broad reflection detector steal the request before
+    // the comparison route could build its deterministic receipt card.
+    if (isJoeAIComparisonQuestion(prompt)) return false;
 
     // These are questions about the user's overall taste/library, not title lookups.
     // Catch them before the legacy title-question parser can turn phrases such as
@@ -1193,30 +1293,250 @@ export function Assistant({
     );
   }
 
-  function buildTitleComparisonEvidence(prompt = '') {
-    const libraryMatches = findCloudTitleMatches(prompt)
+  function comparisonContinuationPenalty(item = {}) {
+    const display = recommendationDetailTitleKey(
+      [item.title, item.officialTitle, item.englishTitle].filter(Boolean).join(' ')
+    );
+
+    let penalty = 0;
+    if (/\b(?:season|s)\s*[2-9]\b/.test(display)) penalty += 350;
+    if (/\b(?:part|cour)\s*[2-9]\b/.test(display)) penalty += 260;
+    if (/\b(?:movie|film|ova|ona|specials?|recap)\b/.test(display)) penalty += 220;
+    if (/\b(?:ii|iii|iv)\b/.test(display)) penalty += 140;
+    return penalty;
+  }
+
+  function promptExplicitlyRequestsContinuation(prompt = '') {
+    const key = recommendationDetailTitleKey(prompt);
+    return /\b(?:season|s)\s*[2-9]\b|\b(?:part|cour)\s*[2-9]\b|\b(?:movie|film|ova|ona|specials?|recap)\b/.test(key);
+  }
+
+  function cleanComparisonTarget(value = '') {
+    return String(value || '')
+      .trim()
+      .replace(/^[\s"'“”‘’`([{]+|[\s"'“”‘’`\])}]+$/g, '')
+      .replace(/\s+(?:for|based\s+on)\s+my\s+(?:anime\s+)?taste\s*$/i, '')
+      .replace(/\s+in\s+my\s+(?:anime\s+)?library\s*$/i, '')
+      .trim();
+  }
+
+  function extractComparisonTitleQueries(prompt = '') {
+    const raw = String(prompt || '')
+      .trim()
+      .replace(/[?!]+\s*$/g, '')
+      .trim();
+    if (!raw) return [];
+
+    const patterns = [
+      /\bwhy\s+do\s+i\s+(?:like|prefer)\s+(.+?)\s+(?:more\s+than|over|to)\s+(.+)$/i,
+      /\bcompare\s+(.+?)\s+(?:vs\.?|versus|and|with)\s+(.+)$/i,
+      /\bbetter\b\s*[,\-:]?\s*(.+?)\s+or\s+(.+)$/i,
+      /\bbetween\s+(.+?)\s+and\s+(.+)$/i,
+      /^(.+?)\s+(?:vs\.?|versus)\s+(.+)$/i,
+      /^(.+?)\s+(?:more\s+than|better\s+than|over)\s+(.+)$/i,
+      /^(.+?)\s+or\s+(.+?)\s+(?:which|what).+\bbetter$/i
+    ];
+
+    for (const pattern of patterns) {
+      const match = raw.match(pattern);
+      if (!match) continue;
+
+      const left = cleanComparisonTarget(match[1]);
+      const right = cleanComparisonTarget(match[2]);
+      if (left && right) return [left, right];
+    }
+
+    return [];
+  }
+
+  function comparisonTargetContinuation(value = '') {
+    const key = recommendationDetailTitleKey(value);
+    const season = key.match(/\b(?:season\s*|s)([2-9])\b/);
+    const part = key.match(/\b(?:part|cour)\s*([2-9])\b/);
+    const special = key.match(/\b(movie|film|ova|ona|specials?|recap)\b/);
+
+    return {
+      season: season ? Number(season[1]) : null,
+      part: part ? Number(part[1]) : null,
+      special: special ? special[1] : ''
+    };
+  }
+
+  function comparisonCandidateMatchesContinuation(item = {}, requested = {}) {
+    if (!requested.season && !requested.part && !requested.special) return false;
+
+    const display = recommendationDetailTitleKey(
+      [item.title, item.officialTitle, item.englishTitle, item.canonicalTitle]
+        .filter(Boolean)
+        .join(' ')
+    );
+
+    if (requested.season) {
+      const seasonPattern = new RegExp(`\\b(?:season\\s*|s)${requested.season}\\b`, 'i');
+      if (!seasonPattern.test(display)) return false;
+    }
+
+    if (requested.part) {
+      const partPattern = new RegExp(`\\b(?:part|cour)\\s*${requested.part}\\b`, 'i');
+      if (!partPattern.test(display)) return false;
+    }
+
+    if (requested.special && !new RegExp(`\\b${requested.special}\\b`, 'i').test(display)) return false;
+    return true;
+  }
+
+  function resolveComparisonLibraryTarget(value = '', excluded = []) {
+    const query = cleanComparisonTarget(value);
+    const queryKey = recommendationDetailTitleKey(query);
+    if (!queryKey) return null;
+
+    const requestedContinuation = comparisonTargetContinuation(query);
+    const wantsContinuation = Boolean(
+      requestedContinuation.season || requestedContinuation.part || requestedContinuation.special
+    );
+
+    const shorthandEntry = [...COMMON_CLOUD_TITLE_SHORTHANDS.entries()]
+      .find(([short]) => queryKey === short || queryKey.startsWith(`${short} `));
+    const shorthandTargets = shorthandEntry?.[1] || [];
+
+    const candidates = anime
+      .map((item, index) => {
+        if (excluded.some((other) => other && sameAnimeIdentity(item, other))) return null;
+
+        const aliases = cloudTitleAliases(item);
+        const displayAliases = [
+          item.title,
+          item.officialTitle,
+          item.englishTitle,
+          item.canonicalTitle
+        ]
+          .filter(Boolean)
+          .map(recommendationDetailTitleKey)
+          .filter(Boolean);
+
+        let matchScore = 0;
+        let reason = '';
+
+        if (displayAliases.includes(queryKey)) {
+          matchScore = 5000;
+          reason = 'exact display title';
+        } else if (aliases.includes(queryKey)) {
+          matchScore = 4500;
+          reason = 'exact alias';
+        }
+
+        for (const target of shorthandTargets) {
+          const targetKey = recommendationDetailTitleKey(target);
+          if (!targetKey) continue;
+
+          if (displayAliases.includes(targetKey)) {
+            const scoreValue = 4900;
+            if (scoreValue > matchScore) {
+              matchScore = scoreValue;
+              reason = `base shorthand ${shorthandEntry[0]}`;
+            }
+          } else if (displayAliases.some((alias) => alias.startsWith(`${targetKey} `))) {
+            const scoreValue = 3600;
+            if (scoreValue > matchScore) {
+              matchScore = scoreValue;
+              reason = `shorthand franchise member ${shorthandEntry[0]}`;
+            }
+          } else if (aliases.includes(targetKey)) {
+            const scoreValue = 3300;
+            if (scoreValue > matchScore) {
+              matchScore = scoreValue;
+              reason = `shorthand alias ${shorthandEntry[0]}`;
+            }
+          }
+        }
+
+        // Full-title requests can still resolve harmless punctuation/subtitle
+        // differences, but this is deliberately weaker than an exact title/alias.
+        if (queryKey.length >= 5) {
+          for (const alias of aliases) {
+            if (alias === queryKey) continue;
+            if (alias.startsWith(`${queryKey} `) || queryKey.startsWith(`${alias} `)) {
+              const scoreValue = 2600 + Math.min(200, Math.min(alias.length, queryKey.length));
+              if (scoreValue > matchScore) {
+                matchScore = scoreValue;
+                reason = 'contained title';
+              }
+            }
+          }
+        }
+
+        if (!matchScore) return null;
+
+        if (wantsContinuation) {
+          if (comparisonCandidateMatchesContinuation(item, requestedContinuation)) matchScore += 1200;
+          else matchScore -= 900;
+        } else {
+          // Bare franchise names and shorthands should prefer the actual base entry.
+          // A sequel/OVA can still be used as a fallback when the base is absent,
+          // but it cannot beat a real base-title match.
+          matchScore -= comparisonContinuationPenalty(item);
+
+          const displayBases = displayAliases.map((alias) =>
+            recommendationDetailTitleKey(franchiseBaseTitle(alias))
+          );
+          if (displayBases.includes(queryKey) && !displayAliases.includes(queryKey)) {
+            matchScore -= 500;
+          }
+        }
+
+        return { item, index, matchScore, reason };
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.matchScore - a.matchScore || a.index - b.index);
+
+    return candidates[0]?.item || null;
+  }
+
+  function resolveComparisonLibraryTitles(prompt = '') {
+    // Resolve the two sides independently instead of ranking every library title
+    // against the entire sentence. The old global ranking could choose two entries
+    // from one franchise or miss a nickname even when both intended titles existed.
+    const explicitTargets = extractComparisonTitleQueries(prompt);
+    if (explicitTargets.length === 2) {
+      const first = resolveComparisonLibraryTarget(explicitTargets[0]);
+      const second = resolveComparisonLibraryTarget(explicitTargets[1], first ? [first] : []);
+      if (first && second) return [first, second];
+    }
+
+    // Conservative fallback for unusual comparison phrasing that the two-target
+    // parser does not recognize yet. Keep this path grounded in the library only.
+    const matches = findCloudTitleMatches(prompt)
       .filter(({ source }) => source === 'library')
       .map(({ item }) => item);
 
-    const unique = [];
-    const seen = new Set();
-    for (const item of libraryMatches) {
-      const key = String(item?.malId ?? item?.kitsuId ?? item?.id ?? item?.officialTitle ?? item?.title ?? '').toLowerCase();
-      if (!key || seen.has(key)) continue;
-      seen.add(key);
-      unique.push(item);
-      if (unique.length >= 2) break;
+    const picked = [];
+    for (const item of matches) {
+      if (picked.some((other) => sameAnimeIdentity(item, other))) continue;
+      picked.push(item);
+      if (picked.length >= 2) break;
     }
+
+    return picked;
+  }
+
+  function buildTitleComparisonEvidence(prompt = '') {
+    const unique = resolveComparisonLibraryTitles(prompt);
 
     if (unique.length < 2) return null;
 
     const [first, second] = unique;
     const firstTitle = first.officialTitle || first.title || 'First title';
     const secondTitle = second.officialTitle || second.title || 'Second title';
-    const firstScore = Number(first.joeScore ?? score(first) ?? 0) || 0;
-    const secondScore = Number(second.joeScore ?? score(second) ?? 0) || 0;
-    const firstRewatches = Number(first.rewatches || 0) || 0;
-    const secondRewatches = Number(second.rewatches || 0) || 0;
+
+    // Comparison receipts must come from explicit saved personal fields only.
+    // Never use score(item) here because that helper may include derived/community
+    // values and can make a comparison look like the user saved a score they did not.
+    const firstReceipt = cloudComparisonRecord(first);
+    const secondReceipt = cloudComparisonRecord(second);
+    const firstScore = Number(firstReceipt.score || 0) || 0;
+    const secondScore = Number(secondReceipt.score || 0) || 0;
+    const firstRewatches = Number(firstReceipt.rewatches || 0) || 0;
+    const secondRewatches = Number(secondReceipt.rewatches || 0) || 0;
     const favoriteDelta = Number(Boolean(first.favorite)) !== Number(Boolean(second.favorite)) ? 8 : 0;
     const signalStrength = Math.max(40, Math.min(95, Math.round(
       48 + Math.abs(firstScore - secondScore) * 10 + Math.abs(firstRewatches - secondRewatches) * 4 + favoriteDelta
@@ -1250,14 +1570,29 @@ export function Assistant({
         { label: `${firstTitle} favorite`, value: first.favorite ? 'Yes' : 'No' },
         { label: `${secondTitle} favorite`, value: second.favorite ? 'Yes' : 'No' }
       ],
-      contributors: [first, second],
+      contributors: [
+        {
+          ...first,
+          score: firstScore || null,
+          rewatches: firstRewatches,
+          favorite: Boolean(firstReceipt.favorite),
+          status: firstReceipt.status || first.status || ''
+        },
+        {
+          ...second,
+          score: secondScore || null,
+          rewatches: secondRewatches,
+          favorite: Boolean(secondReceipt.favorite),
+          status: secondReceipt.status || second.status || ''
+        }
+      ],
       companions: fallbackGenres.map(([name, count]) => ({
         name,
         percent: Math.max(8, Math.round((Number(count) / maxGenreCount) * 100))
       })),
       comparedTitles: [
-        cloudCompactAnime(first, { rich: true, source: 'library' }),
-        cloudCompactAnime(second, { rich: true, source: 'library' })
+        firstReceipt,
+        secondReceipt
       ]
     };
   }
@@ -1961,8 +2296,21 @@ export function Assistant({
       .map(([name, count]) => ({ name, count }));
 
     const titleMatches = findCloudTitleMatches(prompt).map(({ item, source }) =>
-      cloudCompactAnime(item, { rich: true, source })
+      comparisonPrompt && source === 'library'
+        ? cloudComparisonRecord(item)
+        : cloudCompactAnime(item, { rich: true, source })
     );
+
+    // Put the two resolved comparison records in a dedicated, prominent field.
+    // These records are authoritative library receipts: ownership, saved score,
+    // rewatches, favorite status, and watch status must win over model guesses.
+    const comparisonTargets = comparisonPrompt
+      ? compactCloudValue(
+          Array.isArray(localEvidence?.comparedTitles) && localEvidence.comparedTitles.length
+            ? localEvidence.comparedTitles.slice(0, 2)
+            : titleMatches.filter((item) => item.source === 'library').slice(0, 2)
+        )
+      : undefined;
 
     // Exact titleMatches carry the rich facts. The comparison index only needs
     // names for shorthand resolution, which saves a large amount of prompt data.
@@ -1990,6 +2338,7 @@ export function Assistant({
       topGenres,
       topStudios,
       titleMatches,
+      comparisonTargets,
       libraryIndex,
       localEvidence: compactCloudValue(localEvidence),
       conversation: {
@@ -2186,11 +2535,18 @@ export function Assistant({
     if (isJoeAIComparisonQuestion(routedText)) {
       const comparisonEvidence = buildTitleComparisonEvidence(routedText);
       if (comparisonEvidence) {
+        // Keep comparison receipts and cloud commentary in ONE rendered card.
+        // The evidence object is fully local/deterministic; Workers AI only writes
+        // the qualitative "JoeAI's Read" section. If cloud fails, the same local
+        // receipt card still renders by itself.
         if (await tryJoeAICloud(
           routedText,
           {
             kind: 'titleComparison',
-            comparedTitles: comparisonEvidence.comparedTitles
+            comparedTitles: comparisonEvidence.comparedTitles,
+            metrics: comparisonEvidence.metrics,
+            summary: comparisonEvidence.summary,
+            rule: 'The comparison card renders authoritative local score, rewatch, favorite, status, and ownership facts. Do not repeat or invent those facts. Add only concise qualitative interpretation about tone, themes, pacing, characters, worldbuilding, comedy, stakes, or story structure.'
           },
           {
             type: 'dnaComparison',
@@ -2198,7 +2554,16 @@ export function Assistant({
             title: comparisonEvidence.title
           }
         )) return;
+
+        appendBotResult(comparisonEvidence, routedText);
+        return;
       }
+
+      appendBotResult({
+        type: 'text',
+        text: 'I can compare those safely once I can resolve both titles to exact library entries. Try the exact library names so I do not guess at your saved scores.'
+      }, routedText);
+      return;
     }
 
     if (intent.kind === 'recommendationExplanation') {

@@ -433,9 +433,53 @@ function conversationKind(context = {}) {
   return 'conversation';
 }
 
+function comparisonReceiptLines(context = {}) {
+  const targets = Array.isArray(context?.comparisonTargets)
+    ? context.comparisonTargets.slice(0, 2)
+    : (Array.isArray(context?.localEvidence?.comparedTitles)
+      ? context.localEvidence.comparedTitles.slice(0, 2)
+      : []);
+
+  return targets
+    .filter(Boolean)
+    .map((item) => {
+      const title = String(item.title || 'Unknown title').trim();
+      const score = Number(item.score);
+      const rewatches = Number(item.rewatches || 0) || 0;
+      const favorite = item.favorite === true ? 'yes' : 'no';
+      const status = String(item.status || '').trim() || 'unspecified';
+      const scoreText = Number.isFinite(score) && score > 0 ? score.toFixed(1).replace(/\.0$/, '.0') : 'not saved';
+      return `${title}: saved score ${scoreText}; rewatches ${rewatches}; favorite ${favorite}; status ${status}; in library yes`;
+    });
+}
+
+function comparisonReceiptSummary(context = {}) {
+  const lines = comparisonReceiptLines(context);
+  return lines.length ? `Saved receipts — ${lines.join(' | ')}` : '';
+}
+
+function sanitizeComparisonRead(text = '') {
+  const source = String(text || '').trim();
+  if (!source) return '';
+
+  // Scores, rewatches, favorites, ownership and status are rendered by the local
+  // deterministic receipt card. Strip model sentences that try to restate them,
+  // because that is exactly where an LLM can invent a 9.7 that does not exist.
+  const blockedFact = /\b(?:score|scored|rating|rated|rewatch|rewatched|rewatches|favorite|favourite|in your library|library entry|own|owned|ownership|watch status|completed|watching|dropped)\b/i;
+
+  const sentences = source
+    .split(/(?<=[.!?])\s+/)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean)
+    .filter((sentence) => !blockedFact.test(sentence));
+
+  return sentences.join(' ').trim();
+}
+
 async function runConversation(env, prompt, context = {}) {
   const kind = conversationKind(context);
   const joeAnimeContext = compactContext(context, 14000);
+  const comparisonReceipt = kind === 'titleComparison' ? comparisonReceiptSummary(context) : '';
   const messages = [
     {
       role: 'system',
@@ -446,8 +490,15 @@ async function runConversation(env, prompt, context = {}) {
         'Never invent a title as being in the user library, never invent a user score or rewatch count, and never claim you changed the library.',
         'If localEvidence is present, preserve its reliable facts while making the answer natural and conversational.',
         'For comparison questions, treat localEvidence.companions, metrics, and contributors as broad library signals only; never treat the user comparison phrase itself as a genre or claim that every library title matches it.',
-        'For comparisons, prioritize titleMatches and libraryIndex for title-specific facts. Resolve an obvious shorthand only when it is unambiguous from the supplied titles; otherwise say which title detail is uncertain.',
+        'For title comparisons, comparisonTargets and localEvidence.comparedTitles are the authoritative resolved user-library records. Use their score, rewatches, favorite, status, genres, and ownership exactly as supplied.',
+        'For a title comparison, the local JoeAnimeDB comparison card has ALREADY printed the authoritative saved score, rewatches, favorite status, ownership, and watch status before your prose appears. Do NOT repeat or restate any numeric/state facts.',
+        'Your comparison prose is commentary only: explain qualitative differences in themes, tone, pacing, character focus, worldbuilding, comedy, stakes, or story structure. Never invent or infer a score, rating, rewatch count, favorite state, ownership state, or watch status.',
+        'If a title appears in comparisonTargets or localEvidence.comparedTitles, it is already in the user library. Never tell the user to check it out, watch it, add it, or imply they have not seen/owned it.',
+        'If a resolved comparison record contains a score, never claim that title has no direct user score. If its score is absent, say the saved score is unavailable rather than guessing from communityScore.',
+        'For comparisons, use comparisonTargets first, then titleMatches and libraryIndex for title-specific facts. Resolve an obvious shorthand only when it is unambiguous from the supplied titles; otherwise say which title detail is uncertain.',
         'When data is missing, say you do not have that detail instead of guessing.',
+        'Do not compare the user to an average viewer, typical viewer, population, norm, or benchmark unless an explicit comparison baseline is supplied in the context.',
+        'Treat rewatches as recorded rewatch events/counts. Do not turn a total rewatch count into a claim about how many distinct titles were rewatched unless the context explicitly gives a distinct-title count.',
         'Absence from the library is not proof the user dislikes or avoids something. For blind-spot, avoidance, or underrepresented-category questions, say a genre/studio/type is underrepresented or absent unless explicit negative evidence is supplied.',
         'Do not call synopsis, Genome fields, title metadata, or inferred themes user notes. User notes are not supplied in this request unless an explicit notes field exists.',
         'Do not expose implementation details, provider names, model names, or internal routing unless the user explicitly asks.',
@@ -457,9 +508,7 @@ async function runConversation(env, prompt, context = {}) {
     {
       role: 'user',
       content: `JOEANIMEDB CONTEXT:
-${joeAnimeContext}
-
-USER:
+${joeAnimeContext}${comparisonReceipt ? `\n\nAUTHORITATIVE SAVED RECEIPTS:\n${comparisonReceipt}` : ''}\n\nUSER:
 ${prompt}`
     }
   ];
@@ -485,6 +534,29 @@ ${prompt}`
         text: fastReflection.text,
         model: fastReflection.model,
         usage: fastReflection.usage,
+        fastPath: true
+      });
+    }
+  }
+
+  // Title comparisons are also grounded in deterministic local receipts. Use the
+  // fast model for the prose layer so it cannot spend a long reasoning pass
+  // rediscovering facts JoeAnimeDB already knows.
+  if (kind === 'titleComparison') {
+    const fastComparison = await runFastConversationFallback(
+      env,
+      messages,
+      'title comparison receipt fast path',
+      560
+    );
+    if (fastComparison) {
+      const safeRead = sanitizeComparisonRead(fastComparison.text);
+      return json({
+        ok: true,
+        mode: 'conversation',
+        text: safeRead || 'The local comparison receipts above are the deciding evidence; the remaining difference is mainly tone, pacing, themes, and the kind of character journey each series emphasizes.',
+        model: fastComparison.model,
+        usage: fastComparison.usage,
         fastPath: true
       });
     }
