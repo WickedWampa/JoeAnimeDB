@@ -1,4 +1,4 @@
-import assert from 'node:assert/strict';
+﻿import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import vm from 'node:vm';
@@ -116,7 +116,7 @@ check('MAL XML export and import preserve supported personal data', () => {
       },
       {
         id: 'frieren',
-        title: 'Frieren: Beyond Journey’s End',
+        title: 'Frieren: Beyond Journeyâ€™s End',
         malId: 52991,
         status: 'Watching',
         episodeCount: 28,
@@ -156,7 +156,7 @@ check('AniList JSON, CSV, and text import normalization', () => {
         media: {
           id: 154587,
           idMal: 52991,
-          title: { english: 'Frieren: Beyond Journey’s End' }
+          title: { english: 'Frieren: Beyond Journeyâ€™s End' }
         }
       }]
     }]
@@ -235,7 +235,7 @@ check('backup restore is wired on desktop, web, and Android', async () => {
   assert.match(mobileSource, /async restoreBackup\(snapshot = \{\}\)/);
 });
 
-check('Beta 20 version identity is consistent across platforms', async () => {
+check('Beta 21 version identity is consistent across platforms', async () => {
   const [androidSource, preloadSource, mainSource, viteSource, settingsSource, aboutSource] = await Promise.all([
     source('android/app/build.gradle'),
     source('electron/preload.cjs'),
@@ -245,9 +245,9 @@ check('Beta 20 version identity is consistent across platforms', async () => {
     source('src/pages/AboutHelpPage.jsx')
   ]);
 
-  assert.equal(packageMetadata.version, '5.0.0-beta.20');
-  assert.match(androidSource, /versionCode\s+5000020/);
-  assert.match(androidSource, /versionName\s+"5\.0\.0-beta\.20"/);
+  assert.equal(packageMetadata.version, '5.0.0-beta.21');
+  assert.match(androidSource, /versionCode\s+5000021/);
+  assert.match(androidSource, /versionName\s+"5\.0\.0-beta\.21"/);
   assert.doesNotMatch(preloadSource, /require\(['"]\.\.\/package\.json['"]\)/);
   assert.match(mainSource, /version:\s*app\.getVersion\(\)/);
   assert.match(viteSource, /__APP_VERSION__:\s*JSON\.stringify\(packageMetadata\.version\)/);
@@ -404,8 +404,9 @@ for (const { name, operation } of checks) {
 }
 
 if (failures) {
-  console.error(`\nBeta 20 release gate failed: ${failures} check(s).`);
+  console.error(`\nBeta 21 release gate failed: ${failures} check(s).`);
   process.exitCode = 1;
 } else {
-  console.log(`\nBeta 20 automated release gate passed: ${checks.length} checks.`);
+  console.log(`\nBeta 21 automated release gate passed: ${checks.length} checks.`);
 }
+
