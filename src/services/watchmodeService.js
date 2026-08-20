@@ -1,6 +1,99 @@
 const DEFAULT_PROXY_URL = 'https://joeanimedb.com/api/watchmode';
 const MATCH_CACHE_KEY = 'joeanime-watchmode-title-matches-v1';
 const REGION_KEY = 'joeanime-watchmode-region-v1';
+export const STREAMING_APPS_KEY = 'joeanime-streaming-apps-v1';
+
+export const STREAMING_APP_OPTIONS = [
+  { id: 'crunchyroll', label: 'Crunchyroll', description: 'Anime streaming', aliases: ['crunchyroll'] },
+  { id: 'netflix', label: 'Netflix', description: 'Netflix subscription', aliases: ['netflix'] },
+  { id: 'hulu', label: 'Hulu', description: 'Hulu subscription', aliases: ['hulu'] },
+  { id: 'hidive', label: 'HIDIVE', description: 'Anime streaming', aliases: ['hidive', 'hi dive'] },
+  { id: 'prime', label: 'Prime Video', description: 'Amazon Prime Video', aliases: ['amazon prime video', 'prime video', 'amazon video'] },
+  { id: 'disney', label: 'Disney+', description: 'Disney+ subscription', aliases: ['disney+', 'disney plus'] },
+  { id: 'max', label: 'Max', description: 'Max / HBO Max', aliases: ['max', 'hbo max'] },
+  { id: 'peacock', label: 'Peacock', description: 'Peacock subscription', aliases: ['peacock', 'peacock premium'] },
+  { id: 'apple', label: 'Apple TV+', description: 'Apple TV+ subscription', aliases: ['apple tv+', 'apple tv plus', 'apple tv'] },
+  { id: 'paramount', label: 'Paramount+', description: 'Paramount+ subscription', aliases: ['paramount+', 'paramount plus'] },
+  { id: 'tubi', label: 'Tubi', description: 'Free streaming', aliases: ['tubi', 'tubi tv'] },
+  { id: 'retrocrush', label: 'RetroCrush', description: 'Classic anime streaming', aliases: ['retrocrush', 'retro crush'] },
+  { id: 'pluto', label: 'Pluto TV', description: 'Free streaming', aliases: ['pluto tv', 'pluto'] },
+  { id: 'youtube', label: 'YouTube', description: 'YouTube / Premium', aliases: ['youtube', 'youtube premium'] }
+];
+
+const STREAMING_APP_IDS = new Set(STREAMING_APP_OPTIONS.map((item) => item.id));
+
+function normalizeStreamingProviderName(value = '') {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[+]/g, ' plus ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+export function getSavedStreamingApps() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(STREAMING_APPS_KEY) || '[]');
+    if (!Array.isArray(parsed)) return [];
+    return [...new Set(parsed.map((value) => String(value || '').trim()).filter((id) => STREAMING_APP_IDS.has(id)))];
+  } catch {
+    return [];
+  }
+}
+
+export function saveStreamingApps(appIds = []) {
+  const requested = new Set(
+    (Array.isArray(appIds) ? appIds : [])
+      .map((value) => String(value || '').trim())
+      .filter((id) => STREAMING_APP_IDS.has(id))
+  );
+
+  const normalized = STREAMING_APP_OPTIONS
+    .map((item) => item.id)
+    .filter((id) => requested.has(id));
+
+  try {
+    localStorage.setItem(STREAMING_APPS_KEY, JSON.stringify(normalized));
+  } catch {}
+
+  try {
+    window.dispatchEvent(new CustomEvent('joeanime:streaming-apps-changed', { detail: normalized }));
+  } catch {}
+
+  return normalized;
+}
+
+function providerMatchesStreamingApp(provider, app) {
+  const providerName = normalizeStreamingProviderName(provider?.name || '');
+  if (!providerName || !app) return false;
+
+  return (app.aliases || []).some((alias) => {
+    const normalizedAlias = normalizeStreamingProviderName(alias);
+    return providerName === normalizedAlias
+      || providerName.startsWith(`${normalizedAlias} `)
+      || providerName.endsWith(` ${normalizedAlias}`);
+  });
+}
+
+export function groupWatchProvidersByPreference(providers = [], selectedAppIds = getSavedStreamingApps()) {
+  const selected = new Set(Array.isArray(selectedAppIds) ? selectedAppIds : []);
+  const preferred = [];
+  const other = [];
+
+  for (const provider of Array.isArray(providers) ? providers : []) {
+    const matchedApp = STREAMING_APP_OPTIONS.find(
+      (app) => selected.has(app.id) && providerMatchesStreamingApp(provider, app)
+    );
+
+    (matchedApp ? preferred : other).push({
+      ...provider,
+      preferredAppId: matchedApp?.id || ''
+    });
+  }
+
+  return { preferred, other };
+}
 
 const REGION_LABELS = {
   US: 'United States',

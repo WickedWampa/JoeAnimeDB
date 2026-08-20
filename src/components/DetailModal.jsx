@@ -11,7 +11,9 @@ import {
   confirmWatchmodeMatch,
   fetchWhereToWatch,
   forgetWatchmodeMatch,
+  getSavedStreamingApps,
   getSavedWatchRegion,
+  groupWatchProvidersByPreference,
   saveWatchRegion
 } from '../services/watchmodeService';
 import { openExternalUrl } from '../platform/runtime';
@@ -70,6 +72,7 @@ export function DetailModal({
   const [deleting, setDeleting] = useState(false);
   const [deleteMessage, setDeleteMessage] = useState('');
   const [watchRegion, setWatchRegion] = useState(() => getSavedWatchRegion());
+  const [streamingApps, setStreamingApps] = useState(() => getSavedStreamingApps());
   const [watchState, setWatchState] = useState({ status: 'loading', providers: [], candidates: [] });
   const selectedId = String(anime.id || '');
   const isLibraryTitle = Boolean(selectedId) && (library || []).some(
@@ -93,6 +96,10 @@ export function DetailModal({
   const displayEpisodeCount = Number(anime.episodeCount || anime.episodes || 0);
   const displayCommunityScore = anime.communityScore ?? anime.malScore ?? anime.score ?? null;
   const displayMetadataLine = [displayStudio, displayType, displayYear].filter(Boolean).join(' · ');
+  const watchProviderGroups = groupWatchProvidersByPreference(
+    watchState.providers || [],
+    streamingApps
+  );
 
   useEffect(() => {
     setScoreDraft(Number(anime.joeScore ?? score(anime) ?? 0));
@@ -102,6 +109,17 @@ export function DetailModal({
     setConfirmingDelete(false);
     setDeleteMessage('');
   }, [anime.id, anime.joeScore]);
+
+  useEffect(() => {
+    const syncStreamingApps = (event) => {
+      setStreamingApps(
+        Array.isArray(event?.detail) ? event.detail : getSavedStreamingApps()
+      );
+    };
+
+    window.addEventListener('joeanime:streaming-apps-changed', syncStreamingApps);
+    return () => window.removeEventListener('joeanime:streaming-apps-changed', syncStreamingApps);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -905,13 +923,53 @@ export function DetailModal({
             {watchState.status === 'ready' && (
               <>
                 {(watchState.providers || []).length ? (
-                  <div className="whereToWatchProviders">
-                    {watchState.providers.map((provider) => (
-                      <button type="button" key={`${provider.name}-${provider.url}`} onClick={() => openExternalUrl(provider.url)}>
-                        Watch on {provider.name}
-                      </button>
-                    ))}
-                  </div>
+                  <>
+                    {watchProviderGroups.preferred.length ? (
+                      <div className="quickWatchBlock">
+                        <div className="quickWatchHeading">
+                          <span>Quick Watch</span>
+                          <small>Your selected streaming apps</small>
+                        </div>
+                        <div className="quickWatchProviders">
+                          {watchProviderGroups.preferred.map((provider, index) => (
+                            <button
+                              type="button"
+                              className={index === 0 ? 'quickWatchPrimary' : ''}
+                              key={`quick-${provider.name}-${provider.url}`}
+                              onClick={() => openExternalUrl(provider.url)}
+                            >
+                              Watch on {provider.name}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : streamingApps.length ? (
+                      <p className="watchPreferenceHint">
+                        None of your selected streaming apps currently have this title. Showing other options.
+                      </p>
+                    ) : (
+                      <p className="watchPreferenceHint">
+                        Choose your streaming apps in Settings to enable personalized Quick Watch.
+                      </p>
+                    )}
+
+                    {watchProviderGroups.other.length ? (
+                      <div className="otherWatchOptions">
+                        {watchProviderGroups.preferred.length ? <small>Other streaming options</small> : null}
+                        <div className="whereToWatchProviders">
+                          {watchProviderGroups.other.map((provider) => (
+                            <button
+                              type="button"
+                              key={`${provider.name}-${provider.url}`}
+                              onClick={() => openExternalUrl(provider.url)}
+                            >
+                              Watch on {provider.name}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                  </>
                 ) : (
                   <p>No subscription streaming options were found in this region.</p>
                 )}

@@ -43,6 +43,7 @@ function backupPreferences() {
     onboardingVersion: read('joeanime-onboarding-version'),
     onboardingState: read('joeanime-onboarding-state-v1'),
     followingNotifications: read('joeanime-following-notifications-enabled'),
+    streamingApps: read('joeanime-streaming-apps-v1'),
     joeAIMemoryProfile: read('joeai.memory.profile.v1'),
     joeAIMemoryJournal: read('joeai.memory.journal.v1'),
     joeAIMemoryEvents: read('joeai.memory.events.v1')
@@ -182,6 +183,7 @@ export function applyBackupPreferences(preferences = {}) {
     ['onboardingVersion', 'joeanime-onboarding-version'],
     ['onboardingState', 'joeanime-onboarding-state-v1'],
     ['followingNotifications', 'joeanime-following-notifications-enabled'],
+    ['streamingApps', 'joeanime-streaming-apps-v1'],
     ['joeAIMemoryProfile', 'joeai.memory.profile.v1'],
     ['joeAIMemoryJournal', 'joeai.memory.journal.v1'],
     ['joeAIMemoryEvents', 'joeai.memory.events.v1']

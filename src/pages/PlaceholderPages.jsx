@@ -53,6 +53,11 @@ import {
   filterContentBySafety,
   getContentRating
 } from '../services/contentSafety';
+import {
+  STREAMING_APP_OPTIONS,
+  getSavedStreamingApps,
+  saveStreamingApps
+} from '../services/watchmodeService';
 import { askJoeAICloud, isJoeAICloudEnabled } from '../services/joeAICloud';
 import {
   animeIdentityKeys,
@@ -4957,6 +4962,7 @@ export function SettingsPage({
   const [providerHealth, setProviderHealth] = React.useState(null);
   const [checkingProviders, setCheckingProviders] = React.useState(false);
   const [displayNameDraft, setDisplayNameDraft] = React.useState(displayName);
+  const [streamingApps, setStreamingApps] = React.useState(() => getSavedStreamingApps());
   const [lastBackup, setLastBackup] = React.useState(() => readLastBackupRecord());
   const [lastUpdateSummary, setLastUpdateSummary] = React.useState(() => {
     try {
@@ -4976,6 +4982,32 @@ export function SettingsPage({
   });
   const libraryImportInputRef = React.useRef(null);
   const backupRestoreInputRef = React.useRef(null);
+
+  useEffect(() => {
+    const syncStreamingApps = (event) => {
+      setStreamingApps(
+        Array.isArray(event?.detail) ? event.detail : getSavedStreamingApps()
+      );
+    };
+
+    window.addEventListener('joeanime:streaming-apps-changed', syncStreamingApps);
+    return () => window.removeEventListener('joeanime:streaming-apps-changed', syncStreamingApps);
+  }, []);
+
+  function toggleStreamingApp(appId) {
+    const selected = new Set(streamingApps);
+
+    if (selected.has(appId)) selected.delete(appId);
+    else selected.add(appId);
+
+    const next = saveStreamingApps(
+      STREAMING_APP_OPTIONS
+        .map((option) => option.id)
+        .filter((id) => selected.has(id))
+    );
+
+    setStreamingApps(next);
+  }
 
   function handleMalCompatibleExport(target) {
     const platform = target === 'anilist' ? 'AniList' : 'MyAnimeList';
@@ -6122,6 +6154,50 @@ export function SettingsPage({
         </p>
       </section>
 
+      <section className="settingsStreamingAppsCard">
+        <header>
+          <div>
+            <p className="settingsWorkshopEyebrow">Quick Watch</p>
+            <h2>My Streaming Apps</h2>
+            <p>
+              Pick the services you use. Where to Watch will put matching services first
+              so you can get from Details to playback with fewer clicks.
+            </p>
+          </div>
+          <strong>
+            {streamingApps.length
+              ? `${streamingApps.length} selected`
+              : 'None selected'}
+          </strong>
+        </header>
+
+        <div className="settingsStreamingAppsGrid" role="group" aria-label="My streaming apps">
+          {STREAMING_APP_OPTIONS.map((option) => {
+            const selected = streamingApps.includes(option.id);
+
+            return (
+              <button
+                key={option.id}
+                type="button"
+                className={`settingsStreamingAppOption ${selected ? 'active' : ''}`}
+                aria-pressed={selected}
+                onClick={() => toggleStreamingApp(option.id)}
+              >
+                <span>
+                  <b>{option.label}</b>
+                  <small>{option.description}</small>
+                </span>
+                <em>{selected ? 'Quick Watch' : 'Add'}</em>
+              </button>
+            );
+          })}
+        </div>
+
+        <p className="settingsStreamingAppsNote">
+          These selections are included in full backups and Cloud Sync. Provider availability still depends on your streaming region.
+        </p>
+      </section>
+
       <section className="settingsProfileCard">
         <div>
           <p className="settingsWorkshopEyebrow">Profile</p>
@@ -6306,7 +6382,7 @@ export function SettingsPage({
           </header>
 
           <p className="settingsWorkshopDescription">
-            <strong>Full Backup</strong> is for complete JoeAnimeDB recovery. <strong>Import Library List</strong> merges outside watch-list data into what you already have. <strong>Export</strong> creates portable/shareable lists and is not a full backup.
+            Back up the full database or export clean lists that are easy to share.
           </p>
 
           {document.documentElement.dataset.platform === 'web' && (
@@ -6334,13 +6410,13 @@ export function SettingsPage({
             <button type="button" className="settingsPrimaryBackup" onClick={handleRollingBackup}>
               <span>📦</span>
               <strong>Update Rolling Backup</strong>
-              <small>FULL BACKUP · Update the main JoeAnimeDB recovery JSON</small>
+              <small>Updates JoeAnimeDB-backup.json when supported</small>
             </button>
 
             <button type="button" onClick={handleBackupAs}>
               <span>＋</span>
               <strong>Save Backup As...</strong>
-              <small>FULL BACKUP · Create a separate dated recovery snapshot</small>
+              <small>Create a separate dated snapshot</small>
             </button>
 
             <input
@@ -6358,37 +6434,37 @@ export function SettingsPage({
             >
               <span>♻️</span>
               <strong>Restore Full Backup</strong>
-              <small>RESTORE · Replaces current data from a JoeAnimeDB full-backup JSON</small>
+              <small>Replace the current database from a JoeAnimeDB JSON backup</small>
             </button>
 
             <button type="button" onClick={() => exportLibraryList(data)}>
               <span>📄</span>
               <strong>Export Library List</strong>
-              <small>EXPORT ONLY · Alphabetical title list; not a full backup</small>
+              <small>Alphabetical plain-text title list</small>
             </button>
 
             <button type="button" onClick={() => exportRankedLibraryList(data)}>
               <span>⭐</span>
               <strong>Export Ranked List</strong>
-              <small>EXPORT ONLY · Titles with score/status; not a full backup</small>
+              <small>Titles with score and watch status</small>
             </button>
 
             <button type="button" onClick={() => exportLibraryCsv(data)}>
               <span>📊</span>
               <strong>Export CSV</strong>
-              <small>EXPORT ONLY · Spreadsheet-ready list data; not a full backup</small>
+              <small>Spreadsheet-ready library data</small>
             </button>
 
             <button type="button" onClick={() => handleMalCompatibleExport('mal')}>
               <span>🔷</span>
               <strong>Export for MyAnimeList</strong>
-              <small>EXPORT ONLY · MAL-compatible list XML; not a full backup</small>
+              <small>MAL-compatible XML with status, scores, and progress</small>
             </button>
 
             <button type="button" onClick={() => handleMalCompatibleExport('anilist')}>
               <span>🔹</span>
               <strong>Export for AniList</strong>
-              <small>EXPORT ONLY · AniList-importable list XML; not a full backup</small>
+              <small>MAL XML accepted by AniList's list importer</small>
             </button>
 
             <input
@@ -6411,7 +6487,7 @@ export function SettingsPage({
                   : 'Import Library List'}
               </strong>
               <small>
-                {libraryImportProgress?.title || 'MERGES INTO CURRENT LIBRARY · MAL XML · AniList JSON/CSV · JoeAnimeDB TXT/CSV'}
+                {libraryImportProgress?.title || 'MAL XML · AniList JSON/CSV · JoeAnimeDB TXT/CSV'}
               </small>
             </button>
           </div>

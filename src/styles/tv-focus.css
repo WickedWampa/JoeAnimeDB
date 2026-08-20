@@ -4006,3 +4006,87 @@ body.tvLayoutMode .favoritesGrid {
   margin-top: 0 !important;
 }
 
+
+
+/* =========================================================
+   Android TV Quick Watch hotfix
+   ========================================================= */
+
+body.tvLayoutMode .settingsStreamingAppsCard {
+  margin: 0 8px 9px !important;
+  padding: 12px 14px !important;
+  border-radius: 14px !important;
+}
+
+body.tvLayoutMode .settingsStreamingAppsCard > header {
+  margin-bottom: 9px !important;
+  gap: 12px !important;
+}
+
+body.tvLayoutMode .settingsStreamingAppsCard h2 {
+  margin-bottom: 3px !important;
+  font-size: 17px !important;
+}
+
+body.tvLayoutMode .settingsStreamingAppsCard header p,
+body.tvLayoutMode .settingsStreamingAppsNote {
+  font-size: 8px !important;
+  line-height: 1.25 !important;
+}
+
+body.tvLayoutMode .settingsStreamingAppsCard header > strong {
+  padding: 5px 8px !important;
+  font-size: 8px !important;
+}
+
+body.tvLayoutMode .settingsStreamingAppsGrid {
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 6px !important;
+}
+
+body.tvLayoutMode .settingsStreamingAppOption {
+  min-height: 42px !important;
+  padding: 6px 8px !important;
+  border-radius: 9px !important;
+}
+
+body.tvLayoutMode .settingsStreamingAppOption b {
+  font-size: 9px !important;
+}
+
+body.tvLayoutMode .settingsStreamingAppOption small,
+body.tvLayoutMode .settingsStreamingAppOption em {
+  font-size: 7px !important;
+}
+
+body.tvLayoutMode .detailModal .quickWatchBlock {
+  padding: 7px 0 2px !important;
+  gap: 6px !important;
+}
+
+body.tvLayoutMode .detailModal .quickWatchHeading > span {
+  font-size: 9px !important;
+}
+
+body.tvLayoutMode .detailModal .quickWatchHeading > small,
+body.tvLayoutMode .detailModal .otherWatchOptions > small,
+body.tvLayoutMode .detailModal .watchPreferenceHint {
+  font-size: 7px !important;
+}
+
+body.tvLayoutMode .detailModal .quickWatchProviders,
+body.tvLayoutMode .detailModal .whereToWatchProviders {
+  gap: 6px !important;
+}
+
+body.tvLayoutMode .detailModal .quickWatchProviders button,
+body.tvLayoutMode .detailModal .whereToWatchProviders button {
+  min-height: 32px !important;
+  padding: 5px 9px !important;
+  font-size: 8px !important;
+}
+
+body.tvLayoutMode .detailModal .quickWatchPrimary:focus,
+body.tvLayoutMode .detailModal .quickWatchPrimary:focus-visible {
+  transform: scale(1.035) !important;
+}
