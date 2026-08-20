@@ -1,0 +1,4008 @@
+/* Android TV / keyboard focus layer
+   Keeps normal pointer/touch presentation unchanged. Strong focus treatment is
+   enabled after D-pad/keyboard navigation begins. */
+
+:root {
+  --tv-focus-ring: color-mix(in srgb, var(--cyan, #37eaff) 78%, white);
+  --tv-focus-hot: var(--pink, #ff4db8);
+  --tv-focus-shadow: color-mix(in srgb, var(--cyan, #37eaff) 42%, transparent);
+}
+
+/* Give spatial-navigation targets breathing room when they are scrolled into view. */
+.content :where(
+  button,
+  a[href],
+  input,
+  select,
+  textarea,
+  [role="button"],
+  [tabindex]:not([tabindex="-1"])
+) {
+  scroll-margin: 54px 42px;
+}
+
+/* Keep standards-based keyboard focus useful even before the TV input class is set. */
+:where(
+  button,
+  a[href],
+  input,
+  select,
+  textarea,
+  [role="button"],
+  [tabindex]:not([tabindex="-1"])
+):focus-visible {
+  outline: 3px solid var(--tv-focus-ring) !important;
+  outline-offset: 3px !important;
+}
+
+/* Android TV WebView reliably exposes :focus for D-pad focus. Scope the strong
+   treatment to TV/keyboard input mode so mouse/touch users do not get giant rings. */
+body.tvInputMode :where(
+  button,
+  a[href],
+  input,
+  select,
+  textarea,
+  [role="button"],
+  [tabindex]:not([tabindex="-1"])
+):focus {
+  position: relative;
+  outline: 3px solid var(--tv-focus-ring) !important;
+  outline-offset: 3px !important;
+  border-color: var(--tv-focus-ring) !important;
+  box-shadow:
+    0 0 0 2px rgba(0, 0, 0, .78),
+    0 0 26px var(--tv-focus-shadow) !important;
+  z-index: 20;
+}
+
+body.tvInputMode :where(input, textarea, select):focus {
+  background-color: color-mix(in srgb, var(--panel, #08111d) 92%, black) !important;
+}
+
+/* Large visual targets should read as a selected TV tile, not merely a tiny
+   outlined element. These are already clickable/focusable in the app. */
+body.tvInputMode :where(
+  .animeCard,
+  .discoverCard,
+  .discoverLiveList > article,
+  .homeV3Anchor,
+  .homeV3MiniAnime,
+  .homeV3Prompt,
+  .joeaiRecCard [role="button"],
+  .upcomingPoster
+):focus {
+  transform: translateY(-4px) scale(1.025) !important;
+  filter: brightness(1.08) saturate(1.04);
+  box-shadow:
+    0 0 0 2px rgba(0, 0, 0, .82),
+    0 0 0 5px var(--tv-focus-ring),
+    0 18px 38px rgba(0, 0, 0, .34),
+    0 0 34px var(--tv-focus-shadow) !important;
+}
+
+body.tvInputMode .discoverCard:focus,
+body.tvInputMode .discoverLiveList > article:focus {
+  border-color: var(--tv-focus-ring) !important;
+}
+
+/* Small controls need a little more visual mass at television distance. */
+body.tvInputMode :where(
+  .viewModes button,
+  .discoverViewToggle button,
+  .discoverCardActions button,
+  .discoverFeedbackControls button,
+  .upcomingTabs button,
+  .detailModal button,
+  .settings button,
+  .settingsPage button
+):focus {
+  transform: scale(1.055);
+}
+
+/* Avoid focused controls disappearing beneath clipping containers. */
+body.tvInputMode :where(
+  .discoverRail,
+  .libraryPosterGrid,
+  .discoverLiveGrid,
+  .discoverLiveList
+) {
+  scroll-padding: 34px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.tvInputMode :where(
+    button,
+    a[href],
+    [role="button"],
+    [tabindex]:not([tabindex="-1"])
+  ):focus {
+    transition: none !important;
+  }
+}
+
+/* =========================================================
+   Android TV compact Discover layout
+   Enabled only after D-pad input is detected on an Android
+   landscape viewport. Desktop/web/phone touch layouts remain
+   unchanged.
+   ========================================================= */
+body.tvLayoutMode .discoverPage {
+  gap: 12px;
+  padding-bottom: 26px;
+}
+
+body.tvLayoutMode .discoverHero,
+body.tvLayoutMode .discoverHero.compact {
+  min-height: 0 !important;
+  height: clamp(320px, 36vw, 410px) !important;
+  max-height: 410px !important;
+  aspect-ratio: auto !important;
+  border-radius: 18px;
+}
+
+body.tvLayoutMode .discoverHero::before {
+  background-size: cover !important;
+  background-position: center center !important;
+}
+
+body.tvLayoutMode .discoverHero > div:first-child {
+  flex: 0 1 640px;
+  width: min(640px, 64%) !important;
+  max-width: 640px !important;
+  padding: 18px 20px !important;
+}
+
+body.tvLayoutMode .discoverHero h1 {
+  font-size: clamp(2.6rem, 5.4vw, 4rem) !important;
+}
+
+body.tvLayoutMode .discoverHero h1 svg {
+  margin-right: 9px;
+}
+
+body.tvLayoutMode .discoverHero p:not(.discoverEyebrow) {
+  max-width: 520px;
+  margin-top: 7px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+body.tvLayoutMode .discoverEyebrow {
+  margin-bottom: 5px;
+  font-size: 9px;
+}
+
+body.tvLayoutMode .discoverHeroActions {
+  gap: 7px;
+  margin-top: 10px;
+}
+
+body.tvLayoutMode .discoverHeroActions button {
+  padding: 7px 10px;
+  border-radius: 11px;
+  font-size: 11px;
+}
+
+body.tvLayoutMode .discoverDataState {
+  margin-top: 8px;
+  padding: 5px 9px;
+  font-size: 9px;
+}
+
+body.tvLayoutMode .discoverHeroStats {
+  gap: 6px;
+  margin: 0 14px 14px 0;
+}
+
+body.tvLayoutMode .discoverHeroStats span {
+  min-width: 82px;
+  padding: 9px;
+  border-radius: 11px;
+  font-size: 9px;
+}
+
+body.tvLayoutMode .discoverHeroStats strong {
+  font-size: 18px;
+}
+
+body.tvLayoutMode .discoverShelf {
+  padding: 13px;
+  border-radius: 17px;
+}
+
+body.tvLayoutMode .discoverShelfHeader {
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+body.tvLayoutMode .discoverShelfHeader h2 {
+  gap: 7px;
+  font-size: 18px;
+}
+
+body.tvLayoutMode .discoverShelfHeader p {
+  margin-top: 2px;
+  font-size: 10px;
+}
+
+body.tvLayoutMode .discoverShelfActions {
+  gap: 5px;
+}
+
+body.tvLayoutMode .discoverShelfHeader .discoverBrowseLink {
+  padding: 6px 9px;
+  font-size: 9px;
+}
+
+body.tvLayoutMode .discoverShelfHeader .discoverArrow {
+  width: 32px;
+  height: 32px;
+}
+
+body.tvLayoutMode .discoverShelfHeader .discoverArrow svg {
+  width: 17px;
+  height: 17px;
+}
+
+body.tvLayoutMode .discoverRail {
+  grid-auto-columns: minmax(164px, 178px) !important;
+  gap: 9px;
+  padding: 3px 2px 7px;
+}
+
+body.tvLayoutMode .discoverRail .discoverCard {
+  grid-template-rows: 210px auto !important;
+  border-radius: 13px;
+}
+
+body.tvLayoutMode .discoverRail .discoverCardCopy {
+  min-height: 136px !important;
+  gap: 4px;
+  padding: 9px;
+}
+
+body.tvLayoutMode .discoverRail .discoverCardCopy strong {
+  font-size: 12px;
+}
+
+body.tvLayoutMode .discoverRail .discoverCardCopy small {
+  min-height: 25px;
+  font-size: 10px;
+}
+
+body.tvLayoutMode .discoverRail .discoverCardCopy b {
+  padding: 3px 5px;
+  font-size: 8px;
+}
+
+body.tvLayoutMode .discoverRail .discoverScore,
+body.tvLayoutMode .discoverRail .discoverTasteBadge {
+  padding: 4px 6px;
+  font-size: 9px;
+}
+
+body.tvLayoutMode .discoverRail .discoverCardActions {
+  gap: 5px;
+}
+
+body.tvLayoutMode .discoverRail .discoverCardActions button,
+body.tvLayoutMode .discoverRail .discoverFeedbackControls button {
+  min-width: 0;
+  padding: 6px 5px;
+  font-size: 9px;
+}
+
+/* Give the next shelf enough vertical breathing room to become an obvious
+   directional target while keeping more content visible at once. */
+body.tvLayoutMode .discoverShelf + .discoverShelf {
+  margin-top: 0;
+}
+
+
+/* TV cards are one navigation stop. Secondary mouse/touch actions remain part
+   of the normal app, but are intentionally removed from the couch-distance
+   D-pad path. Open the card with OK/Enter for its full action surface. */
+body.tvLayoutMode .discoverRail .discoverCardActions,
+body.tvLayoutMode .discoverRail .discoverFeedbackControls,
+body.tvLayoutMode .discoverRail .discoverWhyButton,
+body.tvLayoutMode .discoverRail .discoverWhyPanel {
+  display: none !important;
+}
+
+body.tvLayoutMode .discoverRail .discoverCardCopy {
+  min-height: 96px !important;
+}
+
+body.tvLayoutMode .discoverRail .discoverCardIntelligence {
+  gap: 3px;
+}
+
+body.tvLayoutMode .discoverRail .discoverCardIntelligence > p {
+  display: none;
+}
+
+/* =========================================================
+   Android TV hero + poster sizing pass
+   Scoped to tvLayoutMode only. Desktop/web/phone/tablet stay
+   on their existing layouts.
+   ========================================================= */
+
+/* ---------- Shared compact hero footprint ---------- */
+body.tvLayoutMode :where(
+  .homeV3Hero,
+  .libraryArchiveHeroLive,
+  .favoritesHero,
+  .followingHero,
+  .upcomingHero,
+  .joeAIHero,
+  .analyticsLabHero,
+  .aboutHelpHero
+) {
+  aspect-ratio: auto !important;
+  min-height: 0 !important;
+  height: clamp(270px, 30vw, 320px) !important;
+  max-height: 320px !important;
+  border-radius: 18px !important;
+}
+
+/* ---------- Home ---------- */
+body.tvLayoutMode .homeV3Hero {
+  background-size: auto, auto 100% !important;
+  background-position: center, right center !important;
+  background-repeat: no-repeat !important;
+}
+
+body.tvLayoutMode .homeV3HeroCopy {
+  width: min(520px, 61%) !important;
+  padding: 18px 22px 68px !important;
+}
+
+body.tvLayoutMode .homeV3Eyebrow {
+  margin-bottom: 4px !important;
+  font-size: 8px !important;
+}
+
+body.tvLayoutMode .homeV3Hero h1 {
+  margin-bottom: 5px !important;
+  font-size: clamp(34px, 4.8vw, 48px) !important;
+}
+
+body.tvLayoutMode .homeV3Lead {
+  max-width: 440px !important;
+  font-size: 11px !important;
+  line-height: 1.3 !important;
+}
+
+body.tvLayoutMode .homeV3HeroBody {
+  max-width: 450px !important;
+  margin-top: 5px !important;
+  font-size: 9px !important;
+  line-height: 1.3 !important;
+}
+
+body.tvLayoutMode .homeV3HeroActions {
+  gap: 6px !important;
+  margin-top: 8px !important;
+}
+
+body.tvLayoutMode .homeV3HeroActions button {
+  min-height: 30px !important;
+  padding: 5px 9px !important;
+  border-radius: 9px !important;
+  font-size: 9px !important;
+}
+
+body.tvLayoutMode .homeV3HeroStats {
+  left: 22px !important;
+  right: auto !important;
+  bottom: 11px !important;
+  width: min(560px, calc(100% - 44px)) !important;
+  max-width: 560px !important;
+  gap: 7px !important;
+}
+
+body.tvLayoutMode .homeV3StatPill {
+  min-height: 43px !important;
+  padding: 5px 8px !important;
+  border-radius: 10px !important;
+  column-gap: 6px !important;
+}
+
+body.tvLayoutMode .homeV3StatIcon { font-size: 13px !important; }
+body.tvLayoutMode .homeV3StatPill strong { font-size: 14px !important; }
+body.tvLayoutMode .homeV3StatPill small { font-size: 7px !important; }
+
+/* ---------- Library / Rankings ---------- */
+body.tvLayoutMode .libraryArchiveHeroLive::before {
+  background-size: auto 100% !important;
+  background-position: right center !important;
+}
+
+body.tvLayoutMode .libraryArchiveLiveCopy {
+  align-self: stretch !important;
+  width: min(560px, 62%) !important;
+  min-height: 0 !important;
+  padding: 18px 22px !important;
+  justify-content: center !important;
+  gap: 7px !important;
+}
+
+body.tvLayoutMode .libraryArchiveHeroLive .eyebrow {
+  margin-bottom: 4px !important;
+  font-size: 8px !important;
+}
+
+body.tvLayoutMode .libraryArchiveHeroLive h1 {
+  font-size: clamp(34px, 4.8vw, 48px) !important;
+}
+
+body.tvLayoutMode .libraryArchiveLiveTagline {
+  margin-top: 6px !important;
+  max-width: 450px !important;
+  font-size: 10px !important;
+  line-height: 1.3 !important;
+}
+
+body.tvLayoutMode .libraryArchiveLiveStats {
+  width: min(100%, 520px) !important;
+  gap: 7px !important;
+  margin-top: 8px !important;
+  padding-top: 0 !important;
+}
+
+body.tvLayoutMode .libraryArchiveLiveStats > div {
+  min-height: 48px !important;
+  padding: 6px 8px !important;
+  border-radius: 10px !important;
+}
+
+body.tvLayoutMode .libraryArchiveLiveStats strong { font-size: 14px !important; }
+body.tvLayoutMode .libraryArchiveLiveStats small { font-size: 7px !important; }
+
+body.tvLayoutMode .libraryArchiveLiveAdd {
+  min-height: 30px !important;
+  padding: 6px 10px !important;
+  font-size: 9px !important;
+}
+
+/* ---------- Favorites hero ---------- */
+body.tvLayoutMode .favoritesHeroArt {
+  background-size: auto 100% !important;
+  background-position: right center !important;
+  background-repeat: no-repeat !important;
+}
+
+body.tvLayoutMode .favoritesHeroCopy {
+  width: min(560px, 62%) !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  padding: 18px 22px !important;
+  justify-content: center !important;
+  gap: 7px !important;
+}
+
+body.tvLayoutMode .favoritesEyebrow {
+  margin-bottom: 3px !important;
+  font-size: 8px !important;
+}
+
+body.tvLayoutMode .favoritesEyebrow span {
+  font-size: 12px !important;
+}
+
+body.tvLayoutMode .favoritesHero h1 {
+  font-size: clamp(34px, 4.8vw, 48px) !important;
+}
+
+body.tvLayoutMode .favoritesLead {
+  margin-top: 4px !important;
+  font-size: 10px !important;
+  line-height: 1.3 !important;
+}
+
+body.tvLayoutMode .favoritesHero blockquote {
+  gap: 5px !important;
+  margin: 5px 0 !important;
+  padding-left: 8px !important;
+  font-size: 9px !important;
+  line-height: 1.25 !important;
+}
+
+body.tvLayoutMode .favoritesHero blockquote strong {
+  font-size: 16px !important;
+}
+
+body.tvLayoutMode .favoritesStats {
+  width: min(100%, 520px) !important;
+  grid-template-columns: repeat(4, minmax(70px, 1fr)) !important;
+  gap: 7px !important;
+  margin-top: 5px !important;
+}
+
+body.tvLayoutMode .favoritesStats > div {
+  min-height: 48px !important;
+  grid-template-columns: 20px 1fr !important;
+  padding: 6px 7px !important;
+  border: 1px solid color-mix(in srgb, var(--hof-accent) 24%, transparent) !important;
+  border-radius: 10px !important;
+}
+
+body.tvLayoutMode .favoritesStats span { font-size: 15px !important; }
+body.tvLayoutMode .favoritesStats strong { font-size: 14px !important; }
+body.tvLayoutMode .favoritesStats small { margin-top: 2px !important; font-size: 7px !important; }
+
+/* ---------- Favorites posters ---------- */
+body.tvLayoutMode .favoritesGrid {
+  grid-template-columns: repeat(auto-fill, minmax(145px, 1fr)) !important;
+  gap: 11px !important;
+}
+
+body.tvLayoutMode .favoritesGrid .animeCard {
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  height: 266px !important;
+  border-radius: 15px !important;
+}
+
+body.tvLayoutMode .favoritesGrid .animeCard:hover,
+body.tvLayoutMode .favoritesGrid .animeCard:focus,
+body.tvLayoutMode .favoritesGrid .animeCard:focus-visible {
+  transform: translateY(-3px) scale(1.018) !important;
+}
+
+body.tvLayoutMode .favoritesGrid .cardInfo {
+  padding: 8px 9px 9px !important;
+}
+
+body.tvLayoutMode .favoritesGrid .cardInfo h3 {
+  margin-bottom: 4px !important;
+  font-size: 12px !important;
+  line-height: 1.12 !important;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+body.tvLayoutMode .favoritesGrid .metaPills span,
+body.tvLayoutMode .favoritesGrid .tags span {
+  padding: 3px 5px !important;
+  font-size: 8px !important;
+}
+
+body.tvLayoutMode .favoritesGrid .tags span:nth-child(n + 3) {
+  display: none !important;
+}
+
+body.tvLayoutMode .favoritesGrid .rankRibbon {
+  top: 7px !important;
+  left: 7px !important;
+  width: 38px !important;
+  height: 38px !important;
+  font-size: 11px !important;
+}
+
+body.tvLayoutMode .favoritesGrid .scoreBadge {
+  top: 7px !important;
+  right: 7px !important;
+  padding: 4px 6px !important;
+  font-size: 9px !important;
+}
+
+body.tvLayoutMode .favoritesGrid .favoriteButton,
+body.tvInputMode .favoritesGrid .favoriteButton:focus {
+  position: absolute !important;
+  top: 37px !important;
+  right: 7px !important;
+  left: auto !important;
+  width: 30px !important;
+  height: 30px !important;
+  font-size: 14px !important;
+  transform: none !important;
+  z-index: 9 !important;
+}
+
+/* ---------- Following ---------- */
+body.tvLayoutMode .followingHero::before {
+  background-size: auto 100% !important;
+  background-position: right center !important;
+}
+
+body.tvLayoutMode .followingHeroContent {
+  width: min(560px, 63%) !important;
+  min-height: 0 !important;
+  padding: 17px 22px !important;
+  justify-content: center !important;
+}
+
+body.tvLayoutMode .followingHero p {
+  margin-bottom: 3px !important;
+  font-size: 8px !important;
+}
+
+body.tvLayoutMode .followingHero h1 {
+  gap: 7px !important;
+  font-size: clamp(33px, 4.7vw, 47px) !important;
+}
+
+body.tvLayoutMode .followingHero span {
+  margin-top: 5px !important;
+  font-size: 10px !important;
+  line-height: 1.3 !important;
+}
+
+body.tvLayoutMode .followingHeroStats {
+  gap: 6px !important;
+  margin-top: 7px !important;
+}
+
+body.tvLayoutMode .followingHeroStats > div {
+  min-width: 100px !important;
+  min-height: 44px !important;
+  padding: 5px 7px !important;
+  border-radius: 9px !important;
+}
+
+body.tvLayoutMode .followingHeroStats strong { font-size: 13px !important; }
+body.tvLayoutMode .followingHeroStats small { font-size: 7px !important; }
+
+body.tvLayoutMode .followingHeroActions {
+  width: min(100%, 480px) !important;
+  gap: 6px !important;
+  margin-top: 7px !important;
+  transform: none !important;
+}
+
+body.tvLayoutMode .followingHeroActions .followingCheckButton,
+body.tvLayoutMode .followingHeroActions .followingNotifyButton,
+body.tvLayoutMode .followingHeroActions .followingNotificationsOn {
+  min-height: 30px !important;
+  padding: 5px 8px !important;
+  font-size: 8px !important;
+}
+
+/* ---------- Upcoming hero ---------- */
+body.tvLayoutMode .upcomingHero {
+  padding: 0 !important;
+}
+
+body.tvLayoutMode .upcomingHero::before {
+  background-size: auto 100% !important;
+  background-position: right center !important;
+}
+
+body.tvLayoutMode .upcomingHero > div {
+  width: min(560px, 62%) !important;
+  max-width: 560px !important;
+  padding: 18px 22px !important;
+}
+
+body.tvLayoutMode .upcomingHero h1 {
+  font-size: clamp(34px, 4.8vw, 48px) !important;
+}
+
+body.tvLayoutMode .upcomingHero p {
+  margin-top: 5px !important;
+  max-width: 450px !important;
+  font-size: 10px !important;
+  line-height: 1.3 !important;
+}
+
+body.tvLayoutMode .upcomingHero small {
+  margin-top: 7px !important;
+  font-size: 8px !important;
+}
+
+body.tvLayoutMode .upcomingHero > svg {
+  width: 52px !important;
+  height: 52px !important;
+  margin-right: 24px !important;
+}
+
+/* ---------- Upcoming posters ---------- */
+body.tvLayoutMode .upcomingGrid {
+  grid-template-columns: repeat(auto-fill, minmax(145px, 1fr)) !important;
+  gap: 11px !important;
+}
+
+body.tvLayoutMode .upcomingCard {
+  border-radius: 14px !important;
+}
+
+body.tvLayoutMode .upcomingPoster {
+  aspect-ratio: 2 / 3 !important;
+}
+
+body.tvLayoutMode .upcomingCardBody {
+  padding: 9px !important;
+}
+
+body.tvLayoutMode .upcomingDate {
+  gap: 4px !important;
+  font-size: 8px !important;
+}
+
+body.tvLayoutMode .upcomingDate strong {
+  padding: 3px 5px !important;
+}
+
+body.tvLayoutMode .upcomingCard h3 {
+  min-height: 2.25em !important;
+  margin: 5px 0 4px !important;
+  font-size: 11px !important;
+  line-height: 1.15 !important;
+}
+
+body.tvLayoutMode .upcomingCardBody > p {
+  min-height: 0 !important;
+  font-size: 9px !important;
+}
+
+body.tvLayoutMode .upcomingMeta {
+  gap: 4px !important;
+  margin: 6px 0 !important;
+}
+
+body.tvLayoutMode .upcomingMeta span {
+  padding: 3px 5px !important;
+  font-size: 8px !important;
+}
+
+body.tvLayoutMode .upcomingActions {
+  gap: 4px !important;
+}
+
+body.tvLayoutMode .upcomingActions button {
+  min-height: 28px !important;
+  padding: 4px !important;
+  font-size: 8px !important;
+}
+
+/* ---------- JoeAI ---------- */
+body.tvLayoutMode .joeAIHero {
+  grid-template-columns: minmax(0, 1.3fr) minmax(175px, .8fr) 150px !important;
+}
+
+body.tvLayoutMode .joeAIHeroCopy {
+  width: auto !important;
+  padding: 17px 0 17px 21px !important;
+}
+
+body.tvLayoutMode .joeAIHeroTitle {
+  gap: 7px !important;
+  margin-bottom: 7px !important;
+}
+
+body.tvLayoutMode .joeAIHeroIcon {
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 9px !important;
+  font-size: 17px !important;
+}
+
+body.tvLayoutMode .joeAIHeroTitle h1 {
+  font-size: 16px !important;
+}
+
+body.tvLayoutMode .joeAIEyebrow {
+  font-size: 8px !important;
+}
+
+body.tvLayoutMode .joeAIHeroCopy > h2 {
+  margin: 5px 0 7px !important;
+  font-size: clamp(30px, 4vw, 42px) !important;
+}
+
+body.tvLayoutMode .joeAIHeroBody {
+  max-width: 420px !important;
+  font-size: 10px !important;
+  line-height: 1.3 !important;
+}
+
+body.tvLayoutMode .joeAIAnalysisLink {
+  margin-top: 7px !important;
+  font-size: 9px !important;
+}
+
+body.tvLayoutMode .joeAIHeroBrain {
+  min-height: 0 !important;
+  height: 100% !important;
+  margin: -6px -12px !important;
+}
+
+body.tvLayoutMode .joeAIHeroStats {
+  gap: 4px !important;
+  margin-right: 12px !important;
+  padding: 7px !important;
+  border-radius: 12px !important;
+}
+
+body.tvLayoutMode .joeAIHeroStats div {
+  grid-template-columns: 22px 1fr !important;
+  column-gap: 5px !important;
+  padding: 5px 3px !important;
+}
+
+body.tvLayoutMode .joeAIHeroStats span { font-size: 16px !important; }
+body.tvLayoutMode .joeAIHeroStats strong { font-size: 14px !important; }
+body.tvLayoutMode .joeAIHeroStats small { font-size: 7px !important; }
+
+/* ---------- Analytics ---------- */
+body.tvLayoutMode .analyticsLabBackdrop {
+  background-size: auto 100% !important;
+  background-position: right center !important;
+  transform: none !important;
+}
+
+body.tvLayoutMode .analyticsLabCopy {
+  width: min(570px, 64%) !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  padding: 17px 22px !important;
+  justify-content: center !important;
+  gap: 6px !important;
+}
+
+body.tvLayoutMode .analyticsLabEyebrow {
+  margin-bottom: 3px !important;
+  font-size: 8px !important;
+}
+
+body.tvLayoutMode .analyticsLabCopy h1 {
+  font-size: clamp(34px, 4.8vw, 48px) !important;
+}
+
+body.tvLayoutMode .analyticsLabLead {
+  margin-top: 5px !important;
+  font-size: 10px !important;
+  line-height: 1.3 !important;
+}
+
+body.tvLayoutMode .analyticsLabInsight {
+  margin-top: 5px !important;
+  padding: 6px 8px !important;
+  font-size: 8px !important;
+  line-height: 1.25 !important;
+}
+
+body.tvLayoutMode .analyticsLabInsight span {
+  margin-bottom: 2px !important;
+  font-size: 7px !important;
+}
+
+body.tvLayoutMode .analyticsLabStats {
+  gap: 6px !important;
+  max-width: 520px !important;
+}
+
+body.tvLayoutMode .analyticsLabStats > div {
+  min-height: 46px !important;
+  padding: 5px 6px !important;
+  border-radius: 9px !important;
+}
+
+body.tvLayoutMode .analyticsLabStats span { font-size: 12px !important; }
+body.tvLayoutMode .analyticsLabStats strong { margin-top: 1px !important; font-size: 13px !important; }
+body.tvLayoutMode .analyticsLabStats small { font-size: 7px !important; }
+
+/* ---------- About / Help ---------- */
+body.tvLayoutMode .aboutHelpHero {
+  height: clamp(230px, 27vw, 280px) !important;
+  max-height: 280px !important;
+  padding: 18px 22px !important;
+  gap: 14px !important;
+}
+
+body.tvLayoutMode .aboutHelpHero > div {
+  max-width: 540px !important;
+}
+
+body.tvLayoutMode .aboutHelpHero > div > p {
+  margin-bottom: 4px !important;
+  font-size: 8px !important;
+}
+
+body.tvLayoutMode .aboutHelpHero h1 {
+  font-size: clamp(34px, 4.8vw, 48px) !important;
+}
+
+body.tvLayoutMode .aboutHelpHero > div > span {
+  margin-top: 7px !important;
+  font-size: 10px !important;
+  line-height: 1.3 !important;
+}
+
+body.tvLayoutMode .aboutHelpHero > svg {
+  width: 70px !important;
+}
+
+body.tvLayoutMode .aboutVersion {
+  gap: 5px !important;
+  margin-top: 8px !important;
+  padding: 5px 8px !important;
+  font-size: 8px !important;
+}
+
+/* =========================================================
+   Android TV JoeAI single-page conversation flow
+   The desktop/mobile chat keeps its nested-scroll behavior.
+   On TV the page itself owns scrolling so D-pad focus can
+   move naturally through prompts, results, and the composer.
+   ========================================================= */
+
+body.tvLayoutMode .joeAICommandCenter .joeAIChatShell {
+  min-height: 0 !important;
+  height: auto !important;
+  max-height: none !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: visible !important;
+  padding: 14px !important;
+}
+
+body.tvLayoutMode .joeAICommandCenter .joeAIConversation {
+  min-height: 0 !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+  overscroll-behavior: auto !important;
+  scroll-behavior: auto !important;
+  padding: 10px !important;
+}
+
+body.tvLayoutMode .joeAICommandCenter .joeAIConversation > .chat {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 8px 0 !important;
+  scroll-margin-block: 72px !important;
+}
+
+body.tvLayoutMode .joeAICommandCenter .joeAIConversation > .chat:focus,
+body.tvLayoutMode .joeAICommandCenter .joeAIConversation > .chat:focus-visible {
+  outline: 3px solid var(--cyan) !important;
+  outline-offset: 4px !important;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--pink) 58%, transparent),
+    0 0 24px color-mix(in srgb, var(--cyan) 28%, transparent) !important;
+}
+
+body.tvLayoutMode .joeAICommandCenter .joeAIComposer {
+  position: static !important;
+  bottom: auto !important;
+  z-index: 1 !important;
+  align-self: stretch !important;
+  margin-top: 10px !important;
+  backdrop-filter: none !important;
+}
+
+body.tvLayoutMode .joeAICommandCenter .joeAIStarterChips {
+  margin-bottom: 10px !important;
+}
+
+body.tvLayoutMode .joeAICommandCenter .joeAIStarterChips button {
+  padding: 6px 9px !important;
+  font-size: 9px !important;
+}
+
+body.tvLayoutMode .joeAICommandCenter .assistant-input.joeAIComposer {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) 150px !important;
+  grid-template-rows: auto !important;
+  gap: 8px !important;
+}
+
+body.tvLayoutMode .joeAICommandCenter .assistant-input.joeAIComposer textarea {
+  min-height: 64px !important;
+  height: 64px !important;
+  resize: none !important;
+  padding: 9px 11px !important;
+  font-size: 11px !important;
+}
+
+body.tvLayoutMode .joeAICommandCenter .assistant-input.joeAIComposer button {
+  min-width: 150px !important;
+  min-height: 64px !important;
+  width: auto !important;
+}
+
+/* Keep structured JoeAI result cards readable without turning one answer into
+   an enormous TV viewport. The page can keep growing naturally. */
+body.tvLayoutMode .joeAICommandCenter .joeaiRecGrid {
+  gap: 10px !important;
+}
+
+body.tvLayoutMode .joeAICommandCenter .joeaiRecommendationCard,
+body.tvLayoutMode .joeAICommandCenter .joeaiRecommendationResultCard {
+  max-width: 100% !important;
+}
+
+/* =========================================================
+   Android TV JoeAI simplification
+   Remove dashboard-style context panels from the TV flow.
+   Desktop/web/phone/tablet keep the full JoeAI overview.
+   ========================================================= */
+
+body.tvLayoutMode .joeAICommandCenter .joeAIOverviewGrid {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+body.tvLayoutMode .joeAICommandCenter .joeAIDNACard,
+body.tvLayoutMode .joeAICommandCenter .joeAIActivityCard {
+  display: none !important;
+}
+
+body.tvLayoutMode .joeAICommandCenter .joeAIPickCard {
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
+/* =========================================================
+   Android TV Home: one-screen launchpad
+   Hero -> Continue Watching -> JoeAI Pick of the Day.
+   Everything else remains available on desktop/web/mobile.
+   ========================================================= */
+
+.homeV3TvOnly {
+  display: none;
+}
+
+body.tvLayoutMode .homeV3TvOnly {
+  display: block !important;
+}
+
+body.tvLayoutMode .homeV3DesktopOnly {
+  display: none !important;
+}
+
+/* Strip the TV dashboard down to the two useful rows. */
+body.tvLayoutMode .homeV3Grid > :not(.homeV3Continue):not(.homeV3TvPickPanel) {
+  display: none !important;
+}
+
+body.tvLayoutMode .homeV3Grid {
+  display: grid !important;
+  grid-template-columns: 1fr !important;
+  gap: 10px !important;
+  margin-top: -6px !important;
+}
+
+/* Make the hero compact enough that all of TV Home fits in one viewport. */
+body.tvLayoutMode .homeV3Hero {
+  height: 205px !important;
+  max-height: 205px !important;
+  min-height: 205px !important;
+}
+
+body.tvLayoutMode .homeV3HeroCopy {
+  width: min(500px, 60%) !important;
+  padding: 12px 18px 50px !important;
+}
+
+body.tvLayoutMode .homeV3Eyebrow {
+  font-size: 7px !important;
+}
+
+body.tvLayoutMode .homeV3Hero h1 {
+  font-size: clamp(29px, 4vw, 40px) !important;
+}
+
+body.tvLayoutMode .homeV3Lead {
+  font-size: 9px !important;
+  line-height: 1.2 !important;
+}
+
+body.tvLayoutMode .homeV3HeroBody {
+  display: none !important;
+}
+
+body.tvLayoutMode .homeV3HeroActions {
+  margin-top: 6px !important;
+}
+
+body.tvLayoutMode .homeV3HeroActions button {
+  min-height: 27px !important;
+  padding: 4px 8px !important;
+  font-size: 8px !important;
+}
+
+body.tvLayoutMode .homeV3HeroStats {
+  left: 18px !important;
+  bottom: 8px !important;
+  width: min(500px, calc(100% - 36px)) !important;
+  gap: 5px !important;
+}
+
+body.tvLayoutMode .homeV3StatPill {
+  min-height: 34px !important;
+  padding: 3px 6px !important;
+}
+
+body.tvLayoutMode .homeV3StatPill strong {
+  font-size: 11px !important;
+}
+
+body.tvLayoutMode .homeV3StatPill small {
+  font-size: 6px !important;
+}
+
+/* Shared compact panel chrome. */
+body.tvLayoutMode .homeV3Continue {
+  display: block !important;
+}
+
+body.tvLayoutMode .homeV3Continue,
+body.tvLayoutMode .homeV3TvPickPanel {
+  padding: 8px 10px 10px !important;
+  border-radius: 14px !important;
+}
+
+body.tvLayoutMode .homeV3Continue .homeV3PanelHeader,
+body.tvLayoutMode .homeV3TvPickPanel .homeV3PanelHeader {
+  min-height: 24px !important;
+  margin-bottom: 6px !important;
+}
+
+body.tvLayoutMode .homeV3Continue .homeV3PanelHeader h2,
+body.tvLayoutMode .homeV3TvPickPanel .homeV3PanelHeader h2 {
+  font-size: 11px !important;
+}
+
+body.tvLayoutMode .homeV3Continue .homeV3PanelHeader button {
+  min-height: 24px !important;
+  padding: 3px 7px !important;
+  font-size: 7px !important;
+}
+
+/* Six-card Continue Watching baseline. */
+body.tvLayoutMode .homeV3TvContinue {
+  display: grid !important;
+  grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+}
+
+body.tvLayoutMode .homeV3TvPosterCard {
+  position: relative !important;
+  display: block !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 112px !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  border: 1px solid color-mix(in srgb, var(--cyan) 30%, transparent) !important;
+  border-radius: 10px !important;
+  background: #08101b !important;
+  text-align: left !important;
+}
+
+body.tvLayoutMode .homeV3TvPosterCard img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  object-position: center 22% !important;
+}
+
+body.tvLayoutMode .homeV3TvPosterCard > span {
+  position: absolute !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  padding: 14px 6px 5px !important;
+  overflow: hidden !important;
+  background: linear-gradient(transparent, rgba(2, 7, 13, .94)) !important;
+  color: #f4f8ff !important;
+  font-size: 7px !important;
+  font-weight: 800 !important;
+  line-height: 1.12 !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+body.tvLayoutMode .homeV3TvPosterCard:focus,
+body.tvLayoutMode .homeV3TvPosterCard:focus-visible {
+  transform: translateY(-2px) scale(1.025) !important;
+}
+
+/* Pick of the Day is a single D-pad stop, not a row of micro-buttons. */
+body.tvLayoutMode .homeV3TvPickPanel {
+  display: block !important;
+}
+
+body.tvLayoutMode .homeV3TvPickPanel .homeV3PanelHeader {
+  margin-bottom: 5px !important;
+}
+
+body.tvLayoutMode .homeV3TvPick {
+  display: grid !important;
+  grid-template-columns: 68px minmax(0, 1fr) auto !important;
+  align-items: center !important;
+  gap: 10px !important;
+  width: 100% !important;
+  min-height: 92px !important;
+  padding: 7px !important;
+  border: 1px solid color-mix(in srgb, var(--pink) 45%, var(--cyan)) !important;
+  border-radius: 12px !important;
+  background: linear-gradient(100deg, rgba(7, 18, 29, .98), rgba(24, 12, 36, .92)) !important;
+  text-align: left !important;
+}
+
+body.tvLayoutMode .homeV3TvPick > img,
+body.tvLayoutMode .homeV3TvPick > .poster,
+body.tvLayoutMode .homeV3TvPick > div:first-child {
+  width: 68px !important;
+  height: 78px !important;
+  object-fit: cover !important;
+  overflow: hidden !important;
+  border-radius: 8px !important;
+}
+
+body.tvLayoutMode .homeV3TvPickCopy {
+  display: grid !important;
+  gap: 3px !important;
+  min-width: 0 !important;
+}
+
+body.tvLayoutMode .homeV3TvPickCopy > strong {
+  overflow: hidden !important;
+  color: #f5f8ff !important;
+  font-size: 13px !important;
+  line-height: 1.1 !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+body.tvLayoutMode .homeV3TvPickCopy > small {
+  color: var(--cyan) !important;
+  font-size: 8px !important;
+  font-weight: 800 !important;
+  text-transform: uppercase !important;
+}
+
+body.tvLayoutMode .homeV3TvPickTags {
+  display: flex !important;
+  gap: 4px !important;
+  flex-wrap: wrap !important;
+}
+
+body.tvLayoutMode .homeV3TvPickTags b {
+  padding: 2px 5px !important;
+  border: 1px solid color-mix(in srgb, var(--cyan) 32%, transparent) !important;
+  border-radius: 999px !important;
+  color: #ccecff !important;
+  font-size: 6px !important;
+}
+
+body.tvLayoutMode .homeV3TvPickCopy > em {
+  max-width: 620px !important;
+  overflow: hidden !important;
+  color: #9fb0c5 !important;
+  font-size: 7px !important;
+  font-style: normal !important;
+  line-height: 1.2 !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+body.tvLayoutMode .homeV3TvPickOpen {
+  padding-right: 5px !important;
+  color: var(--cyan) !important;
+  font-size: 9px !important;
+  font-weight: 900 !important;
+}
+
+/* Pick of the Day moved to Home for TV. The JoeAI page becomes conversation-first. */
+body.tvLayoutMode .joeAICommandCenter .joeAIOverviewGrid {
+  display: none !important;
+}
+
+body.tvLayoutMode .homeV3TvEmptyAction {
+  width: 100% !important;
+  min-height: 56px !important;
+  padding: 8px !important;
+  border-radius: 10px !important;
+  font-size: 9px !important;
+}
+
+@media (max-width: 820px) {
+  body.tvLayoutMode .homeV3TvContinue {
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  }
+}
+
+/* =========================================================
+   Android TV Home ordering + immediate Detail layout
+   Fixes legacy desktop grid-area placement and removes the
+   poster-only intermediate detail state on TV.
+   ========================================================= */
+
+/* Old Home dashboard named areas can still place surviving panels into
+   implicit columns. TV Home is a strict vertical launchpad. */
+body.tvLayoutMode .homeV3Grid {
+  grid-template-areas: none !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+  grid-auto-columns: minmax(0, 1fr) !important;
+  grid-auto-flow: row !important;
+  align-items: stretch !important;
+}
+
+body.tvLayoutMode .homeV3Continue {
+  grid-area: auto !important;
+  grid-column: 1 / -1 !important;
+  grid-row: auto !important;
+  order: 1 !important;
+  width: 100% !important;
+  max-width: none !important;
+}
+
+body.tvLayoutMode .homeV3TvPickPanel {
+  grid-area: auto !important;
+  grid-column: 1 / -1 !important;
+  grid-row: auto !important;
+  order: 2 !important;
+  width: 100% !important;
+  max-width: none !important;
+}
+
+/* Six equal poster targets across the full Home content width. */
+body.tvLayoutMode .homeV3TvContinue {
+  width: 100% !important;
+  grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+}
+
+/* Detail modal should open directly in the proper TV layout. Do not wait for
+   another D-pad move and do not inherit the <=1050px single-column fallback. */
+body.tvLayoutMode .modalBackdrop {
+  display: grid !important;
+  place-items: center !important;
+  padding: 14px !important;
+}
+
+body.tvLayoutMode .detailModal.upgradedModal {
+  display: grid !important;
+  grid-template-columns: minmax(240px, 30%) minmax(0, 1fr) !important;
+  width: min(1180px, calc(100vw - 34px)) !important;
+  max-width: none !important;
+  height: auto !important;
+  max-height: calc(100vh - 28px) !important;
+  overflow-y: auto !important;
+  gap: 20px !important;
+  padding: 16px !important;
+  border-radius: 20px !important;
+}
+
+body.tvLayoutMode .detailModal .detailArtRail {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  align-self: start !important;
+}
+
+body.tvLayoutMode .detailModal .detailPoster {
+  width: 100% !important;
+  max-width: 310px !important;
+  height: auto !important;
+  aspect-ratio: 2 / 3 !important;
+  margin: 0 auto !important;
+}
+
+body.tvLayoutMode .detailModal .detailBody {
+  min-width: 0 !important;
+  margin-top: 0 !important;
+}
+
+/* Generic TV focus styling must not pull the close control out of its
+   absolute position and make it look like part of the poster rail. */
+body.tvLayoutMode .detailModal .close,
+body.tvInputMode .detailModal .close:focus,
+body.tvInputMode .detailModal .close:focus-visible {
+  position: absolute !important;
+  top: 12px !important;
+  right: 12px !important;
+  left: auto !important;
+  width: 40px !important;
+  height: 40px !important;
+  transform: none !important;
+  z-index: 20 !important;
+}
+
+/* Keep the nav arrows in their normal layout when focused too. */
+body.tvInputMode .detailModal .detailNavigationButton:focus,
+body.tvInputMode .detailModal .detailNavigationButton:focus-visible {
+  position: relative !important;
+  transform: none !important;
+}
+
+/* Android TV Home Continue Watching poster wrapper fix.
+   Poster(mode="thumb") uses an absolutely positioned img, so its wrapper
+   needs an explicit size inside the TV card. */
+body.tvLayoutMode .homeV3TvPosterCard > .posterThumb,
+body.tvLayoutMode .homeV3TvPosterCard > .poster {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  border-radius: inherit !important;
+}
+
+body.tvLayoutMode .homeV3TvPosterCard > .posterThumb img,
+body.tvLayoutMode .homeV3TvPosterCard > .poster img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  object-position: center 22% !important;
+}
+
+/* =========================================================
+   Android TV compact sidebar
+   Fit the complete command rail, including Update Database,
+   inside a normal TV viewport without sidebar scrolling.
+   ========================================================= */
+
+body.tvLayoutMode .sidebar {
+  height: 100vh !important;
+  min-height: 100vh !important;
+  overflow-y: hidden !important;
+  padding: 12px 10px 10px !important;
+}
+
+body.tvLayoutMode .sidebar .brand {
+  margin: 0 3px 8px !important;
+  padding: 1px 0 9px !important;
+}
+
+body.tvLayoutMode .sidebar .brandEyebrow {
+  display: none !important;
+}
+
+body.tvLayoutMode .sidebar .brand strong {
+  font-size: 20px !important;
+  line-height: 1 !important;
+}
+
+body.tvLayoutMode .sidebar .brand small {
+  gap: 5px !important;
+  margin-top: 5px !important;
+  font-size: 9px !important;
+}
+
+body.tvLayoutMode .sidebar .brand small i {
+  width: 5px !important;
+  height: 5px !important;
+}
+
+body.tvLayoutMode .sidebar nav {
+  gap: 3px !important;
+}
+
+body.tvLayoutMode .sidebarNavHeading {
+  display: none !important;
+}
+
+body.tvLayoutMode .sidebarNavItems {
+  gap: 2px !important;
+}
+
+body.tvLayoutMode .sidebar nav button {
+  min-height: 38px !important;
+  gap: 8px !important;
+  padding: 4px 8px 4px 6px !important;
+  border-radius: 11px !important;
+  font-size: 12px !important;
+}
+
+body.tvLayoutMode .sidebar nav button::before {
+  top: 7px !important;
+  bottom: 7px !important;
+}
+
+body.tvLayoutMode .sidebarNavIcon {
+  width: 26px !important;
+  height: 26px !important;
+  flex: 0 0 26px !important;
+  border-radius: 8px !important;
+}
+
+body.tvLayoutMode .sidebarNavIcon svg {
+  width: 15px !important;
+  height: 15px !important;
+}
+
+body.tvLayoutMode .sidebar .navBadge {
+  min-width: 21px !important;
+  height: 19px !important;
+  padding: 0 5px !important;
+  font-size: 9px !important;
+}
+
+body.tvLayoutMode .sidebarFooter {
+  margin-top: auto !important;
+  padding-top: 5px !important;
+}
+
+body.tvLayoutMode .sidebar .syncSide {
+  min-height: 40px !important;
+  grid-template-columns: 27px minmax(0, 1fr) !important;
+  gap: 7px !important;
+  padding: 5px 7px !important;
+  border-radius: 11px !important;
+}
+
+body.tvLayoutMode .sidebarSyncIcon {
+  width: 27px !important;
+  height: 27px !important;
+  border-radius: 8px !important;
+}
+
+body.tvLayoutMode .sidebarSyncIcon svg {
+  width: 14px !important;
+  height: 14px !important;
+}
+
+body.tvLayoutMode .sidebar .syncSide strong {
+  font-size: 10px !important;
+  line-height: 1.05 !important;
+}
+
+body.tvLayoutMode .sidebar .syncSide small {
+  display: none !important;
+}
+
+/* Give focused rail items a little emphasis without increasing layout size. */
+body.tvInputMode .sidebar nav button:focus,
+body.tvInputMode .sidebar nav button:focus-visible,
+body.tvInputMode .sidebar .syncSide:focus,
+body.tvInputMode .sidebar .syncSide:focus-visible {
+  transform: none !important;
+}
+
+/* =========================================================
+   Android TV JoeAI lean layout
+   Keep the JoeAI identity/hero, remove TV-only dashboard
+   fluff, and put the conversation closer to the top.
+   ========================================================= */
+
+body.tvLayoutMode .joeAICommandCenter .joeAIHero {
+  height: 220px !important;
+  min-height: 220px !important;
+  max-height: 220px !important;
+  grid-template-columns: minmax(0, 1.05fr) minmax(300px, .95fr) !important;
+  overflow: hidden !important;
+}
+
+body.tvLayoutMode .joeAICommandCenter .joeAIHeroCopy {
+  width: auto !important;
+  padding: 13px 0 13px 18px !important;
+  align-self: center !important;
+}
+
+body.tvLayoutMode .joeAICommandCenter .joeAIHeroTitle {
+  margin-bottom: 4px !important;
+}
+
+body.tvLayoutMode .joeAICommandCenter .joeAIHeroIcon {
+  width: 28px !important;
+  height: 28px !important;
+  font-size: 15px !important;
+}
+
+body.tvLayoutMode .joeAICommandCenter .joeAIHeroTitle h1 {
+  font-size: 14px !important;
+}
+
+body.tvLayoutMode .joeAICommandCenter .joeAIEyebrow {
+  margin-top: 2px !important;
+  font-size: 7px !important;
+}
+
+body.tvLayoutMode .joeAICommandCenter .joeAIHeroCopy > h2 {
+  margin: 3px 0 5px !important;
+  font-size: clamp(27px, 3.6vw, 38px) !important;
+  line-height: .98 !important;
+}
+
+body.tvLayoutMode .joeAICommandCenter .joeAIHeroBody {
+  max-width: 500px !important;
+  margin: 0 !important;
+  font-size: 9px !important;
+  line-height: 1.22 !important;
+}
+
+body.tvLayoutMode .joeAICommandCenter .joeAIAnalysisLink,
+body.tvLayoutMode .joeAICommandCenter .joeAIHeroStats,
+body.tvLayoutMode .joeAICommandCenter .joeAIStarterChips {
+  display: none !important;
+}
+
+body.tvLayoutMode .joeAICommandCenter .joeAIHeroBrain {
+  min-height: 0 !important;
+  height: 220px !important;
+  margin: 0 !important;
+  align-self: stretch !important;
+}
+
+body.tvLayoutMode .joeAICommandCenter .joeAIHeroBrain img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  object-position: center !important;
+}
+
+body.tvLayoutMode .joeAICommandCenter .joeAIChatShell {
+  margin-top: 10px !important;
+  padding: 10px 12px 12px !important;
+}
+
+body.tvLayoutMode .joeAICommandCenter .joeAIChatHeader {
+  margin-bottom: 6px !important;
+  padding-bottom: 6px !important;
+}
+
+body.tvLayoutMode .joeAICommandCenter .joeAIConversation {
+  padding-top: 6px !important;
+}
+
+/* =========================================================
+   Android TV JoeAI centered recommendation selection
+   The recommendation nearest the viewport center is the active
+   title. It highlights without becoming a keyboard focus stop.
+   ========================================================= */
+
+body.tvLayoutMode .joeAICommandCenter .joeaiRecCard {
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease,
+    filter 150ms ease !important;
+}
+
+body.tvLayoutMode .joeAICommandCenter .joeaiRecCard.tvJoeAIActiveCard {
+  border-color: var(--cyan) !important;
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--cyan) 72%, transparent),
+    0 0 0 6px color-mix(in srgb, var(--pink) 32%, transparent),
+    0 18px 44px rgba(0, 0, 0, .34),
+    0 0 34px color-mix(in srgb, var(--cyan) 20%, transparent) !important;
+  transform: scale(1.012) !important;
+  filter: brightness(1.04) !important;
+  z-index: 3 !important;
+}
+
+body.tvLayoutMode .joeAICommandCenter .joeaiRecCard.tvJoeAIActiveCard .joeaiRecPoster {
+  filter: brightness(1.08) saturate(1.06) !important;
+}
+
+body.tvLayoutMode .joeAICommandCenter .joeaiRecCard.tvJoeAIActiveCard::after {
+  content: 'SELECTED';
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 20;
+  padding: 4px 7px;
+  border: 1px solid color-mix(in srgb, var(--cyan) 58%, transparent);
+  border-radius: 999px;
+  background: rgba(2, 13, 23, .88);
+  color: var(--cyan);
+  font-size: 7px;
+  font-weight: 950;
+  letter-spacing: .11em;
+  pointer-events: none;
+}
+
+/* Android TV JoeAI active-card action navigation.
+   Left/Right moves through controls inside the centered recommendation. */
+body.tvLayoutMode .joeAICommandCenter .joeaiRecCard.tvJoeAIActiveCard
+:is(button, a[href], [role="button"]):focus,
+body.tvLayoutMode .joeAICommandCenter .joeaiRecCard.tvJoeAIActiveCard
+:is(button, a[href], [role="button"]):focus-visible {
+  outline: 3px solid var(--cyan) !important;
+  outline-offset: 3px !important;
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--pink) 36%, transparent),
+    0 0 22px color-mix(in srgb, var(--cyan) 30%, transparent) !important;
+}
+
+/* =========================================================
+   Android TV JoeAI latest-exchange-only view
+   Conversation memory still persists internally. TV only
+   renders the newest question + newest answer to avoid
+   accumulating D-pad scrolling debt.
+   ========================================================= */
+
+body.tvLayoutMode .joeAICommandCenter .joeAIHistoryNotice {
+  display: none !important;
+}
+
+/* Hide prior rendered chat entries on TV. */
+body.tvLayoutMode .joeAICommandCenter .joeAIConversation > .chat {
+  display: none !important;
+}
+
+/* The newest exchange is normally the final user + bot pair. */
+body.tvLayoutMode .joeAICommandCenter .joeAIConversation > .chat:nth-last-of-type(-n + 2) {
+  display: block !important;
+}
+
+/* While JoeAI is thinking, keep the newest user prompt plus thinking state visible.
+   The thinking element is also a .chat, so the same two-entry rule naturally works. */
+
+/* =========================================================
+   Android TV Library density pass
+   Shorter hero, compact stats, faster path to the collection.
+   ========================================================= */
+
+body.tvLayoutMode .libraryArchiveHeroLive {
+  height: 178px !important;
+  min-height: 178px !important;
+  max-height: 178px !important;
+}
+
+body.tvLayoutMode .libraryArchiveHeroLive::before {
+  background-size: auto 100% !important;
+  background-position: right center !important;
+}
+
+body.tvLayoutMode .libraryArchiveLiveCopy {
+  width: min(520px, 61%) !important;
+  min-height: 0 !important;
+  padding: 10px 18px !important;
+  gap: 3px !important;
+  justify-content: center !important;
+}
+
+body.tvLayoutMode .libraryArchiveHeroLive .eyebrow {
+  margin-bottom: 1px !important;
+  font-size: 7px !important;
+}
+
+body.tvLayoutMode .libraryArchiveHeroLive h1 {
+  font-size: clamp(28px, 3.8vw, 38px) !important;
+  line-height: 1 !important;
+}
+
+body.tvLayoutMode .libraryArchiveLiveTagline {
+  max-width: 430px !important;
+  margin-top: 2px !important;
+  font-size: 8px !important;
+  line-height: 1.18 !important;
+}
+
+body.tvLayoutMode .libraryArchiveLiveStats {
+  width: min(100%, 455px) !important;
+  gap: 4px !important;
+  margin-top: 4px !important;
+  padding-top: 0 !important;
+}
+
+body.tvLayoutMode .libraryArchiveLiveStats > div {
+  min-height: 32px !important;
+  padding: 3px 6px !important;
+  border-radius: 8px !important;
+}
+
+body.tvLayoutMode .libraryArchiveLiveStats strong {
+  font-size: 10px !important;
+  line-height: 1 !important;
+}
+
+body.tvLayoutMode .libraryArchiveLiveStats small {
+  margin-top: 1px !important;
+  font-size: 6px !important;
+  line-height: 1 !important;
+}
+
+body.tvLayoutMode .libraryArchiveLiveAdd {
+  min-height: 24px !important;
+  margin-top: 2px !important;
+  padding: 3px 8px !important;
+  font-size: 8px !important;
+  border-radius: 8px !important;
+}
+
+body.tvLayoutMode .libraryPage .libraryToolbar,
+body.tvLayoutMode .libraryPage .libraryControls {
+  margin-top: 7px !important;
+}
+
+/* =========================================================
+   Android TV Favorites cleanup + search-last layout
+   Favorites: no stat strip, six posters across, compact ranks.
+   Search fields: move to the far/right end of TV toolbars so
+   the on-screen keyboard is an intentional navigation choice.
+   ========================================================= */
+
+/* ---------- Favorites ---------- */
+body.tvLayoutMode .favoritesStats {
+  display: none !important;
+}
+
+body.tvLayoutMode .favoritesGrid {
+  grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+  gap: 10px !important;
+}
+
+body.tvLayoutMode .favoritesGrid .animeCard {
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 238px !important;
+  border-radius: 14px !important;
+}
+
+body.tvLayoutMode .favoritesGrid .rankRibbon {
+  top: 6px !important;
+  left: 6px !important;
+  width: 30px !important;
+  height: 30px !important;
+  min-width: 30px !important;
+  min-height: 30px !important;
+  padding: 0 !important;
+  border-width: 2px !important;
+  font-size: 9px !important;
+  line-height: 1 !important;
+}
+
+body.tvLayoutMode .favoritesGrid .scoreBadge {
+  top: 6px !important;
+  right: 6px !important;
+}
+
+body.tvLayoutMode .favoritesGrid .favoriteButton,
+body.tvInputMode .favoritesGrid .favoriteButton:focus {
+  top: 33px !important;
+  right: 6px !important;
+  width: 28px !important;
+  height: 28px !important;
+  font-size: 13px !important;
+}
+
+@media (max-width: 920px) {
+  body.tvLayoutMode .favoritesGrid {
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  }
+}
+
+/* ---------- Main Library / Favorites / Rankings topbar ---------- */
+body.tvLayoutMode .topbar {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+}
+
+body.tvLayoutMode .topbar .viewModes {
+  order: 1 !important;
+  flex: 0 0 auto !important;
+}
+
+body.tvLayoutMode .topbar .search {
+  order: 2 !important;
+  width: min(46%, 560px) !important;
+  max-width: 560px !important;
+  margin-left: auto !important;
+}
+
+/* ---------- Discover catalog modal ---------- */
+body.tvLayoutMode .discoverCatalogToolbar {
+  grid-template-columns: minmax(170px, .42fr) minmax(150px, .32fr) minmax(280px, 1fr) !important;
+}
+
+body.tvLayoutMode .discoverCatalogToolbar .discoverSearch {
+  grid-column: 3 !important;
+  grid-row: 1 !important;
+}
+
+body.tvLayoutMode .discoverCatalogToolbar > select:nth-of-type(1) {
+  grid-column: 1 !important;
+  grid-row: 1 !important;
+}
+
+body.tvLayoutMode .discoverCatalogToolbar > select:nth-of-type(2) {
+  grid-column: 2 !important;
+  grid-row: 1 !important;
+}
+
+/* ---------- Discover live toolbar ---------- */
+body.tvLayoutMode .discoverLiveToolbar {
+  grid-template-columns:
+    repeat(3, minmax(120px, .7fr))
+    auto
+    minmax(260px, 1.5fr) !important;
+}
+
+body.tvLayoutMode .discoverLiveToolbar .discoverSearch {
+  grid-column: 5 !important;
+  grid-row: 1 !important;
+}
+
+body.tvLayoutMode .discoverLiveToolbar > select:nth-of-type(1) {
+  grid-column: 1 !important;
+  grid-row: 1 !important;
+}
+
+body.tvLayoutMode .discoverLiveToolbar > select:nth-of-type(2) {
+  grid-column: 2 !important;
+  grid-row: 1 !important;
+}
+
+body.tvLayoutMode .discoverLiveToolbar > select:nth-of-type(3) {
+  grid-column: 3 !important;
+  grid-row: 1 !important;
+}
+
+body.tvLayoutMode .discoverLiveToolbar .discoverViewToggle {
+  grid-column: 4 !important;
+  grid-row: 1 !important;
+}
+
+/* ---------- Upcoming ---------- */
+body.tvLayoutMode .upcomingToolbar {
+  grid-template-columns: minmax(0, 1fr) auto minmax(260px, 38%) !important;
+  gap: 9px !important;
+}
+
+body.tvLayoutMode .upcomingToolbar .upcomingTabs {
+  grid-column: 1 !important;
+  grid-row: 1 !important;
+}
+
+body.tvLayoutMode .upcomingToolbar .upcomingRefresh {
+  grid-column: 2 !important;
+  grid-row: 1 !important;
+}
+
+body.tvLayoutMode .upcomingToolbar .upcomingSearch {
+  grid-column: 3 !important;
+  grid-row: 1 !important;
+}
+
+/* ---------- Following ---------- */
+/* Following's search is its own row, so push it to the right instead of
+   letting it span the entire content width and become the obvious first stop. */
+body.tvLayoutMode .followingSearch {
+  width: min(46%, 560px) !important;
+  margin-left: auto !important;
+}
+
+/* Keep intentional search boxes readable from couch distance. */
+body.tvLayoutMode :is(
+  .topbar .search,
+  .discoverSearch,
+  .upcomingSearch,
+  .followingSearch
+) input {
+  font-size: 10px !important;
+}
+
+/* =========================================================
+   Android TV Discover rebuild
+   Compact cinematic hero -> action bar -> six-across shelves.
+   Desktop/web/phone/tablet keep the existing Discover layout.
+   ========================================================= */
+
+.discoverTvActionBar {
+  display: none;
+}
+
+body.tvLayoutMode .discoverPage {
+  gap: 10px !important;
+}
+
+/* ---------- Hero ---------- */
+body.tvLayoutMode .discoverHero,
+body.tvLayoutMode .discoverHero.compact {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto !important;
+  align-items: center !important;
+  min-height: 0 !important;
+  height: 218px !important;
+  max-height: 218px !important;
+  aspect-ratio: auto !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  border-radius: 18px !important;
+}
+
+body.tvLayoutMode .discoverHero::before {
+  background-size: cover !important;
+  background-position: center 48% !important;
+}
+
+body.tvLayoutMode .discoverHero::after {
+  width: 58% !important;
+}
+
+body.tvLayoutMode .discoverHero > div:first-child {
+  flex: none !important;
+  width: min(520px, 58%) !important;
+  max-width: 520px !important;
+  align-self: center !important;
+  padding: 14px 18px !important;
+}
+
+body.tvLayoutMode .discoverHero h1 {
+  margin: 0 !important;
+  font-size: clamp(29px, 4.1vw, 42px) !important;
+  line-height: .98 !important;
+}
+
+body.tvLayoutMode .discoverHero h1 svg {
+  margin-right: 5px !important;
+}
+
+body.tvLayoutMode .discoverEyebrow {
+  margin-bottom: 3px !important;
+  font-size: 7px !important;
+}
+
+body.tvLayoutMode .discoverHero p:not(.discoverEyebrow) {
+  max-width: 430px !important;
+  margin-top: 5px !important;
+  font-size: 9px !important;
+  line-height: 1.22 !important;
+}
+
+body.tvLayoutMode .discoverHero .discoverHeroActions {
+  display: none !important;
+}
+
+body.tvLayoutMode .discoverDataState {
+  margin-top: 6px !important;
+  padding: 4px 7px !important;
+  gap: 5px !important;
+  font-size: 7px !important;
+}
+
+body.tvLayoutMode .discoverDataState > span {
+  width: 5px !important;
+  height: 5px !important;
+}
+
+body.tvLayoutMode .discoverContentSafetyState {
+  margin-top: 4px !important;
+  font-size: 7px !important;
+}
+
+body.tvLayoutMode .discoverCatalogMessage {
+  margin-top: 4px !important;
+  font-size: 7px !important;
+  line-height: 1.15 !important;
+}
+
+body.tvLayoutMode .discoverHeroStats {
+  align-self: end !important;
+  display: grid !important;
+  grid-template-columns: repeat(3, 70px) !important;
+  gap: 5px !important;
+  margin: 0 12px 12px 0 !important;
+}
+
+body.tvLayoutMode .discoverHeroStats span {
+  min-width: 0 !important;
+  min-height: 42px !important;
+  gap: 1px !important;
+  padding: 5px 6px !important;
+  border-radius: 9px !important;
+  font-size: 6px !important;
+  line-height: 1 !important;
+}
+
+body.tvLayoutMode .discoverHeroStats strong {
+  font-size: 12px !important;
+  line-height: 1 !important;
+}
+
+/* ---------- Action bar ---------- */
+body.tvLayoutMode .discoverTvActionBar {
+  position: relative !important;
+  z-index: 4 !important;
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 6px !important;
+  width: 100% !important;
+  padding: 8px !important;
+  overflow: visible !important;
+  border: 1px solid color-mix(in srgb, var(--line) 72%, var(--discover-accent) 28%) !important;
+  border-radius: 14px !important;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--panel) 94%, transparent),
+      color-mix(in srgb, var(--panel) 78%, #02050a)
+    ) !important;
+}
+
+body.tvLayoutMode .discoverTvActionBar > button,
+body.tvLayoutMode .discoverTvActionBar > .discoverSurpriseControl {
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
+body.tvLayoutMode .discoverTvActionBar > button,
+body.tvLayoutMode .discoverTvActionBar .discoverSurpriseControl > button {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  width: 100% !important;
+  min-height: 34px !important;
+  padding: 5px 8px !important;
+  border: 1px solid color-mix(in srgb, var(--line) 66%, var(--discover-accent)) !important;
+  border-radius: 9px !important;
+  background: color-mix(in srgb, var(--panel) 84%, transparent) !important;
+  color: var(--text) !important;
+  font-size: 9px !important;
+  font-weight: 900 !important;
+  white-space: nowrap !important;
+}
+
+body.tvLayoutMode .discoverTvActionBar > button.primary {
+  border-color: transparent !important;
+  background: linear-gradient(135deg, var(--discover-hot), var(--discover-accent)) !important;
+  color: #fff !important;
+}
+
+body.tvLayoutMode .discoverTvActionBar button b {
+  min-width: 18px !important;
+  padding: 1px 4px !important;
+  font-size: 7px !important;
+}
+
+body.tvLayoutMode .discoverTvActionBar .discoverSurpriseControl {
+  position: relative !important;
+}
+
+body.tvLayoutMode .discoverTvActionBar .discoverSurpriseMenu {
+  z-index: 50 !important;
+}
+
+/* ---------- Shelves ---------- */
+body.tvLayoutMode .discoverShelf {
+  padding: 10px !important;
+  border-radius: 15px !important;
+}
+
+body.tvLayoutMode .discoverShelfHeader {
+  margin-bottom: 6px !important;
+}
+
+body.tvLayoutMode .discoverShelfHeader h2 {
+  font-size: 16px !important;
+}
+
+body.tvLayoutMode .discoverShelfHeader p {
+  font-size: 8px !important;
+  line-height: 1.18 !important;
+}
+
+body.tvLayoutMode .discoverRail {
+  grid-auto-columns: calc((100% - 50px) / 6) !important;
+  gap: 10px !important;
+  padding: 3px 2px 6px !important;
+}
+
+body.tvLayoutMode .discoverRail .discoverCard {
+  grid-template-rows: 178px auto !important;
+  min-width: 0 !important;
+  border-radius: 12px !important;
+}
+
+body.tvLayoutMode .discoverRail .discoverCardCopy {
+  min-height: 78px !important;
+  gap: 3px !important;
+  padding: 7px !important;
+}
+
+body.tvLayoutMode .discoverRail .discoverCardCopy strong {
+  font-size: 10px !important;
+  line-height: 1.08 !important;
+}
+
+body.tvLayoutMode .discoverRail .discoverCardCopy small {
+  min-height: 0 !important;
+  font-size: 8px !important;
+  line-height: 1.1 !important;
+}
+
+body.tvLayoutMode .discoverRail .discoverCardCopy b {
+  padding: 2px 4px !important;
+  font-size: 7px !important;
+}
+
+body.tvLayoutMode .discoverRail .discoverScore,
+body.tvLayoutMode .discoverRail .discoverTasteBadge {
+  padding: 3px 5px !important;
+  font-size: 8px !important;
+}
+
+body.tvLayoutMode .discoverLiveGrid,
+body.tvLayoutMode .discoverCatalogGrid {
+  grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+  gap: 10px !important;
+}
+
+@media (max-width: 920px) {
+  body.tvLayoutMode .discoverTvActionBar {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+
+  body.tvLayoutMode .discoverRail {
+    grid-auto-columns: calc((100% - 40px) / 5) !important;
+  }
+
+  body.tvLayoutMode .discoverLiveGrid,
+  body.tvLayoutMode .discoverCatalogGrid {
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  }
+}
+
+/* =========================================================
+   Android TV Detail synopsis navigation
+   Synopsis is a real D-pad stop so the modal can reach and
+   read content below Where to Watch.
+   ========================================================= */
+
+body.tvLayoutMode .detailModal .tvDetailSynopsis {
+  position: relative !important;
+  scroll-margin-block: 70px !important;
+  outline: none !important;
+}
+
+body.tvLayoutMode .detailModal .tvDetailSynopsis:focus,
+body.tvLayoutMode .detailModal .tvDetailSynopsis:focus-visible {
+  border-color: color-mix(in srgb, var(--cyan) 72%, transparent) !important;
+  box-shadow:
+    inset 0 0 0 2px color-mix(in srgb, var(--cyan) 62%, transparent),
+    0 0 24px color-mix(in srgb, var(--cyan) 16%, transparent) !important;
+}
+
+body.tvLayoutMode .detailModal .tvDetailSynopsis h2 {
+  font-size: 15px !important;
+}
+
+body.tvLayoutMode .detailModal .tvDetailSynopsis p {
+  font-size: 10px !important;
+  line-height: 1.45 !important;
+}
+
+/* =========================================================
+   Android TV Entire Catalog card cleanup
+   Catalog cards are one D-pad target. Quick Add / Follow are
+   handled from Details instead of cluttering the browse grid.
+   ========================================================= */
+
+body.tvLayoutMode .discoverCatalogGrid .discoverCardActions {
+  display: none !important;
+}
+
+body.tvLayoutMode .discoverCatalogGrid .discoverCard {
+  cursor: pointer !important;
+}
+
+body.tvLayoutMode .discoverCatalogGrid .discoverCardCopy {
+  padding-bottom: 9px !important;
+}
+
+/* =========================================================
+   Android TV Entire Catalog vertical-density pass
+   Reclaim the fixed space that used to belong to Quick Add /
+   Follow and shrink modal chrome so more catalog is visible.
+   ========================================================= */
+
+/* ---------- Modal shell/header ---------- */
+body.tvLayoutMode .discoverCatalogOverlay {
+  padding: 12px !important;
+}
+
+body.tvLayoutMode .discoverCatalogModal {
+  width: min(1420px, 97vw) !important;
+  height: min(760px, 96vh) !important;
+  grid-template-rows: auto auto minmax(0, 1fr) !important;
+  border-radius: 18px !important;
+}
+
+body.tvLayoutMode .discoverCatalogHeader {
+  min-height: 0 !important;
+  padding: 10px 14px !important;
+  gap: 10px !important;
+}
+
+body.tvLayoutMode .discoverCatalogHeader p {
+  margin: 0 0 2px !important;
+  font-size: 7px !important;
+  letter-spacing: .11em !important;
+}
+
+body.tvLayoutMode .discoverCatalogHeader h2 {
+  gap: 6px !important;
+  font-size: 19px !important;
+  line-height: 1 !important;
+}
+
+body.tvLayoutMode .discoverCatalogHeader h2 svg {
+  width: 18px !important;
+  height: 18px !important;
+}
+
+body.tvLayoutMode .discoverCatalogHeader span {
+  margin-top: 2px !important;
+  font-size: 9px !important;
+}
+
+body.tvLayoutMode .discoverCatalogClose {
+  width: 34px !important;
+  height: 34px !important;
+  min-width: 34px !important;
+  min-height: 34px !important;
+}
+
+body.tvLayoutMode .discoverCatalogClose svg {
+  width: 18px !important;
+  height: 18px !important;
+}
+
+/* ---------- Compact dropdown/search bar ---------- */
+body.tvLayoutMode .discoverCatalogToolbar {
+  grid-template-columns:
+    minmax(150px, .42fr)
+    minmax(135px, .32fr)
+    minmax(250px, 1fr) !important;
+  gap: 7px !important;
+  padding: 7px 14px !important;
+}
+
+body.tvLayoutMode .discoverCatalogToolbar select,
+body.tvLayoutMode .discoverCatalogToolbar .discoverSearch {
+  min-height: 38px !important;
+  height: 38px !important;
+  border-radius: 9px !important;
+  font-size: 10px !important;
+}
+
+body.tvLayoutMode .discoverCatalogToolbar select {
+  padding: 0 9px !important;
+}
+
+body.tvLayoutMode .discoverCatalogToolbar .discoverSearch {
+  gap: 7px !important;
+  padding: 5px 10px !important;
+}
+
+body.tvLayoutMode .discoverCatalogToolbar .discoverSearch svg {
+  width: 18px !important;
+  height: 18px !important;
+}
+
+body.tvLayoutMode .discoverCatalogToolbar .discoverSearch input {
+  font-size: 9px !important;
+}
+
+/* ---------- Cards: remove the old 445px action-era sizing ---------- */
+body.tvLayoutMode .discoverCatalogGrid {
+  grid-auto-rows: 330px !important;
+  grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+  gap: 9px !important;
+  padding: 9px 14px 14px !important;
+}
+
+body.tvLayoutMode .discoverCatalogGrid .discoverCard {
+  min-height: 330px !important;
+  height: 330px !important;
+  grid-template-rows: 218px 112px !important;
+  border-radius: 12px !important;
+}
+
+body.tvLayoutMode .discoverCatalogGrid .discoverPosterWrap {
+  min-height: 218px !important;
+  height: 218px !important;
+}
+
+body.tvLayoutMode .discoverCatalogGrid .discoverPoster,
+body.tvLayoutMode .discoverCatalogGrid .discoverPoster > *,
+body.tvLayoutMode .discoverCatalogGrid .discoverPoster .poster,
+body.tvLayoutMode .discoverCatalogGrid .discoverPoster img {
+  min-height: 218px !important;
+  height: 218px !important;
+}
+
+body.tvLayoutMode .discoverCatalogGrid .discoverCardCopy {
+  min-height: 112px !important;
+  height: 112px !important;
+  padding: 7px 8px 8px !important;
+  gap: 3px !important;
+  overflow: hidden !important;
+  align-content: start !important;
+}
+
+body.tvLayoutMode .discoverCatalogGrid .discoverCardCopy strong {
+  min-height: 0 !important;
+  margin: 0 !important;
+  font-size: 10px !important;
+  line-height: 1.08 !important;
+  -webkit-line-clamp: 2 !important;
+}
+
+body.tvLayoutMode .discoverCatalogGrid .discoverCardCopy small {
+  min-height: 0 !important;
+  margin: 0 !important;
+  font-size: 8px !important;
+  line-height: 1.1 !important;
+}
+
+body.tvLayoutMode .discoverCatalogGrid .discoverCardCopy > span {
+  gap: 3px !important;
+}
+
+body.tvLayoutMode .discoverCatalogGrid .discoverCardCopy b {
+  padding: 2px 5px !important;
+  font-size: 7px !important;
+}
+
+/* Quick Add / Follow were removed in 5.2d. Make absolutely sure their
+   container contributes zero layout height in the catalog modal. */
+body.tvLayoutMode .discoverCatalogGrid .discoverCardActions {
+  display: none !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  gap: 0 !important;
+  overflow: hidden !important;
+}
+
+/* Also collapse any optional feedback/reasoning affordances if catalog data
+   ever starts supplying JoeAI intelligence here; Details owns those actions. */
+body.tvLayoutMode .discoverCatalogGrid .discoverFeedbackControls,
+body.tvLayoutMode .discoverCatalogGrid .discoverWhyButton,
+body.tvLayoutMode .discoverCatalogGrid .discoverWhyPanel {
+  display: none !important;
+}
+
+@media (max-width: 920px) {
+  body.tvLayoutMode .discoverCatalogGrid {
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  }
+}
+
+/* =========================================================
+   Android TV Discover: compact JoeAI Pick of the Day
+   Treat the daily pick like one shelf-height feature card,
+   not a desktop-size billboard.
+   ========================================================= */
+
+body.tvLayoutMode .dailyPickHero {
+  min-height: 0 !important;
+  height: 242px !important;
+  max-height: 242px !important;
+  grid-template-columns: minmax(0, 1fr) 150px !important;
+  align-items: center !important;
+  border-radius: 16px !important;
+}
+
+body.tvLayoutMode .dailyPickBackdrop {
+  opacity: .18 !important;
+}
+
+body.tvLayoutMode .dailyPickContent {
+  display: grid !important;
+  align-content: center !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  padding: 12px 10px 12px 16px !important;
+}
+
+body.tvLayoutMode .dailyPickEyebrow {
+  gap: 5px !important;
+  margin: 0 0 4px !important;
+  font-size: 7px !important;
+  letter-spacing: .12em !important;
+}
+
+body.tvLayoutMode .dailyPickEyebrow svg {
+  width: 11px !important;
+  height: 11px !important;
+}
+
+body.tvLayoutMode .dailyPickContent h2 {
+  display: -webkit-box !important;
+  max-width: 620px !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+  font-size: clamp(22px, 3vw, 31px) !important;
+  line-height: 1 !important;
+  letter-spacing: -.025em !important;
+  -webkit-box-orient: vertical !important;
+  -webkit-line-clamp: 2 !important;
+}
+
+body.tvLayoutMode .dailyPickMatch {
+  gap: 7px !important;
+  margin-top: 6px !important;
+}
+
+body.tvLayoutMode .dailyPickMatch strong {
+  font-size: 14px !important;
+  line-height: 1 !important;
+}
+
+body.tvLayoutMode .dailyPickMatch span {
+  font-size: 7px !important;
+  line-height: 1.1 !important;
+}
+
+body.tvLayoutMode .dailyPickConfidenceReceipt {
+  gap: 4px !important;
+  margin-top: 5px !important;
+}
+
+body.tvLayoutMode .dailyPickConfidenceReceipt span {
+  padding: 2px 5px !important;
+  font-size: 6px !important;
+}
+
+body.tvLayoutMode .dailyPickReasons {
+  gap: 4px !important;
+  margin-top: 6px !important;
+}
+
+body.tvLayoutMode .dailyPickReasons span {
+  padding: 3px 6px !important;
+  font-size: 7px !important;
+  line-height: 1 !important;
+}
+
+/* Two reasons are enough from the couch; Details/JoeAI can explain the rest. */
+body.tvLayoutMode .dailyPickReasons span:nth-child(n + 3) {
+  display: none !important;
+}
+
+body.tvLayoutMode .dailyPickActions {
+  display: grid !important;
+  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  gap: 5px !important;
+  margin-top: 7px !important;
+}
+
+body.tvLayoutMode .dailyPickActions button {
+  min-width: 0 !important;
+  min-height: 29px !important;
+  padding: 4px 6px !important;
+  border-radius: 8px !important;
+  font-size: 8px !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+}
+
+body.tvLayoutMode .dailyPickPoster {
+  width: 136px !important;
+  height: 194px !important;
+  margin-right: 10px !important;
+  border-width: 1px !important;
+  border-radius: 12px !important;
+  box-shadow:
+    0 12px 30px rgba(0,0,0,.38),
+    0 0 20px color-mix(in srgb, var(--cyan) 16%, transparent) !important;
+}
+
+body.tvLayoutMode .dailyPickFeedbackReasons {
+  position: absolute !important;
+  z-index: 20 !important;
+  left: 16px !important;
+  right: 170px !important;
+  bottom: 8px !important;
+  gap: 4px !important;
+  margin: 0 !important;
+  padding: 6px !important;
+}
+
+body.tvLayoutMode .dailyPickFeedbackReasons strong,
+body.tvLayoutMode .dailyPickFeedbackReasons button {
+  font-size: 7px !important;
+}
+
+body.tvLayoutMode .dailyPickFeedbackReasons button {
+  padding: 3px 5px !important;
+}
+
+/* =========================================================
+   Android TV narrow command rail
+   Reclaim horizontal space for content without shrinking the
+   already-tuned nav labels/icons.
+   ========================================================= */
+
+body.tvLayoutMode .shell {
+  grid-template-columns: 220px minmax(0, 1fr) !important;
+}
+
+body.tvLayoutMode .sidebar {
+  width: 220px !important;
+  min-width: 220px !important;
+  max-width: 220px !important;
+  padding-left: 9px !important;
+  padding-right: 9px !important;
+}
+
+body.tvLayoutMode .sidebar .brand {
+  margin-left: 2px !important;
+  margin-right: 2px !important;
+}
+
+body.tvLayoutMode .sidebar nav button {
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
+body.tvLayoutMode .sidebar .syncSide {
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
+/* =========================================================
+   Android TV Favorites hero normalization
+   Match the compact hero language used across the TV app.
+   ========================================================= */
+
+body.tvLayoutMode .favoritesHero {
+  min-height: 218px !important;
+  height: 218px !important;
+  max-height: 218px !important;
+}
+
+body.tvLayoutMode .favoritesHeroCopy {
+  min-height: 0 !important;
+  height: 218px !important;
+  padding-top: 14px !important;
+  padding-bottom: 14px !important;
+}
+
+body.tvLayoutMode .favoritesHeroArt {
+  filter: none !important;
+  opacity: 1 !important;
+}
+
+/* =========================================================
+   Android TV Favorites full-width density pass
+   Use more of the content canvas without stretching hero art.
+   ========================================================= */
+
+body.tvLayoutMode .favoritesPage {
+  width: 100% !important;
+  max-width: none !important;
+  gap: 10px !important;
+  padding: 6px 8px 18px !important;
+}
+
+body.tvLayoutMode .favoritesHero {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+}
+
+body.tvLayoutMode .favoritesHeroArt {
+  background-size: cover !important;
+  background-position: center center !important;
+}
+
+body.tvLayoutMode .favoritesHeroCopy {
+  width: min(500px, 46%) !important;
+  padding: 12px 16px 12px 20px !important;
+}
+
+body.tvLayoutMode .favoritesGrid {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  gap: 9px !important;
+}
+
+/* =========================================================
+   Android TV topbar content-boundary fix
+   Base desktop topbar uses negative horizontal margins.
+   On TV those margins bleed underneath the narrowed sidebar.
+   ========================================================= */
+
+body.tvLayoutMode .topbar {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  padding-left: 10px !important;
+  padding-right: 10px !important;
+}
+
+/* =========================================================
+   Android TV Following compact layout
+   Keep the Release Watch identity/art, remove the TV search
+   trap, and fit the useful hero controls into one compact card.
+   ========================================================= */
+
+body.tvLayoutMode .followingPage {
+  gap: 9px !important;
+}
+
+body.tvLayoutMode .followingHero {
+  height: 236px !important;
+  min-height: 236px !important;
+  max-height: 236px !important;
+  aspect-ratio: auto !important;
+  overflow: hidden !important;
+  border-radius: 18px !important;
+}
+
+body.tvLayoutMode .followingHero::before {
+  background-size: cover !important;
+  background-position: center 48% !important;
+}
+
+body.tvLayoutMode .followingHeroContent {
+  width: min(520px, 54%) !important;
+  max-width: 520px !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  padding: 11px 16px !important;
+  gap: 0 !important;
+  justify-content: center !important;
+}
+
+body.tvLayoutMode .followingHero > .followingHeroContent > p:first-child {
+  margin: 0 0 3px !important;
+  font-size: 7px !important;
+  line-height: 1 !important;
+  letter-spacing: .13em !important;
+}
+
+body.tvLayoutMode .followingHero h1 {
+  gap: 5px !important;
+  margin: 0 !important;
+  font-size: clamp(27px, 3.5vw, 34px) !important;
+  line-height: .98 !important;
+}
+
+body.tvLayoutMode .followingHero h1 svg {
+  width: .7em !important;
+  height: .7em !important;
+  margin-right: 2px !important;
+}
+
+body.tvLayoutMode .followingHeroContent > span {
+  max-width: 455px !important;
+  margin-top: 5px !important;
+  font-size: 8px !important;
+  line-height: 1.22 !important;
+}
+
+body.tvLayoutMode .followingHeroStats {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  width: min(100%, 350px) !important;
+  max-width: 350px !important;
+  gap: 5px !important;
+  margin-top: 7px !important;
+  padding-top: 0 !important;
+}
+
+body.tvLayoutMode .followingHeroStats > div {
+  min-width: 0 !important;
+  min-height: 42px !important;
+  height: 42px !important;
+  padding: 3px 5px !important;
+  gap: 0 !important;
+  border-radius: 8px !important;
+  align-content: center !important;
+}
+
+body.tvLayoutMode .followingHeroStats svg {
+  width: 13px !important;
+  height: 13px !important;
+}
+
+body.tvLayoutMode .followingHeroStats strong {
+  font-size: 10px !important;
+  line-height: 1 !important;
+}
+
+body.tvLayoutMode .followingHeroStats small {
+  margin-top: 1px !important;
+  font-size: 5.5px !important;
+  line-height: 1 !important;
+  letter-spacing: .05em !important;
+}
+
+body.tvLayoutMode .followingHeroActions {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  width: min(100%, 350px) !important;
+  max-width: 350px !important;
+  gap: 5px !important;
+  margin-top: 6px !important;
+  transform: none !important;
+}
+
+body.tvLayoutMode .followingHeroActions .followingCheckButton,
+body.tvLayoutMode .followingHeroActions .followingNotifyButton,
+body.tvLayoutMode .followingHeroActions .followingNotificationsOn {
+  min-height: 29px !important;
+  height: 29px !important;
+  padding: 3px 6px !important;
+  gap: 4px !important;
+  border-radius: 8px !important;
+  font-size: 7px !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+}
+
+body.tvLayoutMode .followingHeroActions svg {
+  width: 12px !important;
+  height: 12px !important;
+}
+
+body.tvLayoutMode .followingCheckMessage {
+  width: min(100%, 350px) !important;
+  margin: 3px 0 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  font-size: 6.5px !important;
+  line-height: 1.15 !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+/* TV does not need an always-visible search field. It creates an accidental
+   keyboard stop and there are usually only a handful of followed titles. */
+body.tvLayoutMode .followingSearch {
+  display: none !important;
+}
+
+body.tvLayoutMode .followingGrid {
+  gap: 10px !important;
+}
+
+body.tvLayoutMode .followingCard {
+  min-height: 190px !important;
+  grid-template-columns: 126px minmax(0, 1fr) !important;
+  gap: 11px !important;
+  padding: 10px !important;
+  border-radius: 15px !important;
+}
+
+body.tvLayoutMode .followingCard h2 {
+  margin: 5px 0 3px !important;
+  font-size: 16px !important;
+  line-height: 1.08 !important;
+}
+
+body.tvLayoutMode .followingCard span,
+body.tvLayoutMode .followingCard small,
+body.tvLayoutMode .followingStatus {
+  font-size: 8px !important;
+}
+
+body.tvLayoutMode .followingActions {
+  gap: 5px !important;
+  margin-top: 9px !important;
+}
+
+body.tvLayoutMode .followingActions button {
+  min-height: 28px !important;
+  padding: 4px 8px !important;
+  border-radius: 8px !important;
+  font-size: 7px !important;
+}
+
+/* =========================================================
+   Android TV Following full-width hero + true search removal
+   Keep the compact 5.4 controls, reclaim the whole canvas,
+   and ensure the hidden search consumes zero layout space.
+   ========================================================= */
+
+body.tvLayoutMode .followingPage {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 6px 8px 18px !important;
+  gap: 9px !important;
+}
+
+body.tvLayoutMode .followingHero {
+  width: 100% !important;
+  max-width: none !important;
+  height: 218px !important;
+  min-height: 218px !important;
+  max-height: 218px !important;
+  margin: 0 !important;
+  aspect-ratio: auto !important;
+}
+
+body.tvLayoutMode .followingHero::before {
+  background-size: cover !important;
+  background-position: center center !important;
+  filter: none !important;
+  opacity: 1 !important;
+}
+
+body.tvLayoutMode .followingHero::after {
+  width: 46% !important;
+}
+
+body.tvLayoutMode .followingHeroContent {
+  width: min(500px, 46%) !important;
+  max-width: 500px !important;
+  height: 218px !important;
+  min-height: 0 !important;
+  padding: 10px 16px 10px 20px !important;
+}
+
+body.tvLayoutMode .followingHero h1 {
+  font-size: clamp(25px, 3.2vw, 32px) !important;
+}
+
+body.tvLayoutMode .followingHeroStats {
+  width: min(100%, 330px) !important;
+  max-width: 330px !important;
+  margin-top: 6px !important;
+}
+
+body.tvLayoutMode .followingHeroStats > div {
+  height: 38px !important;
+  min-height: 38px !important;
+}
+
+body.tvLayoutMode .followingHeroActions {
+  width: min(100%, 330px) !important;
+  max-width: 330px !important;
+  margin-top: 5px !important;
+}
+
+body.tvLayoutMode .followingHeroActions .followingCheckButton,
+body.tvLayoutMode .followingHeroActions .followingNotifyButton,
+body.tvLayoutMode .followingHeroActions .followingNotificationsOn {
+  height: 27px !important;
+  min-height: 27px !important;
+}
+
+/* Hide the entire search row, not just its input. */
+body.tvLayoutMode .followingSearch {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  overflow: hidden !important;
+}
+
+/* Pull the actual Following content up immediately under the hero. */
+body.tvLayoutMode .followingUpdates,
+body.tvLayoutMode .followingGrid {
+  margin-top: 0 !important;
+}
+
+/* =========================================================
+   Android TV Following: remove Windows-only notification UI
+   Windows desktop keeps the notification control unchanged.
+   ========================================================= */
+
+body.tvLayoutMode .followingHeroActions .followingNotifyButton,
+body.tvLayoutMode .followingHeroActions .followingNotificationsOn {
+  display: none !important;
+}
+
+body.tvLayoutMode .followingHeroActions {
+  grid-template-columns: 1fr !important;
+  width: min(100%, 250px) !important;
+  max-width: 250px !important;
+}
+
+body.tvLayoutMode .followingHeroActions .followingCheckButton {
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
+/* =========================================================
+   Android TV Analytics compact/full-width pass
+   Compact hero, remove redundant coverage boxes, six-across
+   result cards, and couch-readable Analytics density.
+   ========================================================= */
+
+body.tvLayoutMode .analyticsLabPage {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 6px 8px 18px !important;
+  gap: 10px !important;
+}
+
+/* ---------- Hero ---------- */
+body.tvLayoutMode .analyticsLabHero {
+  width: 100% !important;
+  max-width: none !important;
+  min-height: 218px !important;
+  height: 218px !important;
+  max-height: 218px !important;
+  margin: 0 !important;
+  border-radius: 18px !important;
+}
+
+body.tvLayoutMode .analyticsLabBackdrop {
+  background-size: cover !important;
+  background-position: center center !important;
+  filter: none !important;
+  opacity: 1 !important;
+}
+
+body.tvLayoutMode .analyticsLabShade {
+  background:
+    linear-gradient(
+      90deg,
+      rgba(2,4,9,.88) 0%,
+      rgba(2,4,9,.70) 30%,
+      rgba(2,4,9,.18) 55%,
+      transparent 72%
+    ) !important;
+}
+
+body.tvLayoutMode .analyticsLabCopy {
+  width: min(590px, 52%) !important;
+  max-width: 590px !important;
+  min-height: 0 !important;
+  height: 218px !important;
+  padding: 11px 16px 11px 20px !important;
+  justify-content: center !important;
+}
+
+body.tvLayoutMode .analyticsLabEyebrow {
+  margin-bottom: 2px !important;
+  font-size: 7px !important;
+  letter-spacing: .12em !important;
+}
+
+body.tvLayoutMode .analyticsLabCopy h1 {
+  margin: 0 !important;
+  font-size: clamp(28px, 3.7vw, 39px) !important;
+  line-height: .98 !important;
+}
+
+body.tvLayoutMode .analyticsLabLead {
+  max-width: 500px !important;
+  margin: 5px 0 0 !important;
+  font-size: 8px !important;
+  line-height: 1.2 !important;
+}
+
+body.tvLayoutMode .analyticsLabInsight {
+  max-width: 500px !important;
+  margin-top: 6px !important;
+  padding: 5px 8px !important;
+  border-left-width: 2px !important;
+  font-size: 7px !important;
+  line-height: 1.18 !important;
+}
+
+body.tvLayoutMode .analyticsLabInsight span {
+  margin-bottom: 2px !important;
+  font-size: 6px !important;
+}
+
+/* Four hero stats stay useful; make them tiny instead of a second dashboard. */
+body.tvLayoutMode .analyticsLabStats {
+  width: min(100%, 430px) !important;
+  max-width: 430px !important;
+  gap: 5px !important;
+  margin-top: 7px !important;
+}
+
+body.tvLayoutMode .analyticsLabStats > div {
+  min-height: 37px !important;
+  padding: 4px 6px !important;
+  border-radius: 9px !important;
+}
+
+body.tvLayoutMode .analyticsLabStats span {
+  font-size: 8px !important;
+}
+
+body.tvLayoutMode .analyticsLabStats strong {
+  margin-top: 1px !important;
+  font-size: 11px !important;
+  line-height: 1 !important;
+}
+
+body.tvLayoutMode .analyticsLabStats small {
+  margin-top: 1px !important;
+  font-size: 5.5px !important;
+  line-height: 1 !important;
+}
+
+/* ---------- Remove redundant coverage dashboard ---------- */
+body.tvLayoutMode .analyticsCoverageStrip {
+  display: none !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
+/* ---------- Studio / Genre DNA panels ---------- */
+body.tvLayoutMode .analyticsLabGrid {
+  gap: 10px !important;
+}
+
+body.tvLayoutMode .analyticsDataPanel {
+  border-radius: 15px !important;
+}
+
+body.tvLayoutMode .analyticsDataPanel header {
+  gap: 8px !important;
+  padding: 9px 12px !important;
+}
+
+body.tvLayoutMode .analyticsDataPanel header > span {
+  width: 31px !important;
+  height: 31px !important;
+  border-radius: 9px !important;
+  font-size: 12px !important;
+}
+
+body.tvLayoutMode .analyticsDataPanel header p {
+  font-size: 6px !important;
+}
+
+body.tvLayoutMode .analyticsDataPanel header h2 {
+  font-size: 13px !important;
+}
+
+body.tvLayoutMode .analyticsDataPanel header small {
+  margin-top: 1px !important;
+  font-size: 7px !important;
+}
+
+body.tvLayoutMode .analyticsDataRows {
+  gap: 4px !important;
+  padding: 7px 10px 10px !important;
+}
+
+body.tvLayoutMode .analyticsDataRow {
+  min-height: 29px !important;
+  grid-template-columns: 24px minmax(80px, 130px) minmax(70px, 1fr) 28px !important;
+  gap: 7px !important;
+  padding: 3px 4px !important;
+}
+
+body.tvLayoutMode .analyticsDataRank,
+body.tvLayoutMode .analyticsDataRow strong,
+body.tvLayoutMode .analyticsDataRow b {
+  font-size: 7px !important;
+}
+
+body.tvLayoutMode .analyticsDataBar {
+  height: 5px !important;
+}
+
+body.tvLayoutMode .analyticsPanelToggle {
+  margin: 0 auto 8px !important;
+  min-height: 26px !important;
+  padding: 4px 10px !important;
+  font-size: 7px !important;
+}
+
+/* ---------- Interactive results ---------- */
+body.tvLayoutMode .analyticsSignalResults {
+  padding: 12px !important;
+  border-radius: 16px !important;
+  scroll-margin-top: 18px !important;
+}
+
+body.tvLayoutMode .analyticsResultsHeader {
+  margin-bottom: 8px !important;
+}
+
+body.tvLayoutMode .analyticsResultsHeader p {
+  font-size: 6px !important;
+}
+
+body.tvLayoutMode .analyticsResultsHeader h2 {
+  font-size: 18px !important;
+}
+
+body.tvLayoutMode .analyticsResultsHeader span {
+  font-size: 8px !important;
+}
+
+body.tvLayoutMode .analyticsResultsHeader button {
+  min-height: 28px !important;
+  padding: 4px 9px !important;
+  font-size: 8px !important;
+}
+
+body.tvLayoutMode .analyticsFilterChips {
+  gap: 5px !important;
+  margin: 2px 0 8px !important;
+}
+
+body.tvLayoutMode .analyticsFilterChips button {
+  min-height: 26px !important;
+  padding: 4px 8px !important;
+  font-size: 8px !important;
+}
+
+body.tvLayoutMode .analyticsFilterChips small {
+  font-size: 7px !important;
+}
+
+body.tvLayoutMode .analyticsJoeInsight {
+  gap: 4px !important;
+  margin-bottom: 8px !important;
+  padding: 7px 9px !important;
+  border-radius: 10px !important;
+}
+
+body.tvLayoutMode .analyticsJoeInsight > div {
+  gap: 5px !important;
+  font-size: 6px !important;
+}
+
+body.tvLayoutMode .analyticsJoeInsight p {
+  font-size: 8px !important;
+  line-height: 1.3 !important;
+}
+
+/* Keep Search available, but compact it. Sort remains an easy intentional stop. */
+body.tvLayoutMode .analyticsResultsToolbar {
+  grid-template-columns: minmax(220px, 1fr) auto auto !important;
+  gap: 7px !important;
+  margin-bottom: 9px !important;
+}
+
+body.tvLayoutMode .analyticsResultsToolbar input,
+body.tvLayoutMode .analyticsResultsToolbar select {
+  min-height: 32px !important;
+  height: 32px !important;
+  border-radius: 9px !important;
+  padding: 0 9px !important;
+  font-size: 8px !important;
+}
+
+body.tvLayoutMode .analyticsResultsToolbar span {
+  font-size: 7px !important;
+}
+
+/* Six library cards across, matching the TV Library/Favorites density. */
+body.tvLayoutMode .analyticsCardGrid {
+  grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+  gap: 9px !important;
+}
+
+body.tvLayoutMode .analyticsCardGrid .animeCard {
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 238px !important;
+  border-radius: 14px !important;
+}
+
+body.tvLayoutMode .analyticsCardGrid .rankRibbon {
+  top: 6px !important;
+  left: 6px !important;
+  width: 30px !important;
+  height: 30px !important;
+  min-width: 30px !important;
+  min-height: 30px !important;
+  padding: 0 !important;
+  border-width: 2px !important;
+  font-size: 9px !important;
+  line-height: 1 !important;
+}
+
+body.tvLayoutMode .analyticsCardGrid .scoreBadge {
+  top: 6px !important;
+  right: 6px !important;
+  font-size: 9px !important;
+}
+
+body.tvLayoutMode .analyticsCardGrid .cardInfo {
+  padding: 7px 8px 8px !important;
+}
+
+body.tvLayoutMode .analyticsCardGrid .cardInfo h3 {
+  margin-bottom: 4px !important;
+  font-size: 11px !important;
+  line-height: 1.1 !important;
+}
+
+body.tvLayoutMode .analyticsCardGrid .tags span:nth-child(n + 3) {
+  display: none !important;
+}
+
+body.tvLayoutMode .analyticsCardGrid .favoriteButton.isNotFavorite {
+  display: none !important;
+}
+
+@media (max-width: 920px) {
+  body.tvLayoutMode .analyticsCardGrid {
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  }
+}
+
+/* Android TV Analytics hero navigation bridge.
+   The hero can receive programmatic focus without drawing a browser outline. */
+body.tvLayoutMode .analyticsLabHero:focus,
+body.tvLayoutMode .analyticsLabHero:focus-visible {
+  outline: none !important;
+}
+
+/* =========================================================
+   Android TV Upcoming compact/full-width pass
+   Compact cinematic hero, one-row controls, six-across titles.
+   ========================================================= */
+
+body.tvLayoutMode .upcomingPage {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 6px 8px 18px !important;
+}
+
+/* ---------- Hero ---------- */
+body.tvLayoutMode .upcomingHero {
+  width: 100% !important;
+  max-width: none !important;
+  min-height: 218px !important;
+  height: 218px !important;
+  max-height: 218px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border-radius: 18px !important;
+  gap: 0 !important;
+}
+
+body.tvLayoutMode .upcomingHero::before {
+  background-size: cover !important;
+  background-position: var(--upcoming-hero-position) !important;
+  filter: none !important;
+}
+
+body.tvLayoutMode .upcomingHero > div {
+  width: min(540px, 48%) !important;
+  max-width: 540px !important;
+  min-height: 0 !important;
+  height: 218px !important;
+  padding: 14px 16px 14px 20px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  background: linear-gradient(
+    90deg,
+    rgba(2, 5, 11, .84) 0%,
+    rgba(2, 5, 11, .62) 68%,
+    transparent 100%
+  ) !important;
+}
+
+body.tvLayoutMode .upcomingHero .eyebrow {
+  margin: 0 0 3px !important;
+  font-size: 7px !important;
+  letter-spacing: .12em !important;
+}
+
+body.tvLayoutMode .upcomingHero h1 {
+  margin: 0 !important;
+  font-size: clamp(28px, 3.7vw, 39px) !important;
+  line-height: .98 !important;
+}
+
+body.tvLayoutMode .upcomingHero p {
+  max-width: 460px !important;
+  margin: 6px 0 0 !important;
+  font-size: 8px !important;
+  line-height: 1.22 !important;
+}
+
+body.tvLayoutMode .upcomingHero small {
+  margin-top: 7px !important;
+  font-size: 7px !important;
+  line-height: 1.1 !important;
+}
+
+body.tvLayoutMode .upcomingHero > svg {
+  display: none !important;
+}
+
+body.tvLayoutMode .upcomingHero:focus,
+body.tvLayoutMode .upcomingHero:focus-visible {
+  outline: none !important;
+}
+
+/* ---------- One compact control row ---------- */
+body.tvLayoutMode .upcomingToolbar {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto minmax(230px, 31%) !important;
+  align-items: center !important;
+  gap: 7px !important;
+  width: 100% !important;
+  margin: 9px 0 10px !important;
+}
+
+body.tvLayoutMode .upcomingTabs {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 6px !important;
+  min-width: 0 !important;
+}
+
+body.tvLayoutMode .upcomingTabs button,
+body.tvLayoutMode .upcomingRefresh {
+  min-width: 0 !important;
+  min-height: 34px !important;
+  height: 34px !important;
+  padding: 4px 7px !important;
+  border-radius: 9px !important;
+  font-size: 8px !important;
+  line-height: 1.05 !important;
+  white-space: nowrap !important;
+}
+
+body.tvLayoutMode .upcomingRefresh {
+  grid-column: 2 !important;
+  grid-row: 1 !important;
+  display: inline-flex !important;
+  justify-content: center !important;
+  gap: 5px !important;
+}
+
+body.tvLayoutMode .upcomingRefresh svg {
+  width: 13px !important;
+  height: 13px !important;
+}
+
+body.tvLayoutMode .upcomingSearch {
+  grid-column: 3 !important;
+  grid-row: 1 !important;
+  min-height: 34px !important;
+  height: 34px !important;
+  gap: 6px !important;
+  padding: 0 9px !important;
+  border-radius: 9px !important;
+}
+
+body.tvLayoutMode .upcomingSearch svg {
+  width: 14px !important;
+  height: 14px !important;
+}
+
+body.tvLayoutMode .upcomingSearch input {
+  padding: 0 !important;
+  font-size: 8px !important;
+}
+
+/* ---------- Six-across release cards ---------- */
+body.tvLayoutMode .upcomingGrid {
+  grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+  gap: 9px !important;
+}
+
+body.tvLayoutMode .upcomingCard {
+  min-width: 0 !important;
+  border-radius: 13px !important;
+}
+
+body.tvLayoutMode .upcomingPoster {
+  aspect-ratio: 2 / 3 !important;
+}
+
+body.tvLayoutMode .upcomingCardBody {
+  padding: 7px !important;
+}
+
+body.tvLayoutMode .upcomingDate {
+  gap: 3px !important;
+  font-size: 6px !important;
+  letter-spacing: .03em !important;
+}
+
+body.tvLayoutMode .upcomingDate strong {
+  padding: 2px 4px !important;
+}
+
+body.tvLayoutMode .upcomingCard h3 {
+  min-height: 2.1em !important;
+  margin: 4px 0 3px !important;
+  font-size: 9px !important;
+  line-height: 1.08 !important;
+}
+
+body.tvLayoutMode .upcomingCardBody > p {
+  min-height: 0 !important;
+  font-size: 7px !important;
+  line-height: 1.1 !important;
+}
+
+body.tvLayoutMode .upcomingMeta {
+  gap: 3px !important;
+  margin: 5px 0 !important;
+}
+
+body.tvLayoutMode .upcomingMeta span {
+  padding: 2px 4px !important;
+  font-size: 6px !important;
+}
+
+/* Keep actions usable, but do not let them dominate six-across cards. */
+body.tvLayoutMode .upcomingActions {
+  gap: 3px !important;
+}
+
+body.tvLayoutMode .upcomingActions button {
+  min-height: 24px !important;
+  padding: 3px !important;
+  font-size: 6px !important;
+}
+
+body.tvLayoutMode .upcomingActions button svg {
+  width: 10px !important;
+  height: 10px !important;
+}
+
+@media (max-width: 920px) {
+  body.tvLayoutMode .upcomingGrid {
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  }
+}
+
+/* =========================================================
+   Android TV Upcoming card cleanup
+   Browse -> Details. Follow/Add live in Details, not grid cards.
+   ========================================================= */
+
+body.tvLayoutMode .upcomingActions {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  gap: 0 !important;
+  overflow: hidden !important;
+}
+
+body.tvLayoutMode .upcomingCardBody {
+  padding-bottom: 7px !important;
+}
+
+body.tvLayoutMode .upcomingCard {
+  overflow: hidden !important;
+}
+
+/* =========================================================
+   Android TV Detail modal poster-density pass
+   Keep Details intentionally large, but shorten the art rail
+   enough to keep its action buttons visible on first screen.
+   ========================================================= */
+
+body.tvLayoutMode .detailModal.upgradedModal {
+  grid-template-columns: minmax(205px, 26%) minmax(0, 1fr) !important;
+  gap: 18px !important;
+}
+
+body.tvLayoutMode .detailModal .detailPoster {
+  width: min(100%, 245px) !important;
+  max-width: 245px !important;
+  height: auto !important;
+  aspect-ratio: 2 / 3 !important;
+  margin: 0 auto 8px !important;
+}
+
+body.tvLayoutMode .detailModal .detailArtRail {
+  gap: 7px !important;
+}
+
+body.tvLayoutMode .detailModal .detailArtRail .heroFavorite,
+body.tvLayoutMode .detailModal .detailArtRail .repairMetadataButton {
+  width: min(100%, 245px) !important;
+  min-height: 34px !important;
+  height: 34px !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  padding: 5px 8px !important;
+  font-size: 9px !important;
+  line-height: 1.05 !important;
+}
+
+body.tvLayoutMode .detailModal .detailArtRail .metadataRepairProgress,
+body.tvLayoutMode .detailModal .detailArtRail .metadataRepairMessage {
+  width: min(100%, 245px) !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  font-size: 7px !important;
+  line-height: 1.15 !important;
+}
+
+/* =========================================================
+   Android TV Detail left-rail focus stack
+   Favorite / Follow / Repair Metadata behave as one vertical
+   D-pad group beside the smaller poster.
+   ========================================================= */
+
+body.tvLayoutMode .detailModal .detailArtRail > button {
+  scroll-margin-block: 18px !important;
+}
+
+body.tvLayoutMode .detailModal .detailArtRail > button:focus,
+body.tvLayoutMode .detailModal .detailArtRail > button:focus-visible {
+  position: relative !important;
+  z-index: 3 !important;
+}
+
+/* =========================================================
+   Android TV Settings capability trim
+   Keep controls that make sense on a TV. Desktop/web/mobile
+   Settings remain unchanged.
+   ========================================================= */
+
+/* Manual file backup/import/export is a desktop/browser workflow.
+   TV uses Cloud Sync instead. Remove the whole card and its space. */
+body.tvLayoutMode .settingsWorkshopCard.library {
+  display: none !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
+/* Hide any stale import/export review/status UI that belongs to the
+   manual Library file workflow. */
+body.tvLayoutMode .settingsImportStatus,
+body.tvLayoutMode .settingsImportSummary,
+body.tvLayoutMode .settingsImportReviewBanner,
+body.tvLayoutMode .settingsImportReview {
+  display: none !important;
+}
+
+/* System card: Android TV cannot open Windows/data folders, browse logs,
+   or meaningfully export a diagnostics file from the couch.
+   Keep Replay Tutorial and Reset Local Data. */
+body.tvLayoutMode .settingsWorkshopCard.system
+  .settingsWorkshopActions > button:nth-child(1),
+body.tvLayoutMode .settingsWorkshopCard.system
+  .settingsWorkshopActions > button:nth-child(2),
+body.tvLayoutMode .settingsWorkshopCard.system
+  .settingsWorkshopActions > button:nth-child(3) {
+  display: none !important;
+}
+
+/* Reflow the two useful System actions after removing desktop-only tools. */
+body.tvLayoutMode .settingsWorkshopCard.system .settingsWorkshopActions {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 7px !important;
+}
+
+body.tvLayoutMode .settingsWorkshopCard.system
+  .settingsWorkshopActions > button {
+  min-height: 48px !important;
+}
+
+/* Desktop-oriented storage paths are not useful on Android TV. */
+body.tvLayoutMode .settingsWorkshopCard.system .settingsSystemFacts {
+  display: none !important;
+}
+
+/* With the Library file card removed, let Database/System use the full
+   Settings canvas rather than leaving a missing-card hole. */
+body.tvLayoutMode .settingsWorkshopGrid {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 9px !important;
+}
+
+body.tvLayoutMode .settingsWorkshopCard.database,
+body.tvLayoutMode .settingsWorkshopCard.system {
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
+/* =========================================================
+   Android TV Home hero art + bottom action pass
+   Full-bleed hero artwork, with the two primary hero buttons
+   pinned to the bottom-left. Desktop/web/mobile unchanged.
+   ========================================================= */
+
+body.tvLayoutMode .homeV3Hero {
+  /* Layer 1 = readability gradient, layer 2 = hero artwork,
+     layer 3 = base card color. Make the artwork truly full-bleed. */
+  background-size: cover, cover, auto !important;
+  background-position: center center, center center, center !important;
+  background-repeat: no-repeat, no-repeat, no-repeat !important;
+}
+
+/* Let the copy layer span the hero so its action row can be anchored to
+   the actual hero bottom instead of sitting directly under the headline. */
+body.tvLayoutMode .homeV3HeroCopy {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  max-width: none !important;
+  padding: 12px 18px 48px !important;
+  pointer-events: none !important;
+}
+
+body.tvLayoutMode .homeV3HeroCopy > * {
+  pointer-events: auto !important;
+}
+
+/* Keep the text block couch-readable even though the artwork now fills
+   the entire hero. */
+body.tvLayoutMode .homeV3Eyebrow,
+body.tvLayoutMode .homeV3Hero h1,
+body.tvLayoutMode .homeV3Lead {
+  max-width: min(500px, 52%) !important;
+  text-shadow:
+    0 2px 3px rgba(0, 0, 0, .92),
+    0 8px 24px rgba(0, 0, 0, .72) !important;
+}
+
+/* Put Ask JoeAI + Open Library where TV hero actions belong. */
+body.tvLayoutMode .homeV3HeroActions {
+  position: absolute !important;
+  left: 18px !important;
+  bottom: 12px !important;
+  z-index: 4 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 7px !important;
+  margin: 0 !important;
+}
+
+/* If stat pills are enabled for a particular Home state/theme, keep them
+   clear of the newly bottom-pinned action row. */
+body.tvLayoutMode .homeV3HeroStats {
+  left: auto !important;
+  right: 18px !important;
+  bottom: 10px !important;
+  width: min(470px, 46%) !important;
+}
+
+/* =========================================================
+   Android TV Home hero stability pass
+   Hard TV geometry: no responsive desktop flex/stat layout can
+   grow the hero or make focus scroll it into a fake tall state.
+   ========================================================= */
+
+body.tvLayoutMode .homeV3Hero {
+  position: relative !important;
+  display: block !important;
+  box-sizing: border-box !important;
+  width: 100% !important;
+  height: 205px !important;
+  min-height: 205px !important;
+  max-height: 205px !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+
+  /* Full-bleed artwork with a left readability veil. */
+  background:
+    linear-gradient(
+      90deg,
+      rgba(2, 7, 13, .88) 0%,
+      rgba(2, 7, 13, .64) 31%,
+      rgba(2, 7, 13, .25) 58%,
+      rgba(2, 7, 13, .05) 100%
+    ),
+    var(--home-hero-image) center 43% / cover no-repeat,
+    var(--home-card) !important;
+}
+
+/* Copy is an overlay, never a flex item / normal-flow height contributor. */
+body.tvLayoutMode .homeV3HeroCopy {
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: 3 !important;
+  box-sizing: border-box !important;
+  display: block !important;
+  width: 100% !important;
+  max-width: none !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  margin: 0 !important;
+  padding: 13px 18px 48px !important;
+  pointer-events: none !important;
+}
+
+body.tvLayoutMode .homeV3HeroCopy > * {
+  pointer-events: auto !important;
+}
+
+body.tvLayoutMode .homeV3Eyebrow {
+  max-width: 48% !important;
+  margin: 0 0 3px !important;
+  font-size: 7px !important;
+}
+
+body.tvLayoutMode .homeV3Hero h1 {
+  max-width: 49% !important;
+  margin: 0 0 4px !important;
+  font-size: clamp(30px, 4vw, 39px) !important;
+  line-height: .92 !important;
+}
+
+body.tvLayoutMode .homeV3Lead {
+  max-width: 48% !important;
+  margin: 0 !important;
+  font-size: 9px !important;
+  line-height: 1.22 !important;
+}
+
+/* The desktop stats strip is useful with a mouse, but on TV it fights the
+   one-screen launchpad and was the source of the hero expansion glitch. */
+body.tvLayoutMode .homeV3HeroStats {
+  display: none !important;
+  position: absolute !important;
+  width: 0 !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
+/* TV hero actions are always the lower-left anchor. */
+body.tvLayoutMode .homeV3HeroActions {
+  position: absolute !important;
+  left: 18px !important;
+  bottom: 11px !important;
+  z-index: 5 !important;
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  gap: 7px !important;
+  margin: 0 !important;
+}
+
+body.tvLayoutMode .homeV3HeroActions button {
+  min-height: 29px !important;
+  height: 29px !important;
+  padding: 4px 10px !important;
+  border-radius: 9px !important;
+  font-size: 8px !important;
+  line-height: 1 !important;
+}
+
+/* =========================================================
+   Android TV Library + Favorites hero-first toolbar pass
+   Match the rest of the TV app:
+   Hero -> compact view/search toolbar -> title grid.
+   Desktop/web/mobile remain unchanged.
+   ========================================================= */
+
+/* TV content can safely use a vertical flex stack. Individual pages keep
+   their own internal grids; this only controls the top-level page pieces. */
+body.tvLayoutMode .content {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+}
+
+/* Library is rendered as top-level siblings, so give its hero/tool/content
+   explicit TV order. */
+body.tvLayoutMode .content > .libraryArchiveHeroLive {
+  order: 10 !important;
+  margin-top: 6px !important;
+  margin-bottom: 7px !important;
+}
+
+body.tvLayoutMode .content > .topbar {
+  order: 20 !important;
+}
+
+body.tvLayoutMode .content > .libraryReviewQueue,
+body.tvLayoutMode .content > .libraryStateCard,
+body.tvLayoutMode .content > .tablePanel,
+body.tvLayoutMode .content > .libraryPosterGrid {
+  order: 30 !important;
+}
+
+/* Favorites has one page wrapper. On TV only, remove that wrapper box so
+   its hero/grid can participate in the same hero-first top-level ordering. */
+body.tvLayoutMode .favoritesPage {
+  display: contents !important;
+}
+
+body.tvLayoutMode .content > .favoritesPage > .favoritesHero {
+  order: 10 !important;
+  margin-top: 6px !important;
+  margin-bottom: 7px !important;
+}
+
+body.tvLayoutMode .content > .favoritesPage > .libraryStateCard,
+body.tvLayoutMode .content > .favoritesPage > .favoritesTablePanel,
+body.tvLayoutMode .content > .favoritesPage > .favoritesGrid {
+  order: 30 !important;
+}
+
+/* display:contents promotes the Favorites children into the content flex
+   formatting context in Chromium/WebView, so explicitly carry the spacing
+   that used to live on .favoritesPage. */
+body.tvLayoutMode .favoritesHero,
+body.tvLayoutMode .favoritesGrid,
+body.tvLayoutMode .favoritesTablePanel,
+body.tvLayoutMode .favoritesPage .libraryStateCard {
+  width: calc(100% - 16px) !important;
+  margin-left: 8px !important;
+  margin-right: 8px !important;
+}
+
+/* ---------- Compact Library / Favorites toolbar ---------- */
+body.tvLayoutMode .topbar {
+  position: relative !important;
+  top: auto !important;
+  z-index: 5 !important;
+
+  width: calc(100% - 16px) !important;
+  max-width: none !important;
+  height: 44px !important;
+  min-height: 44px !important;
+  max-height: 44px !important;
+
+  margin: 0 8px 8px !important;
+  padding: 5px 7px !important;
+
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+
+  border-radius: 11px !important;
+  backdrop-filter: blur(10px) !important;
+}
+
+/* Poster / List / Update Database become a tight remote toolbar. */
+body.tvLayoutMode .topbar .viewModes {
+  order: 1 !important;
+  display: flex !important;
+  flex: 0 0 auto !important;
+  align-items: center !important;
+  gap: 5px !important;
+}
+
+body.tvLayoutMode .topbar .viewModes button {
+  min-width: 0 !important;
+  min-height: 30px !important;
+  height: 30px !important;
+  padding: 4px 9px !important;
+  border-radius: 8px !important;
+  font-size: 8px !important;
+  line-height: 1 !important;
+}
+
+/* Search remains intentionally last so the TV keyboard is not an accidental
+   first stop. */
+body.tvLayoutMode .topbar .search {
+  order: 2 !important;
+  flex: 0 1 410px !important;
+  width: min(39%, 410px) !important;
+  max-width: 410px !important;
+  min-height: 30px !important;
+  height: 30px !important;
+  margin-left: auto !important;
+  padding: 0 10px !important;
+  gap: 6px !important;
+}
+
+body.tvLayoutMode .topbar .search svg {
+  width: 14px !important;
+  height: 14px !important;
+  flex: 0 0 14px !important;
+}
+
+body.tvLayoutMode .topbar .search input {
+  height: 28px !important;
+  min-height: 28px !important;
+  padding: 3px 2px !important;
+  font-size: 8px !important;
+}
+
+/* Keep the first title row visually close to the toolbar. */
+body.tvLayoutMode .libraryPosterGrid,
+body.tvLayoutMode .favoritesGrid {
+  margin-top: 0 !important;
+}
+

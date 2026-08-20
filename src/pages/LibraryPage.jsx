@@ -511,7 +511,12 @@ function AddAnimeModal({ allAnime = [], updateAnime, deleteAnime, setSelected, o
                       className={`addAnimeResult ${resultDuplicate ? 'alreadyOwned' : ''}`}
                       key={result.malId || result.title}
                     >
-                      <button type="button" className="addAnimeResultMain" onClick={() => chooseResult(result)}>
+                      <button
+                        type="button"
+                        className="addAnimeResultMain"
+                        data-tv-skip-focus="true"
+                        onClick={() => chooseResult(result)}
+                      >
                         <Poster anime={result} className="addAnimeResultPoster" />
                         <span>
                         <span className={`importLabel ${String(result.importLabel || 'Related').replace(/\s+/g, '').toLowerCase()}`}>
@@ -859,7 +864,7 @@ export function LibraryPage({
           </div>
         </section>
       ) : mode === 'list' ? (
-        <section className="tablePanel">
+        <section className="tablePanel libraryListPanel">
           <table>
             <thead>
               <tr>
@@ -875,10 +880,25 @@ export function LibraryPage({
             </thead>
             <tbody>
               {rankedAnime.map((item) => (
-                <tr key={item.id} onClick={() => setSelected(item)}>
+                <tr
+                  key={item.id}
+                  className="libraryListRow"
+                  tabIndex={0}
+                  role="button"
+                  data-tv-card="true"
+                  aria-label={`Open ${item.title} details`}
+                  onClick={() => setSelected(item)}
+                  onKeyDown={(event) => {
+                    if (event.target !== event.currentTarget) return;
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      setSelected(item);
+                    }
+                  }}
+                >
                   <td>
                     <button
-                      className="favoriteListButton"
+                      className={`favoriteListButton ${item.favorite ? 'isFavorite' : 'isNotFavorite'}`}
                       type="button"
                       title={item.favorite ? 'Remove from favorites' : 'Add to favorites'}
                       onClick={(event) => handleFavoriteClick(event, item)}

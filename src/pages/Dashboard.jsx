@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import '../styles/joeai-home-v3.css';
 import '../styles/joeai-home-v3-guide.css';
 import { Poster } from '../components/Poster';
@@ -6,6 +6,14 @@ import { countBy } from '../utils/animeUtils';
 import joeAIHologramBrain from '../assets/joeai-hologram-brain.png';
 import '../styles/joeai-brain-hologram.css';
 import { getTasteReadiness } from '../ai/tasteReadiness';
+import { createAnimeBrain } from '../engine/animeBrain';
+import { filterContentBySafety } from '../services/contentSafety';
+
+function localDaySeed(date = new Date()) {
+  return Number(
+    `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}`
+  );
+}
 
 function normalizeStatus(status = '') {
   return String(status || '').toLowerCase().replace(/\s+/g, '');
@@ -161,15 +169,46 @@ export function StatStrip({ stats, anime }) {
 
 export function Dashboard({
   anime = [],
+  catalog: rawCatalog = [],
   stats = {},
   setSelected,
   updateAnime,
   setView,
   onQuickAsk,
   onOpenFilter,
+  joeAIState = {},
+  contentSafetyMode = 'unrestricted',
   displayName = 'Anime Fan'
 }) {
   const [showJoeAIGuide, setShowJoeAIGuide] = useState(false);
+
+  const tvRecommendationAnime = useMemo(
+    () => filterContentBySafety(anime, contentSafetyMode),
+    [anime, contentSafetyMode]
+  );
+  const tvRecommendationCatalog = useMemo(
+    () => filterContentBySafety(rawCatalog, contentSafetyMode),
+    [rawCatalog, contentSafetyMode]
+  );
+  const tvBrain = useMemo(
+    () => createAnimeBrain(tvRecommendationAnime, tvRecommendationCatalog, { joeAIState }),
+    [tvRecommendationAnime, tvRecommendationCatalog, joeAIState]
+  );
+  const tvJoeAIPick = useMemo(() => {
+    const dailyPool = tvBrain.recommendations(12, {
+      prompt: 'JoeAI Pick of the Day',
+      joeAIState
+    });
+
+    if (!dailyPool.length) return null;
+
+    const item = dailyPool[Math.abs(localDaySeed()) % dailyPool.length];
+    return {
+      item,
+      confidence: item?.match,
+      reasons: Array.isArray(item?.reasons) ? item.reasons : []
+    };
+  }, [tvBrain, joeAIState]);
 
   function sendQuickAsk(prompt) {
     const cleanPrompt = String(prompt || '').trim();
@@ -467,10 +506,75 @@ export function Dashboard({
         </Panel>
 
         <Panel className="homeV3Continue" icon="▶" title="Continue Watching" action="Library" onAction={() => setView?.('library')}>
-          <div className="homeV3MiniList">
+          <div className="homeV3MiniList homeV3DesktopOnly">
             {watching.slice(0, 3).map((item) => <MiniAnimeRow key={item.id || item.title} anime={item} setSelected={setSelected} />)}
             {!watching.length && <p className="homeV3Empty">Nothing marked Watching yet.</p>}
           </div>
+
+          <div className="homeV3TvContinue homeV3TvOnly">
+            {watching.slice(0, 6).map((item) => (
+              <button
+                key={item.id || item.title}
+                type="button"
+                className="homeV3TvPosterCard"
+                data-tv-card="true"
+                onClick={() => setSelected?.(item)}
+                aria-label={`Open ${titleOf(item)}`}
+              >
+                <Poster anime={item} mode="thumb" />
+                <span>{titleOf(item)}</span>
+              </button>
+            ))}
+            {!watching.length && (
+              <button
+                type="button"
+                className="homeV3TvEmptyAction"
+                onClick={() => setView?.('library')}
+              >
+                Nothing marked Watching yet. Open Library
+              </button>
+            )}
+          </div>
+        </Panel>
+
+        <Panel className="homeV3TvPickPanel homeV3TvOnly" icon="✦" title="JoeAI Pick of the Day">
+          {tvJoeAIPick ? (
+            <button
+              type="button"
+              className="homeV3TvPick"
+              data-tv-card="true"
+              onClick={() => setSelected?.(tvJoeAIPick.item)}
+              aria-label={`Open JoeAI Pick of the Day: ${titleOf(tvJoeAIPick.item)}`}
+            >
+              <Poster anime={tvJoeAIPick.item} mode="thumb" />
+              <span className="homeV3TvPickCopy">
+                <strong>{titleOf(tvJoeAIPick.item)}</strong>
+                <small>
+                  {Number.isFinite(Number(tvJoeAIPick.confidence))
+                    ? `${Math.round(Number(tvJoeAIPick.confidence))}% match`
+                    : 'JoeAI daily pick'}
+                </small>
+                <span className="homeV3TvPickTags">
+                  {(tvJoeAIPick.item.genres || []).slice(0, 3).map((genre) => (
+                    <b key={genre}>{genre}</b>
+                  ))}
+                </span>
+                <em>
+                  {tvJoeAIPick.reasons[0]
+                    || 'A strong unseen match based on the taste signals JoeAI has learned from your library.'}
+                </em>
+              </span>
+              <span className="homeV3TvPickOpen">Open ›</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="homeV3TvEmptyAction"
+              onClick={() => setView?.('assistant')}
+            >
+              Ask JoeAI for a recommendation
+            </button>
+          )}
         </Panel>
 
         <Panel className="homeV3Learning" icon="📈" title="Recently Learned" action="View All" onAction={() => setView?.('assistant')}>

@@ -1,0 +1,364 @@
+/* Android TV Library layout polish.
+   Scoped to tvLayoutMode so desktop/web/phone/tablet layouts are unchanged. */
+
+body.tvLayoutMode .posterGrid.libraryPosterGrid {
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)) !important;
+  justify-content: stretch !important;
+  gap: 12px !important;
+  align-items: start;
+}
+
+body.tvLayoutMode .libraryPosterGrid .animeCard {
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 272px !important;
+  border-radius: 16px !important;
+}
+
+body.tvLayoutMode .libraryPosterGrid .animeCard:hover,
+body.tvLayoutMode .libraryPosterGrid .animeCard:focus-visible,
+body.tvLayoutMode .libraryPosterGrid .animeCard:focus {
+  transform: translateY(-3px) scale(1.018) !important;
+  z-index: 30 !important;
+}
+
+body.tvLayoutMode .libraryPosterGrid .animePoster.posterLibrary::before {
+  opacity: .16 !important;
+  filter: blur(14px) saturate(.82) !important;
+}
+
+body.tvLayoutMode .libraryPosterGrid .animePoster.posterLibrary img {
+  object-position: center top !important;
+}
+
+body.tvLayoutMode .libraryPosterGrid .cardGradient {
+  background:
+    linear-gradient(
+      180deg,
+      transparent 50%,
+      rgba(4, 8, 15, .12) 61%,
+      rgba(4, 8, 15, .88) 100%
+    ) !important;
+}
+
+body.tvLayoutMode .libraryPosterGrid .cardInfo {
+  transform: none !important;
+  padding: 9px 10px 10px !important;
+}
+
+body.tvLayoutMode .libraryPosterGrid .cardInfo h3 {
+  margin-bottom: 5px !important;
+  font-size: 13px !important;
+  line-height: 1.15 !important;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+body.tvLayoutMode .libraryPosterGrid .metaPills,
+body.tvLayoutMode .libraryPosterGrid .tags {
+  gap: 4px !important;
+  flex-wrap: wrap;
+}
+
+body.tvLayoutMode .libraryPosterGrid .metaPills span,
+body.tvLayoutMode .libraryPosterGrid .tags span {
+  padding: 3px 6px !important;
+  font-size: 9px !important;
+  line-height: 1.05 !important;
+}
+
+body.tvLayoutMode .libraryPosterGrid .tags span:nth-child(n + 3) {
+  display: none !important;
+}
+
+body.tvLayoutMode .libraryPosterGrid .rankRibbon {
+  top: 7px !important;
+  left: 7px !important;
+  padding: 5px 8px !important;
+  font-size: 11px !important;
+}
+
+body.tvLayoutMode .libraryPosterGrid .scoreBadge {
+  top: 7px !important;
+  right: 7px !important;
+  padding: 5px 7px !important;
+  font-size: 10px !important;
+  z-index: 8 !important;
+}
+
+/* The generic TV focus rule can make a focused absolute button relative.
+   Force the Library favorite heart to remain anchored to the poster. */
+body.tvLayoutMode .libraryPosterGrid .favoriteButton,
+body.tvInputMode .libraryPosterGrid .favoriteButton:focus {
+  position: absolute !important;
+  top: 38px !important;
+  right: 7px !important;
+  left: auto !important;
+  width: 32px !important;
+  height: 32px !important;
+  font-size: 15px !important;
+  z-index: 9 !important;
+  transform: none !important;
+}
+
+body.tvLayoutMode .libraryPosterGrid .cardReviewBadge {
+  top: 38px !important;
+  left: 7px !important;
+  max-width: calc(100% - 48px) !important;
+  font-size: 9px !important;
+  z-index: 8 !important;
+}
+
+@media (min-width: 1280px) {
+  body.tvLayoutMode .posterGrid.libraryPosterGrid {
+    grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)) !important;
+    gap: 14px !important;
+  }
+
+  body.tvLayoutMode .libraryPosterGrid .animeCard {
+    height: 292px !important;
+  }
+}
+
+/* =========================================================
+   Android TV Library: six-across poster baseline
+   ========================================================= */
+
+body.tvLayoutMode .posterGrid.libraryPosterGrid {
+  grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+  gap: 10px !important;
+  align-items: start !important;
+}
+
+body.tvLayoutMode .libraryPosterGrid .animeCard {
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 238px !important;
+  border-radius: 14px !important;
+}
+
+body.tvLayoutMode .libraryPosterGrid .animeCard:hover,
+body.tvLayoutMode .libraryPosterGrid .animeCard:focus,
+body.tvLayoutMode .libraryPosterGrid .animeCard:focus-visible {
+  transform: translateY(-2px) scale(1.016) !important;
+}
+
+body.tvLayoutMode .libraryPosterGrid .cardInfo {
+  padding: 7px 8px 8px !important;
+}
+
+body.tvLayoutMode .libraryPosterGrid .cardInfo h3 {
+  margin-bottom: 4px !important;
+  font-size: 11px !important;
+  line-height: 1.1 !important;
+}
+
+body.tvLayoutMode .libraryPosterGrid .metaPills,
+body.tvLayoutMode .libraryPosterGrid .tags {
+  gap: 3px !important;
+}
+
+body.tvLayoutMode .libraryPosterGrid .metaPills span,
+body.tvLayoutMode .libraryPosterGrid .tags span {
+  padding: 2px 5px !important;
+  font-size: 8px !important;
+}
+
+body.tvLayoutMode .libraryPosterGrid .tags span:nth-child(n + 3) {
+  display: none !important;
+}
+
+body.tvLayoutMode .libraryPosterGrid .rankRibbon {
+  top: 6px !important;
+  left: 6px !important;
+  padding: 4px 6px !important;
+  font-size: 10px !important;
+}
+
+body.tvLayoutMode .libraryPosterGrid .scoreBadge {
+  top: 6px !important;
+  right: 6px !important;
+  padding: 4px 6px !important;
+  font-size: 9px !important;
+}
+
+body.tvLayoutMode .libraryPosterGrid .favoriteButton,
+body.tvInputMode .libraryPosterGrid .favoriteButton:focus {
+  position: absolute !important;
+  top: 33px !important;
+  right: 6px !important;
+  left: auto !important;
+  width: 28px !important;
+  height: 28px !important;
+  font-size: 13px !important;
+  transform: none !important;
+  z-index: 9 !important;
+}
+
+@media (max-width: 920px) {
+  body.tvLayoutMode .posterGrid.libraryPosterGrid {
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  }
+}
+
+/* Android TV Library rank badge size fix.
+   Base premium rank CSS hard-codes 54x54px; override it for six-across TV cards. */
+body.tvLayoutMode .libraryPosterGrid .rankRibbon {
+  width: 30px !important;
+  height: 30px !important;
+  min-width: 30px !important;
+  min-height: 30px !important;
+  padding: 0 !important;
+  border-width: 2px !important;
+  font-size: 9px !important;
+  line-height: 1 !important;
+}
+
+/* Android TV Library favorite indicator cleanup.
+   Empty hearts are redundant on TV: open Details to favorite a title.
+   Existing favorites keep the filled heart as a passive visual marker. */
+body.tvLayoutMode .libraryPosterGrid .favoriteButton.isNotFavorite {
+  display: none !important;
+  pointer-events: none !important;
+}
+
+body.tvLayoutMode .libraryPosterGrid .favoriteButton.isFavorite {
+  display: grid !important;
+}
+
+/* =========================================================
+   Android TV Library list view
+   Each anime row is one D-pad target. The header is visual
+   only, nested favorite buttons are not separate TV stops.
+   ========================================================= */
+
+body.tvLayoutMode .libraryListPanel {
+  overflow: hidden !important;
+  border-radius: 14px !important;
+}
+
+body.tvLayoutMode .libraryListPanel table {
+  table-layout: fixed !important;
+  width: 100% !important;
+}
+
+body.tvLayoutMode .libraryListPanel thead {
+  pointer-events: none !important;
+}
+
+body.tvLayoutMode .libraryListPanel th {
+  padding: 8px 9px !important;
+  font-size: 9px !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+}
+
+body.tvLayoutMode .libraryListPanel th:nth-child(1) { width: 42px !important; }
+body.tvLayoutMode .libraryListPanel th:nth-child(2) { width: 42px !important; }
+body.tvLayoutMode .libraryListPanel th:nth-child(3) { width: 29% !important; }
+body.tvLayoutMode .libraryListPanel th:nth-child(4) { width: 72px !important; }
+body.tvLayoutMode .libraryListPanel th:nth-child(5) { width: 16% !important; }
+body.tvLayoutMode .libraryListPanel th:nth-child(6) { width: 22% !important; }
+body.tvLayoutMode .libraryListPanel th:nth-child(7) { width: 70px !important; }
+body.tvLayoutMode .libraryListPanel th:nth-child(8) { width: 90px !important; }
+
+body.tvLayoutMode .libraryListPanel .libraryListRow {
+  position: relative !important;
+  cursor: pointer !important;
+  outline: none !important;
+}
+
+body.tvLayoutMode .libraryListPanel .libraryListRow td {
+  padding: 7px 9px !important;
+  font-size: 10px !important;
+  line-height: 1.15 !important;
+  vertical-align: middle !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+body.tvLayoutMode .libraryListPanel .libraryListRow td:nth-child(5),
+body.tvLayoutMode .libraryListPanel .libraryListRow td:nth-child(6) {
+  white-space: normal !important;
+}
+
+body.tvLayoutMode .libraryListPanel .libraryListRow td:not(:nth-child(3)):not(:nth-child(5)):not(:nth-child(6)) {
+  white-space: nowrap !important;
+}
+
+body.tvLayoutMode .libraryListPanel .titleCell {
+  gap: 8px !important;
+  min-width: 0 !important;
+}
+
+body.tvLayoutMode .libraryListPanel .titleCell .thumb {
+  width: 42px !important;
+  height: 56px !important;
+  flex: 0 0 42px !important;
+  border-radius: 6px !important;
+}
+
+body.tvLayoutMode .libraryListPanel .libraryTitleStack {
+  min-width: 0 !important;
+}
+
+body.tvLayoutMode .libraryListPanel .libraryTitleStack > strong {
+  display: block !important;
+  overflow: hidden !important;
+  font-size: 11px !important;
+  line-height: 1.12 !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+body.tvLayoutMode .libraryListPanel .metadataReviewBadge {
+  margin-top: 3px !important;
+  padding: 2px 5px !important;
+  font-size: 6px !important;
+}
+
+body.tvLayoutMode .libraryListPanel .statusPill.compact {
+  padding: 3px 6px !important;
+  font-size: 7px !important;
+}
+
+/* List rows are the only TV focus stop. Hearts are passive favorite markers;
+   use Details to add/remove a favorite. */
+body.tvLayoutMode .libraryListPanel .favoriteListButton {
+  pointer-events: none !important;
+  width: 25px !important;
+  height: 25px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  font-size: 13px !important;
+  transform: none !important;
+}
+
+body.tvLayoutMode .libraryListPanel .favoriteListButton.isNotFavorite {
+  visibility: hidden !important;
+}
+
+body.tvLayoutMode .libraryListPanel .libraryListRow:focus,
+body.tvLayoutMode .libraryListPanel .libraryListRow:focus-visible {
+  position: relative !important;
+  z-index: 3 !important;
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--cyan) 12%, transparent),
+      color-mix(in srgb, var(--pink) 8%, transparent)
+    ) !important;
+  box-shadow:
+    inset 4px 0 0 var(--cyan),
+    inset 0 0 0 2px color-mix(in srgb, var(--cyan) 68%, transparent),
+    0 0 24px color-mix(in srgb, var(--cyan) 16%, transparent) !important;
+}
+
+/* Do not let native/browser table focus decoration fight the TV row highlight. */
+body.tvInputMode .libraryListPanel .libraryListRow:focus {
+  transform: none !important;
+}
+

@@ -3,16 +3,19 @@ import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { initializePlatformBridge } from './platform/initializePlatformBridge';
 import { captureRecoveryQrFromLocation } from './services/recoveryQr.js';
+import { initializeTvFocusManager } from './tv/tvFocusManager';
 import './styles/app.css';
 import './styles/sidebar-command-rail.css';
 import './styles/mobile.css';
 import './styles/beta12-ui-consistency.css';
+import './styles/tv-focus.css';
 
 async function startJoeAnimeDB() {
   // A Recovery QR uses the URL fragment so the secret is never sent to the
   // web server. Capture it immediately, then strip it from the address bar.
   captureRecoveryQrFromLocation();
   await initializePlatformBridge();
+  initializeTvFocusManager();
   createRoot(document.getElementById('root')).render(<App />);
 }
 startJoeAnimeDB().catch((error) => {

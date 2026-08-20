@@ -49,6 +49,14 @@ const memberCount = (item = {}) => Number(item.members ?? item.memberCount ?? it
 const personalScore = (item = {}) =>
   Number(item.joeScore ?? item.rating ?? item.finalScore ?? 0) || 0;
 
+function activateCardFromKeyboard(event, onActivate) {
+  if (event.target !== event.currentTarget) return;
+  if (event.key !== 'Enter' && event.key !== ' ') return;
+
+  event.preventDefault();
+  onActivate?.();
+}
+
 function daySeed() {
   const now = new Date();
   return Number(`${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`);
@@ -470,7 +478,14 @@ function DiscoverCard({
   }
 
   return (
-    <article className={`discoverCard ${intelligence ? 'discoverSmartCard' : ''}`} onClick={() => onOpen(item)}>
+    <article
+      className={`discoverCard ${intelligence ? 'discoverSmartCard' : ''}`}
+      tabIndex={0}
+      data-tv-card="true"
+      aria-label={`Open ${titleOf(item)}`}
+      onClick={() => onOpen(item)}
+      onKeyDown={(event) => activateCardFromKeyboard(event, () => onOpen(item))}
+    >
       <div className="discoverPosterWrap">
         <Poster anime={item} className="discoverPoster" mode="thumb" />
         {score > 0 && <span className="discoverScore">★ {score.toFixed(2)}</span>}
@@ -796,7 +811,13 @@ function LiveDiscoverBrowser({
       ) : (
         <div className="discoverLiveList">
           {filtered.map((item) => (
-            <article key={cardKey(item)} onClick={() => onOpen(item)}>
+            <article
+              key={cardKey(item)}
+              tabIndex={0}
+              aria-label={`Open ${titleOf(item)}`}
+              onClick={() => onOpen(item)}
+              onKeyDown={(event) => activateCardFromKeyboard(event, () => onOpen(item))}
+            >
               <Poster anime={item} className="discoverLiveListPoster" mode="thumb" />
               <div>
                 <h3>{titleOf(item)}</h3>
@@ -889,6 +910,10 @@ function CatalogBrowser({
     return results;
   }, [catalog, collection, query, sort]);
 
+  const tvCatalogMode =
+    typeof document !== 'undefined'
+    && document.body?.classList.contains('tvLayoutMode');
+
   return (
     <div className="discoverCatalogOverlay" role="dialog" aria-modal="true" aria-labelledby="discoverCatalogTitle">
       <section className="discoverCatalogModal">
@@ -908,7 +933,8 @@ function CatalogBrowser({
           <label className="discoverSearch">
             <Search />
             <input
-              autoFocus
+              className="discoverCatalogSearchInput"
+              autoFocus={!tvCatalogMode}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search title, studio, genre..."
@@ -916,6 +942,8 @@ function CatalogBrowser({
           </label>
 
           <select
+            className="discoverCatalogCollectionSelect"
+            autoFocus={tvCatalogMode}
             value={`${collection.type}|${collection.value}`}
             onChange={(event) => {
               const [type, ...rest] = event.target.value.split('|');
@@ -932,7 +960,11 @@ function CatalogBrowser({
             </optgroup>
           </select>
 
-          <select value={sort} onChange={(event) => setSort(event.target.value)}>
+          <select
+            className="discoverCatalogSortSelect"
+            value={sort}
+            onChange={(event) => setSort(event.target.value)}
+          >
             <option value="rating">Highest Rated</option>
             <option value="title">Title A–Z</option>
             <option value="year-new">Newest First</option>
@@ -1581,18 +1613,28 @@ function DiscoverPage({
     setCatalogBrowser({ type, value });
   }
 
-  const stageReady = (stage) => renderStage >= stage;
+  function showRecommendations() {
+    setHubMode('recommendations');
 
-  return (
-    <section className="discoverPage">
-      <section className="discoverHero compact">
-        <div>
-          <p className="discoverEyebrow">Recommendation Catalog</p>
-          <h1><Compass /> Discover</h1>
-          <p>Browse unseen anime from the catalog JoeAI uses to find your next favorite.</p>
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const firstShelf = document.querySelector('.discoverPage .discoverShelf');
+        if (!(firstShelf instanceof HTMLElement)) return;
 
-          <div className="discoverHeroActions">
-            <button type="button" className={hubMode === 'recommendations' ? 'primary' : ''} onClick={() => setHubMode('recommendations')}>
+        firstShelf.scrollIntoView({
+          block: 'start',
+          inline: 'nearest',
+          behavior: 'smooth'
+        });
+      });
+    });
+  }
+
+
+  function renderHeroActions(className = 'discoverHeroActions') {
+    return (
+      <div className={className}>
+            <button type="button" className={hubMode === 'recommendations' ? 'primary' : ''} onClick={showRecommendations}>
               <Sparkles /> Recommendations
             </button>
             <button type="button" className={hubMode === 'airing' ? 'primary' : ''} onClick={() => setHubMode('airing')}>
@@ -1645,6 +1687,20 @@ function DiscoverPage({
               <Sparkles /> Ask JoeAI
             </button>
           </div>
+    );
+  }
+
+  const stageReady = (stage) => renderStage >= stage;
+
+  return (
+    <section className="discoverPage">
+      <section className="discoverHero compact">
+        <div>
+          <p className="discoverEyebrow">Recommendation Catalog</p>
+          <h1><Compass /> Discover</h1>
+          <p>Browse unseen anime from the catalog JoeAI uses to find your next favorite.</p>
+
+          {renderHeroActions()}
           <div className={`discoverDataState state-${liveState}`} role="status">
             <span />
             {liveState === 'loading' && 'Refreshing Kitsu — saved titles remain available.'}
@@ -1668,6 +1724,8 @@ function DiscoverPage({
         </div>
       </section>
 
+      {renderHeroActions('discoverTvActionBar')}
+
       {(mobileDiscover || showDesktopProgress) && !stageReady(DISCOVER_FINAL_STAGE) && (
         <div className="discoverProgressiveLoad" role="status" aria-live="polite">
           <span className="discoverProgressivePulse" />
@@ -1689,7 +1747,7 @@ function DiscoverPage({
           items={hubMode === 'airing' ? airingNow : comingSoon}
           studios={studios}
           genres={genres}
-          onBack={() => setHubMode('recommendations')}
+          onBack={showRecommendations}
           onOpen={setSelected}
           onAddWatching={addWatching}
           onToggleFollow={toggleFollow}

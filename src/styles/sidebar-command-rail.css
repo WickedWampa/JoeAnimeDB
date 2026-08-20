@@ -355,3 +355,40 @@
     min-height: 48px;
   }
 }
+
+/* Android TV / keyboard focus bridge polish.
+   This is intentionally useful for desktop keyboard users too, while leaving
+   touch/mobile behavior unchanged because the desktop sidebar is hidden there. */
+.sidebar button:focus,
+.sidebar button:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--sidebar-accent) 88%, white);
+  outline-offset: 3px;
+  border-color: color-mix(in srgb, var(--sidebar-accent) 72%, white);
+  background:
+    linear-gradient(90deg,
+      color-mix(in srgb, var(--sidebar-accent) 24%, rgba(6, 14, 22, .98)),
+      color-mix(in srgb, var(--sidebar-hot) 10%, rgba(6, 14, 22, .98)));
+  color: #fff;
+  box-shadow:
+    0 0 0 2px rgba(0, 0, 0, .72),
+    0 0 24px color-mix(in srgb, var(--sidebar-accent) 44%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, .08);
+  transform: translateX(4px) scale(1.025);
+  z-index: 2;
+}
+
+.sidebar button:focus .sidebarNavIcon,
+.sidebar button:focus-visible .sidebarNavIcon,
+.sidebar .syncSide:focus .sidebarSyncIcon,
+.sidebar .syncSide:focus-visible .sidebarSyncIcon {
+  border-color: color-mix(in srgb, var(--sidebar-accent) 72%, white);
+  background: color-mix(in srgb, var(--sidebar-accent) 24%, rgba(255, 255, 255, .04));
+  color: #fff;
+  box-shadow: 0 0 20px color-mix(in srgb, var(--sidebar-accent) 35%, transparent);
+}
+
+.sidebar nav button:focus::before,
+.sidebar nav button:focus-visible::before {
+  opacity: 1;
+  transform: none;
+}

@@ -3,6 +3,7 @@ import { Poster } from './Poster';
 import { hasUserScore, score, scoreLabel } from '../utils/animeUtils';
 import '../styles/library-collector-cards.css';
 import '../styles/library-release-readiness.css';
+import '../styles/tv-library.css';
 
 function rankTierClass(rank, totalCount = 0) {
   const total = Math.max(Number(totalCount || 0), rank || 0, 1);
@@ -35,6 +36,8 @@ export function AnimeCard({ anime, setSelected, updateAnime, displayRank, totalC
   }
 
   function handleKeyDown(event) {
+    if (event.target !== event.currentTarget) return;
+
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
       openDetails();
@@ -51,13 +54,15 @@ export function AnimeCard({ anime, setSelected, updateAnime, displayRank, totalC
       className={`animeCard ${rankTier}`}
       role="button"
       tabIndex={0}
+      data-tv-card="true"
+      aria-label={`Open ${anime?.title || 'anime details'}`}
       onClick={openDetails}
       onKeyDown={handleKeyDown}
     >
       <Poster anime={anime} className="animePoster" mode="library" />
 
       <button
-        className="favoriteButton"
+        className={`favoriteButton ${isFavorite ? 'isFavorite' : 'isNotFavorite'}`}
         type="button"
         title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
         onClick={handleFavoriteClick}

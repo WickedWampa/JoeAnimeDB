@@ -634,11 +634,14 @@ export function App() {
         {view === 'dashboard' && (
           <Dashboard
             anime={anime}
+            catalog={catalog}
             stats={stats}
             setSelected={setSelected}
             updateAnime={handleUpdateAnime}
             setView={setView}
             onOpenFilter={handleOpenFilter}
+            joeAIState={joeAI}
+            contentSafetyMode={contentSafetyMode}
             displayName={displayName || (anime.length ? 'Joe' : 'Anime Fan')}
           />
         )}

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Poster } from './Poster';
 import { score } from '../utils/animeUtils';
 import { fetchKitsuMetadata } from '../services/kitsuProvider';
@@ -58,6 +58,8 @@ export function DetailModal({
   navigationIndex = -1,
   navigationCount = 0
 }) {
+  const detailModalRef = useRef(null);
+  const tvPendingNavigationFocusRef = useRef(null);
   const [repairingMetadata, setRepairingMetadata] = useState(false);
   const [metadataMessage, setMetadataMessage] = useState('');
   const [metadataMessageType, setMetadataMessageType] = useState('');
@@ -159,6 +161,255 @@ export function DetailModal({
       }));
   }
 
+  function handleDetailNavigation(direction) {
+    if (document.body?.classList.contains('tvInputMode')) {
+      tvPendingNavigationFocusRef.current = direction;
+    }
+
+    if (direction === 'previous') onPrevious?.();
+    else onNext?.();
+  }
+
+  function isTvDetailFocusable(element) {
+    if (!(element instanceof HTMLElement)) return false;
+    if (element.hidden || element.getAttribute('aria-hidden') === 'true') return false;
+    if (element.matches(':disabled, [aria-disabled="true"]')) return false;
+
+    const style = window.getComputedStyle(element);
+    if (style.display === 'none' || style.visibility === 'hidden') return false;
+
+    const rect = element.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  }
+
+  function getTvDetailControls() {
+    const root = detailModalRef.current;
+    if (!root) return [];
+
+    return Array.from(root.querySelectorAll([
+      'button:not([disabled])',
+      'a[href]',
+      'input:not([disabled])',
+      'select:not([disabled])',
+      'textarea:not([disabled])',
+      '[role="button"]:not([aria-disabled="true"])',
+      '[tabindex]:not([tabindex="-1"])'
+    ].join(','))).filter(isTvDetailFocusable);
+  }
+
+  function findTvDetailCandidate(active, direction) {
+    const controls = getTvDetailControls();
+    if (!controls.length) return null;
+
+    const from = active.getBoundingClientRect();
+    const fromX = from.left + from.width / 2;
+    const fromY = from.top + from.height / 2;
+    let best = null;
+    let bestScore = Number.POSITIVE_INFINITY;
+
+    for (const candidate of controls) {
+      if (candidate === active) continue;
+
+      const rect = candidate.getBoundingClientRect();
+      const x = rect.left + rect.width / 2;
+      const y = rect.top + rect.height / 2;
+      const dx = x - fromX;
+      const dy = y - fromY;
+
+      let primary;
+      let cross;
+
+      if (direction === 'ArrowRight') {
+        if (dx <= 8) continue;
+        primary = dx;
+        cross = Math.abs(dy);
+      } else if (direction === 'ArrowLeft') {
+        if (dx >= -8) continue;
+        primary = -dx;
+        cross = Math.abs(dy);
+      } else if (direction === 'ArrowDown') {
+        if (dy <= 8) continue;
+        primary = dy;
+        cross = Math.abs(dx);
+      } else {
+        if (dy >= -8) continue;
+        primary = -dy;
+        cross = Math.abs(dx);
+      }
+
+      const score = primary + (cross * 3.25);
+      if (score < bestScore) {
+        best = candidate;
+        bestScore = score;
+      }
+    }
+
+    return best;
+  }
+
+  function focusTvDetailControl(control) {
+    if (!(control instanceof HTMLElement)) return false;
+
+    control.focus({ preventScroll: true });
+    control.scrollIntoView({
+      block: 'center',
+      inline: 'nearest',
+      behavior: 'smooth'
+    });
+    return true;
+  }
+
+  function getTvDetailRailControls() {
+    const root = detailModalRef.current;
+    if (!root) return [];
+
+    return Array.from(
+      root.querySelectorAll('.detailArtRail button:not([disabled])')
+    ).filter(isTvDetailFocusable);
+  }
+
+  function moveInsideTvDetailRail(active, direction) {
+    if (!(active instanceof HTMLElement)) return false;
+    if (direction !== 'ArrowUp' && direction !== 'ArrowDown') return false;
+    if (!active.closest('.detailArtRail')) return false;
+
+    const controls = getTvDetailRailControls();
+    const index = controls.indexOf(active);
+    if (index < 0) return false;
+
+    const offset = direction === 'ArrowDown' ? 1 : -1;
+    const next = controls[index + offset];
+
+    // Keep vertical D-pad movement inside the poster-side action stack.
+    // At an edge, consume the key rather than letting spatial navigation
+    // jump across the modal to an unrelated right-column control.
+    if (!(next instanceof HTMLElement)) {
+      return true;
+    }
+
+    return focusTvDetailControl(next);
+  }
+
+  function handleTvDetailKeyDown(event) {
+    if (!document.body?.classList.contains('tvInputMode')) return;
+    if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+
+    const root = detailModalRef.current;
+    if (!root) return;
+
+    const active = event.target;
+    const isTextField = active instanceof HTMLElement && (
+      active.isContentEditable ||
+      active.tagName === 'TEXTAREA' ||
+      active.tagName === 'SELECT' ||
+      (active.tagName === 'INPUT' && active.getAttribute('type') !== 'range')
+    );
+
+    // Let text/select controls use their native keys while they are being edited.
+    if (isTextField) return;
+
+    // Left/Right should change the rating while the score slider is focused.
+    if (
+      active instanceof HTMLInputElement &&
+      active.type === 'range' &&
+      (event.key === 'ArrowLeft' || event.key === 'ArrowRight')
+    ) {
+      return;
+    }
+
+    if (!(active instanceof HTMLElement) || !root.contains(active)) {
+      const preferred = root.querySelector(
+        '.detailLibraryReview button:not([disabled]), ' +
+        '.favoriteToggle:not([disabled]), ' +
+        '.detailNavigationButton:not([disabled]), ' +
+        '.close:not([disabled])'
+      ) || getTvDetailControls()[0];
+
+      if (preferred && focusTvDetailControl(preferred)) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      return;
+    }
+
+    if (
+      active instanceof HTMLElement
+      && active.classList.contains('tvDetailSynopsis')
+      && (event.key === 'ArrowDown' || event.key === 'ArrowUp')
+    ) {
+      const modal = detailModalRef.current;
+      const amount = Math.max(120, Math.round(window.innerHeight * 0.24));
+
+      modal?.scrollBy({
+        top: event.key === 'ArrowDown' ? amount : -amount,
+        left: 0,
+        behavior: event.repeat ? 'auto' : 'smooth'
+      });
+
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
+    // Poster-side actions are a simple vertical stack on TV. Do not let the
+    // generic geometry engine jump from Favorite/Follow/Repair to controls
+    // across the right side of the modal.
+    if (
+      (event.key === 'ArrowUp' || event.key === 'ArrowDown')
+      && moveInsideTvDetailRail(active, event.key)
+    ) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
+    const candidate = findTvDetailCandidate(active, event.key);
+
+    // Do not let an edge-of-modal arrow bubble out and switch library titles.
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (candidate) focusTvDetailControl(candidate);
+  }
+
+  useEffect(() => {
+    if (!document.body?.classList.contains('tvInputMode')) return undefined;
+
+    const timer = window.setTimeout(() => {
+      const root = detailModalRef.current;
+      if (!root) return;
+
+      const pendingDirection = tvPendingNavigationFocusRef.current;
+      tvPendingNavigationFocusRef.current = null;
+
+      if (pendingDirection) {
+        const navButton = root.querySelector(
+          `[data-tv-detail-nav="${pendingDirection}"]:not([disabled])`
+        );
+
+        if (navButton instanceof HTMLElement) {
+          navButton.focus({ preventScroll: true });
+          navButton.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+          return;
+        }
+      }
+
+      const preferred = root.querySelector(
+        '.detailLibraryReview button:not([disabled]), ' +
+        '.favoriteToggle:not([disabled]), ' +
+        '.detailNavigationButton:not([disabled]), ' +
+        '.close:not([disabled])'
+      );
+
+      if (preferred instanceof HTMLElement) {
+        preferred.focus({ preventScroll: true });
+        preferred.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      }
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [anime.id, anime.libraryNeedsReview]);
+
   useEffect(() => {
     function handleKeyDown(event) {
       const target = event.target;
@@ -175,6 +426,11 @@ export function DetailModal({
       }
 
       if (isEditing || navigationLocked) return;
+
+      // Desktop keeps the convenient Left/Right title shortcuts. On Android TV,
+      // the D-pad belongs to modal focus navigation; previous/next are activated
+      // by focusing the top arrow buttons and pressing OK/Enter.
+      if (document.body?.classList.contains('tvInputMode')) return;
 
       if (event.key === 'ArrowLeft' && canGoPrevious) {
         event.preventDefault();
@@ -444,7 +700,12 @@ export function DetailModal({
 
   return (
     <div className="modalBackdrop">
-      <section className="detailModal upgradedModal">
+      <section
+        ref={detailModalRef}
+        className="detailModal upgradedModal"
+        data-tv-detail-modal="true"
+        onKeyDownCapture={handleTvDetailKeyDown}
+      >
         <button className="close" onClick={onClose}>×</button>
         <aside className="detailArtRail">
           <Poster anime={anime} className="detailPoster" />
@@ -493,7 +754,8 @@ export function DetailModal({
             <button
               type="button"
               className="detailNavigationButton"
-              onClick={onPrevious}
+              data-tv-detail-nav="previous"
+              onClick={() => handleDetailNavigation('previous')}
               disabled={!canGoPrevious}
               aria-label="Previous anime"
               title="Previous anime (Left arrow)"
@@ -509,7 +771,8 @@ export function DetailModal({
             <button
               type="button"
               className="detailNavigationButton"
-              onClick={onNext}
+              data-tv-detail-nav="next"
+              onClick={() => handleDetailNavigation('next')}
               disabled={!canGoNext}
               aria-label="Next anime"
               title="Next anime (Right arrow)"
@@ -659,7 +922,11 @@ export function DetailModal({
               </>
             )}
           </section>
-          <section className="synopsisBlock">
+          <section
+            className="synopsisBlock tvDetailSynopsis"
+            tabIndex={0}
+            aria-label={`Synopsis for ${anime.title}`}
+          >
             <h2>Synopsis</h2>
             <p>{anime.synopsis}</p>
           </section>
