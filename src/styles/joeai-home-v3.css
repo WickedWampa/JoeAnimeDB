@@ -1,7 +1,7 @@
 
 /* JoeAnimeDB Home 3.0 Theme Worlds */
 .theme-neon .homeV3 {
-  --home-hero-image: url('../assets/joeai-theme-neon.png');
+  --home-hero-image: url('../assets/joeai-theme-neon.webp');
   --home-accent: #25e6ff;
   --home-accent-2: #ff4fd8;
   --home-accent-3: #20f6a6;
@@ -10,7 +10,7 @@
 }
 
 .theme-sakura .homeV3 {
-  --home-hero-image: url('../assets/joeai-theme-sakura.png');
+  --home-hero-image: url('../assets/joeai-theme-sakura.webp');
   --home-accent: #ff78bd;
   --home-accent-2: #b67cff;
   --home-accent-3: #9df6cf;
@@ -19,7 +19,7 @@
 }
 
 .theme-vapor .homeV3 {
-  --home-hero-image: url('../assets/joeai-theme-vapor.png');
+  --home-hero-image: url('../assets/joeai-theme-vapor.webp');
   --home-accent: #a35cff;
   --home-accent-2: #ff4fd8;
   --home-accent-3: #20dfff;
@@ -28,7 +28,7 @@
 }
 
 .theme-inferno .homeV3 {
-  --home-hero-image: url('../assets/joeai-theme-inferno.png');
+  --home-hero-image: url('../assets/joeai-theme-inferno.webp');
   --home-accent: #ffb000;
   --home-accent-2: #ff3d2e;
   --home-accent-3: #ffe066;
@@ -37,7 +37,7 @@
 }
 
 .theme-ramen .homeV3 {
-  --home-hero-image: url('../assets/joeai-theme-ramen.png');
+  --home-hero-image: url('../assets/joeai-theme-ramen.webp');
   --home-accent: #ffc533;
   --home-accent-2: #ff7a1a;
   --home-accent-3: #ffe8a3;
@@ -46,7 +46,7 @@
 }
 
 .theme-amoled .homeV3 {
-  --home-hero-image: url('../assets/joeai-theme-amoled.png');
+  --home-hero-image: url('../assets/joeai-theme-amoled.webp');
   --home-accent: #f4f7ff;
   --home-accent-2: #c24dff;
   --home-accent-3: #23e7ff;
@@ -60,7 +60,7 @@
 }
 
 .homeV3 {
-  --home-hero-image: url('../assets/joeai-theme-neon.png');
+  --home-hero-image: url('../assets/joeai-theme-neon.webp');
   --home-accent: var(--cyan);
   --home-accent-2: var(--pink);
   --home-accent-3: var(--green, #12d66f);

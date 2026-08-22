@@ -6,8 +6,11 @@ import { countBy } from '../utils/animeUtils';
 import joeAIHologramBrain from '../assets/joeai-hologram-brain.png';
 import '../styles/joeai-brain-hologram.css';
 import { getTasteReadiness } from '../ai/tasteReadiness';
-import { createAnimeBrain } from '../engine/animeBrain';
-import { filterContentBySafety } from '../services/contentSafety';
+import { getRecommendationContext } from '../services/recommendationRuntime';
+import { useDeferredDailyRecommendation } from '../hooks/useDeferredDailyRecommendation';
+
+const EMPTY_ANIME_LIST = Object.freeze([]);
+const EMPTY_JOEAI_STATE = Object.freeze({});
 
 function localDaySeed(date = new Date()) {
   return Number(
@@ -168,47 +171,32 @@ export function StatStrip({ stats, anime }) {
 }
 
 export function Dashboard({
-  anime = [],
-  catalog: rawCatalog = [],
+  anime = EMPTY_ANIME_LIST,
+  catalog: rawCatalog = EMPTY_ANIME_LIST,
   stats = {},
   setSelected,
   updateAnime,
   setView,
   onQuickAsk,
   onOpenFilter,
-  joeAIState = {},
+  joeAIState = EMPTY_JOEAI_STATE,
   contentSafetyMode = 'unrestricted',
   displayName = 'Anime Fan'
 }) {
   const [showJoeAIGuide, setShowJoeAIGuide] = useState(false);
 
-  const tvRecommendationAnime = useMemo(
-    () => filterContentBySafety(anime, contentSafetyMode),
-    [anime, contentSafetyMode]
+  const recommendationContext = useMemo(
+    () => getRecommendationContext(anime, rawCatalog, contentSafetyMode, joeAIState),
+    [anime, rawCatalog, contentSafetyMode, joeAIState]
   );
-  const tvRecommendationCatalog = useMemo(
-    () => filterContentBySafety(rawCatalog, contentSafetyMode),
-    [rawCatalog, contentSafetyMode]
+  const {
+    recommendation: tvJoeAIPick,
+    isPending: tvJoeAIPickPending
+  } = useDeferredDailyRecommendation(
+    recommendationContext,
+    localDaySeed(),
+    joeAIState
   );
-  const tvBrain = useMemo(
-    () => createAnimeBrain(tvRecommendationAnime, tvRecommendationCatalog, { joeAIState }),
-    [tvRecommendationAnime, tvRecommendationCatalog, joeAIState]
-  );
-  const tvJoeAIPick = useMemo(() => {
-    const dailyPool = tvBrain.recommendations(12, {
-      prompt: 'JoeAI Pick of the Day',
-      joeAIState
-    });
-
-    if (!dailyPool.length) return null;
-
-    const item = dailyPool[Math.abs(localDaySeed()) % dailyPool.length];
-    return {
-      item,
-      confidence: item?.match,
-      reasons: Array.isArray(item?.reasons) ? item.reasons : []
-    };
-  }, [tvBrain, joeAIState]);
 
   function sendQuickAsk(prompt) {
     const cleanPrompt = String(prompt || '').trim();
@@ -565,6 +553,14 @@ export function Dashboard({
                 </em>
               </span>
               <span className="homeV3TvPickOpen">Open ›</span>
+            </button>
+          ) : tvJoeAIPickPending ? (
+            <button
+              type="button"
+              className="homeV3TvEmptyAction"
+              disabled
+            >
+              Preparing your daily pick...
             </button>
           ) : (
             <button

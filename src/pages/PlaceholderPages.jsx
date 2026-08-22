@@ -23,7 +23,9 @@ import {
   readLastBackupRecord
 } from '../services/storage';
 import { checkMetadataProviders } from '../services/providerHealth';
-import { createAnimeBrain } from '../engine/animeBrain'; import { recommendAnime } from '../engine/recommendationEngine'; import { fetchMetadata } from '../services/metadata'; import { maybeKnowledgeFirstRecommendation } from '../ai/knowledgeFirstRecommender'; import { parseJoeAIIntent } from '../ai/intentParser'; import { executeJoeAICommand } from '../ai/commandExecutor'; import { routeJoeAIRecommendation, routeJoeAITitleQuestion } from '../ai/joeAIRecommendationRouter';
+import { recommendAnime } from '../engine/recommendationEngine'; import { fetchMetadata } from '../services/metadata'; import { maybeKnowledgeFirstRecommendation } from '../ai/knowledgeFirstRecommender'; import { parseJoeAIIntent } from '../ai/intentParser'; import { executeJoeAICommand } from '../ai/commandExecutor'; import { routeJoeAIRecommendation, routeJoeAITitleQuestion } from '../ai/joeAIRecommendationRouter';
+import { getRecommendationContext } from '../services/recommendationRuntime';
+import { useDeferredDailyRecommendation } from '../hooks/useDeferredDailyRecommendation';
 import { buildTonightsWatch } from '../ai/tonightsWatch'; import { importAnimeByTitle, mergeAnimeMetadata, searchAnimeCandidates } from '../services/animeImporter';
 import {
   fetchWikidataRepair,
@@ -50,7 +52,6 @@ import {
 import {
   CONTENT_SAFETY_MODES,
   contentSafetyModeLabel,
-  filterContentBySafety,
   getContentRating
 } from '../services/contentSafety';
 import {
@@ -68,6 +69,9 @@ import { franchiseBaseTitle } from '../utils/titleAliases';
 import { getJoeAIEasterEgg } from '../ai/joeAIEasterEggs';
 import { findGenomeCardByTitle } from '../ai/genome/genomeRegistry';
 import '../styles/joeai-cloud.css';
+
+const EMPTY_ANIME_LIST = Object.freeze([]);
+const EMPTY_JOEAI_STATE = Object.freeze({});
 
 function localDaySeed(date = new Date()) {
   return Number(
@@ -220,11 +224,11 @@ export function Universe({ anime, setQuery, setView }) {
 }
 
 export function Assistant({
-  anime,
-  catalog: rawCatalog = [],
+  anime = EMPTY_ANIME_LIST,
+  catalog: rawCatalog = EMPTY_ANIME_LIST,
   updateAnime,
   setSelected,
-  joeAIState = {},
+  joeAIState = EMPTY_JOEAI_STATE,
   contentSafetyMode = 'unrestricted',
   onRecommendationFeedback,
   onJoeAIPreference,
@@ -232,18 +236,13 @@ export function Assistant({
   initialPrompt = '',
   onPromptConsumed
 }) {
-  const catalog = useMemo(
-    () => filterContentBySafety(rawCatalog, contentSafetyMode),
-    [rawCatalog, contentSafetyMode]
+  const recommendationContext = useMemo(
+    () => getRecommendationContext(anime, rawCatalog, contentSafetyMode, joeAIState),
+    [anime, rawCatalog, contentSafetyMode, joeAIState]
   );
-  const recommendationAnime = useMemo(
-    () => filterContentBySafety(anime, contentSafetyMode),
-    [anime, contentSafetyMode]
-  );
-  const brain = useMemo(
-    () => createAnimeBrain(recommendationAnime, catalog, { joeAIState }),
-    [recommendationAnime, catalog, joeAIState]
-  );
+  const catalog = recommendationContext.catalog;
+  const recommendationAnime = recommendationContext.library;
+  const brain = recommendationContext.brain;
   const [log, setLog] = useState(() => {
     const savedMessages = sanitizeJoeAIConversationMessages(
       joeAIState?.conversation?.messages || [],
@@ -3892,24 +3891,14 @@ export function Assistant({
 
   const tasteReadiness = useMemo(() => getTasteReadiness(anime), [anime]);
 
-  const joeAIPick = useMemo(() => {
-    const dailyPool = brain.recommendations(12, {
-      prompt: 'JoeAI Pick of the Day',
-      joeAIState
-    });
-    const item = dailyPool.length
-      ? dailyPool[Math.abs(dailyPickSeed) % dailyPool.length]
-      : null;
-
-    return dailyPool.length
-      ? {
-          item,
-          confidence: item.match,
-          reasons: item.reasons || [],
-          confidenceReceipt: item.confidenceReceipt
-        }
-      : null;
-  }, [brain, dailyPickSeed, joeAIState]);
+  const {
+    recommendation: joeAIPick,
+    isPending: joeAIPickPending
+  } = useDeferredDailyRecommendation(
+    recommendationContext,
+    dailyPickSeed,
+    joeAIState
+  );
 
   const joeAIThought = useMemo(() => {
     if (!tasteReadiness.hasTasteData) {
@@ -4357,6 +4346,8 @@ export function Assistant({
                 )}
               </div>
             </div>
+          ) : joeAIPickPending ? (
+            <p className="joeAIEmptyCard">Preparing your daily pick...</p>
           ) : (
             <p className="joeAIEmptyCard">Add more catalog titles and JoeAI will choose a daily pick.</p>
           )}
