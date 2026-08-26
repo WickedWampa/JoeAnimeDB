@@ -180,7 +180,7 @@ function writeProviderCache(cache) {
   } catch {}
 }
 
-function saveProviderResult(item, region, payload) {
+function saveProviderResult(item, region, payload, savedAt = Date.now()) {
   const status = String(payload?.status || '');
   if (!['ready', 'needs_review', 'not_found'].includes(status)) return;
   if (status === 'ready' && !Array.isArray(payload.providers)) return;
@@ -191,7 +191,7 @@ function saveProviderResult(item, region, payload) {
 
   const cache = readProviderCache();
   cache[providerCacheKey(item, region)] = {
-    savedAt: Date.now(),
+    savedAt,
     payload: cachedPayload
   };
   writeProviderCache(cache);
@@ -322,7 +322,10 @@ async function requestWhereToWatch(item, {
   if (aliases.length) query.set('aliases', aliases.join('|'));
   if (watchmodeId) query.set('watchmodeId', String(watchmodeId));
   if (forceReview) query.set('forceReview', '1');
-  query.set('requestMode', requestMode === 'background' ? 'background' : 'interactive');
+  const normalizedRequestMode = ['interactive', 'cache-only', 'background'].includes(requestMode)
+    ? requestMode
+    : 'interactive';
+  query.set('requestMode', normalizedRequestMode);
 
   const response = await fetch(`${proxyUrl()}?${query.toString()}`, {
     headers: { Accept: 'application/json' }
@@ -340,7 +343,7 @@ async function requestWhereToWatch(item, {
     throw error;
   }
 
-  if (!['ready', 'needs_review', 'not_found'].includes(payload.status)) {
+  if (!['ready', 'needs_review', 'not_found', 'cache_miss'].includes(payload.status)) {
     throw new Error('Where to Watch is not deployed or configured yet.');
   }
 
@@ -378,7 +381,12 @@ export async function fetchWhereToWatch(item, {
   if (payload.match?.id && payload.status === 'ready') {
     saveWatchmodeMatch(item, payload.match.id, normalizedRegion);
   }
-  if (!payload.stale) saveProviderResult(item, normalizedRegion, payload);
+  if (payload.status !== 'cache_miss' && (!payload.stale || requestMode === 'cache-only')) {
+    const savedAt = payload.stale
+      ? Date.now() - PROVIDER_READY_CACHE_TTL_MS - 1
+      : Date.now();
+    saveProviderResult(item, normalizedRegion, payload, savedAt);
+  }
 
   return payload;
 }

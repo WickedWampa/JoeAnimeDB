@@ -31,6 +31,7 @@ import { buildDiscoverPlan } from '../services/recommendationEngineV3';
 import { isNativeAndroid, openExternalUrl } from '../platform/runtime';
 import { buildQuickAddEntry } from '../services/quickAdd';
 import { buildCachedServiceDiscoverPool } from '../services/discoverServicePool';
+import { runWatchmodeSharedCacheDiscovery } from '../services/watchmodeSharedCacheDiscovery';
 import {
   getSavedStreamingApps,
   getSavedWatchRegion,
@@ -863,6 +864,7 @@ function LiveDiscoverBrowser({
 
 function CatalogBrowser({
   catalog,
+  serviceItems = [],
   initialCollection,
   studios,
   genres,
@@ -878,6 +880,11 @@ function CatalogBrowser({
 
   const filtered = useMemo(() => {
     let results = [...catalog];
+
+    if (collection.type === 'services') {
+      const serviceKeys = new Set(serviceItems.map((item) => cardKey(item)));
+      results = results.filter((item) => serviceKeys.has(cardKey(item)));
+    }
 
     if (collection.type === 'studio') {
       results = results.filter((item) => item.studio === collection.value);
@@ -930,7 +937,7 @@ function CatalogBrowser({
     }
 
     return results;
-  }, [catalog, collection, query, sort]);
+  }, [catalog, collection, query, serviceItems, sort]);
 
   const tvCatalogMode =
     typeof document !== 'undefined'
@@ -973,6 +980,7 @@ function CatalogBrowser({
             }}
           >
             <option value="all|Entire Catalog">Entire Catalog</option>
+            <option value="services|On Your Services">On Your Services</option>
             <option value="hidden|Hidden Gems">Hidden Gems</option>
             <optgroup label="Genres">
               {genres.map(([name]) => <option key={`genre-${name}`} value={`genre|${name}`}>{name}</option>)}
@@ -1293,6 +1301,38 @@ function DiscoverPage({
       getWatchmodeProviderCacheSnapshot()
     );
   }, [catalogStageReady, serviceCacheRevision, unseenCatalog]);
+
+  useEffect(() => {
+    if (!active || !catalogStageReady || !unseenCatalog.length) return undefined;
+    if (!getSavedStreamingApps().length) return undefined;
+
+    const controller = new AbortController();
+    let idleHandle = null;
+    const timeoutHandle = window.setTimeout(() => {
+      const discoverSharedResults = () => {
+        void runWatchmodeSharedCacheDiscovery({
+          library: anime,
+          catalog: unseenCatalog,
+          region: getSavedWatchRegion(),
+          signal: controller.signal
+        });
+      };
+
+      if (typeof window.requestIdleCallback === 'function') {
+        idleHandle = window.requestIdleCallback(discoverSharedResults, { timeout: 1200 });
+      } else {
+        discoverSharedResults();
+      }
+    }, mobileDiscover ? 1800 : 900);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeoutHandle);
+      if (idleHandle !== null && typeof window.cancelIdleCallback === 'function') {
+        window.cancelIdleCallback(idleHandle);
+      }
+    };
+  }, [active, anime, catalogStageReady, mobileDiscover, unseenCatalog]);
 
   const airingNow = useMemo(
     () => [...unseenCatalog]
@@ -1821,6 +1861,7 @@ function DiscoverPage({
         onShowAnother={showAnother}
         onRecommendationFeedback={saveDiscoverFeedback}
         addingKey={addingKey}
+        onBrowse={() => browse('services', 'On Your Services')}
       />
 
       <Shelf
@@ -2103,6 +2144,7 @@ function DiscoverPage({
       {catalogBrowser && (
         <CatalogBrowser
           catalog={unseenCatalog}
+          serviceItems={cachedServicePool}
           initialCollection={catalogBrowser}
           studios={studios}
           genres={genres}

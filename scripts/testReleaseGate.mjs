@@ -75,6 +75,7 @@ const libraryLinkageRepair = await viteTestServer.ssrLoadModule('/src/services/l
 const discoverServicePool = await viteTestServer.ssrLoadModule('/src/services/discoverServicePool.js');
 const watchmodeService = await viteTestServer.ssrLoadModule('/src/services/watchmodeService.js');
 const watchmodeCatalogIndexer = await viteTestServer.ssrLoadModule('/src/services/watchmodeCatalogIndexer.js');
+const watchmodeSharedCacheDiscovery = await viteTestServer.ssrLoadModule('/src/services/watchmodeSharedCacheDiscovery.js');
 const watchmodeProxy = await viteTestServer.ssrLoadModule('/functions/api/watchmode.js');
 
 check('local persistence round trip and corrupt-data fallback', () => {
@@ -861,6 +862,69 @@ check('Discover On Your Services uses the saved provider cache without network l
   assert.match(watchmodeSource, /joeanime:watch-region-changed/);
 });
 
+check('Discover samples the shared Watchmode cache safely and rotates through titles', async () => {
+  localStorage.clear();
+  const calls = [];
+  const catalog = [
+    { title: 'Cache Candidate One', kitsuId: '101', year: 2024, type: 'TV' },
+    { title: 'Cache Candidate Two', kitsuId: '102', year: 2024, type: 'TV' },
+    { title: 'Cache Candidate Three', kitsuId: '103', year: 2024, type: 'TV' }
+  ];
+  const fetcher = async (item, options) => {
+    calls.push({ title: item.title, requestMode: options.requestMode });
+    return item.title.endsWith('One')
+      ? { status: 'ready', cacheBackend: 'KV', providers: [{ name: 'Netflix', url: 'https://example.com' }] }
+      : { status: 'cache_miss', cacheBackend: 'KV' };
+  };
+
+  const first = await watchmodeSharedCacheDiscovery.runWatchmodeSharedCacheDiscovery({
+    catalog,
+    region: 'US',
+    sessionLimit: 2,
+    batchSize: 1,
+    batchDelayMs: 0,
+    minimumIntervalMs: 0,
+    fetcher
+  });
+  assert.equal(first.attempted, 2);
+  assert.equal(first.sharedHits, 1);
+  assert.equal(first.cacheMisses, 1);
+  assert.ok(calls.every((call) => call.requestMode === 'cache-only'));
+  assert.equal(first.cursor, 2);
+  const firstPassTitles = new Set(calls.map((call) => call.title));
+
+  const callsAfterFirst = calls.length;
+  const throttled = await watchmodeSharedCacheDiscovery.runWatchmodeSharedCacheDiscovery({
+    catalog,
+    region: 'US',
+    minimumIntervalMs: 60_000,
+    fetcher
+  });
+  assert.equal(throttled.status, 'recently-checked');
+  assert.equal(calls.length, callsAfterFirst);
+
+  const rotated = await watchmodeSharedCacheDiscovery.runWatchmodeSharedCacheDiscovery({
+    catalog,
+    region: 'US',
+    sessionLimit: 1,
+    batchDelayMs: 0,
+    minimumIntervalMs: 0,
+    fetcher
+  });
+  assert.equal(rotated.attempted, 1);
+  assert.equal(firstPassTitles.has(calls.at(-1).title), false);
+
+  const [discoverSource, samplerSource] = await Promise.all([
+    source('src/pages/Discover.jsx'),
+    source('src/services/watchmodeSharedCacheDiscovery.js')
+  ]);
+  assert.match(discoverSource, /runWatchmodeSharedCacheDiscovery/);
+  assert.match(discoverSource, /browse\('services', 'On Your Services'\)/);
+  assert.match(samplerSource, /requestMode:\s*'cache-only'/);
+  assert.doesNotMatch(samplerSource, /requestMode:\s*'interactive'|requestMode:\s*'background'/);
+  localStorage.clear();
+});
+
 check('Watchmode catalog index resumes safely and caches complete provider payloads', async () => {
   localStorage.clear();
   const library = [{ title: 'Already Owned', kitsuId: '1' }];
@@ -991,9 +1055,11 @@ check('Cloudflare Watchmode zero-dollar policy is region-safe, shared, and stale
   const createKv = () => {
     const rows = new Map();
     const ttlWrites = [];
+    const putKeys = [];
     return {
       rows,
       ttlWrites,
+      putKeys,
       binding: {
         async get(key) {
           const saved = rows.get(key);
@@ -1001,6 +1067,7 @@ check('Cloudflare Watchmode zero-dollar policy is region-safe, shared, and stale
         },
         async put(key, value, options = {}) {
           rows.set(key, value);
+          putKeys.push(key);
           ttlWrites.push(Number(options.expirationTtl || 0));
         }
       }
@@ -1027,12 +1094,24 @@ check('Cloudflare Watchmode zero-dollar policy is region-safe, shared, and stale
     if (String(url).includes('/v1/search/')) {
       return new Response(JSON.stringify({
         title_results: [{ id: 123, name: 'Quota Test', year: 2024, type: 'tv_series' }]
-      }), { status: 200 });
+      }), {
+        status: 200,
+        headers: {
+          'X-Account-Quota': '2500',
+          'X-Account-Quota-Used': String(99 + upstreamCalls)
+        }
+      });
     }
     return new Response(JSON.stringify([
       { type: 'sub', name: 'Netflix', web_url: 'https://example.com/netflix', format: 'HD' },
       { type: 'sub', name: 'Amazon Prime Video', web_url: 'https://example.com/prime', format: 'HD' }
-    ]), { status: 200 });
+    ]), {
+      status: 200,
+      headers: {
+        'X-Account-Quota': '2500',
+        'X-Account-Quota-Used': String(99 + upstreamCalls)
+      }
+    });
   };
 
   try {
@@ -1043,6 +1122,7 @@ check('Cloudflare Watchmode zero-dollar policy is region-safe, shared, and stale
     assert.equal(first.cache.match, 'MISS');
     assert.equal(first.cache.providers, 'MISS');
     assert.equal(upstreamCalls, 2);
+    assert.equal(shared.putKeys.length, 3, 'a fresh title should write one quota checkpoint plus its two cache rows');
 
     const secondResponse = await watchmodeProxy.onRequestGet(context);
     const second = await secondResponse.json();
@@ -1050,6 +1130,24 @@ check('Cloudflare Watchmode zero-dollar policy is region-safe, shared, and stale
     assert.equal(second.cache.match, 'KV');
     assert.equal(second.cache.providers, 'KV');
     assert.equal(upstreamCalls, 2);
+
+    const callsBeforeCacheOnly = upstreamCalls;
+    const writesBeforeCacheOnly = shared.putKeys.length;
+    context.request = new Request('https://joeanimedb.com/api/watchmode?title=Quota%20Test&year=2024&type=TV&region=US&requestMode=cache-only');
+    const cacheOnly = await (await watchmodeProxy.onRequestGet(context)).json();
+    assert.equal(cacheOnly.status, 'ready');
+    assert.equal(cacheOnly.requestMode, 'cache-only');
+    assert.equal(cacheOnly.cache.match, 'KV');
+    assert.equal(cacheOnly.cache.providers, 'KV');
+    assert.equal(upstreamCalls, callsBeforeCacheOnly);
+    assert.equal(shared.putKeys.length, writesBeforeCacheOnly, 'cache-only hits must never write KV');
+
+    context.request = new Request('https://joeanimedb.com/api/watchmode?title=Never%20Cached&year=2024&type=TV&region=US&requestMode=cache-only');
+    const cacheMiss = await (await watchmodeProxy.onRequestGet(context)).json();
+    assert.equal(cacheMiss.status, 'cache_miss');
+    assert.equal(cacheMiss.cache.match, 'MISS');
+    assert.equal(upstreamCalls, callsBeforeCacheOnly, 'cache-only misses must never reach Watchmode');
+    assert.equal(shared.putKeys.length, writesBeforeCacheOnly, 'cache-only misses must never write KV');
 
     context.request = new Request('https://joeanimedb.com/api/watchmode?title=Quota%20Test&year=2024&type=TV&region=CA');
     const canada = await (await watchmodeProxy.onRequestGet(context)).json();
@@ -1203,8 +1301,10 @@ check('Cloudflare Watchmode zero-dollar policy is region-safe, shared, and stale
   assert.match(proxySource, /DEFAULT_MONTHLY_CREDIT_LIMIT\s*=\s*2000/);
   assert.match(proxySource, /X-Account-Quota-Used/);
   assert.match(proxySource, /watchmode-account-header/);
+  assert.match(proxySource, /QUOTA_CHECKPOINT_SIZE\s*=\s*25/);
+  assert.match(proxySource, /QUOTA_PRECISE_WINDOW\s*=\s*100/);
   assert.match(proxySource, /PROVIDER_STALE_TTL_SECONDS\s*=\s*60 \* 60 \* 24 \* 30/);
-  assert.match(proxySource, /requestMode !== 'interactive'/);
+  assert.match(proxySource, /requestMode !== 'interactive' && !cacheOnly/);
   assert.match(proxySource, /cacheBackend/);
   assert.match(clientSource, /PROVIDER_READY_CACHE_TTL_MS\s*=\s*28 \* 24/);
   assert.match(clientSource, /PROVIDER_TERMINAL_CACHE_TTL_MS\s*=\s*24 \* 60 \* 60/);

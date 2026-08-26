@@ -4,6 +4,8 @@ const PROVIDER_STALE_TTL_SECONDS = 60 * 60 * 24 * 30;
 const REVIEW_TTL_SECONDS = 60 * 60 * 24;
 const DEFAULT_MONTHLY_CREDIT_LIMIT = 2000;
 const MAX_FREE_PLAN_CREDIT_LIMIT = 2400;
+const QUOTA_CHECKPOINT_SIZE = 25;
+const QUOTA_PRECISE_WINDOW = 100;
 const QUOTA_KEY_PREFIX = 'watchmode:quota:v1';
 const UPSTREAM_PAUSE_KEY = 'watchmode:quota:v1:upstream-pause';
 
@@ -148,7 +150,7 @@ function quotaWindow(now = new Date()) {
   };
 }
 
-async function reserveUpstreamCredit(context) {
+async function checkUpstreamBudget(context) {
   const namespace = context.env.WATCHMODE_CACHE;
   if (!namespace?.get || !namespace?.put) {
     throw new WatchmodePolicyError(
@@ -192,28 +194,17 @@ async function reserveUpstreamCredit(context) {
     );
   }
 
-  const next = {
-    used: used + 1,
+  return {
+    used,
     limit,
     effectiveLimit,
     providerQuota: providerQuota || null,
-    accounting: current?.accounting || 'estimated-upstream-call',
+    authoritativeUsed: current?.authoritativeUsed ?? null,
+    accounting: current?.accounting || 'checkpoint',
     mode: 'zero-dollar',
     updatedAt: new Date().toISOString(),
     resetsAt: window.resetAt.toISOString()
   };
-  try {
-    await namespace.put(window.key, JSON.stringify(next), {
-      expirationTtl: window.retryAfterSeconds + (24 * 60 * 60)
-    });
-  } catch {
-    throw new WatchmodePolicyError(
-      'Where to Watch could not reserve a free monthly request credit.',
-      { code: 'quota_unavailable', status: 503, retryAfterSeconds: 3600 }
-    );
-  }
-
-  return next;
 }
 
 function quotaHeader(response, name) {
@@ -223,44 +214,42 @@ function quotaHeader(response, name) {
   return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
 }
 
-async function reconcileUpstreamQuota(context, response, reservation) {
+async function reconcileUpstreamQuota(context, response, checkpoint) {
   const authoritativeUsed = quotaHeader(response, 'X-Account-Quota-Used');
   const providerQuota = quotaHeader(response, 'X-Account-Quota');
-  if (authoritativeUsed === null && providerQuota === null) return reservation;
-
   const namespace = context.env.WATCHMODE_CACHE;
   const window = quotaWindow();
   const configuredLimit = monthlyCreditLimit(context.env);
-  let current;
-  try {
-    current = await namespace.get(window.key, { type: 'json' });
-  } catch {
-    throw new WatchmodePolicyError(
-      'Where to Watch could not reconcile the authoritative monthly request budget.',
-      { code: 'quota_unavailable', status: 503, retryAfterSeconds: 3600 }
-    );
-  }
-
-  const savedProviderQuota = Math.max(0, Number(current?.providerQuota || 0)) || null;
+  const savedUsed = Math.max(0, Number(checkpoint?.used || 0));
+  const savedProviderQuota = Math.max(0, Number(checkpoint?.providerQuota || 0)) || null;
   const confirmedProviderQuota = providerQuota ?? savedProviderQuota;
   const effectiveLimit = confirmedProviderQuota
     ? Math.min(configuredLimit, confirmedProviderQuota)
     : configuredLimit;
+  const used = authoritativeUsed ?? (savedUsed + 1);
   const reconciled = {
-    ...reservation,
-    used: Math.max(
-      Number(reservation?.used || 0),
-      Number(current?.used || 0),
-      authoritativeUsed ?? 0
-    ),
+    ...checkpoint,
+    used: Math.max(savedUsed, used),
     limit: configuredLimit,
     effectiveLimit,
     providerQuota: confirmedProviderQuota,
-    authoritativeUsed: authoritativeUsed ?? current?.authoritativeUsed ?? null,
+    authoritativeUsed: authoritativeUsed ?? checkpoint?.authoritativeUsed ?? null,
     accounting: authoritativeUsed === null ? 'estimated-upstream-call' : 'watchmode-account-header',
     updatedAt: new Date().toISOString(),
     resetsAt: window.resetAt.toISOString()
   };
+
+  const previousBucket = Math.floor(savedUsed / QUOTA_CHECKPOINT_SIZE);
+  const currentBucket = Math.floor(reconciled.used / QUOTA_CHECKPOINT_SIZE);
+  const providerQuotaChanged = Boolean(providerQuota && providerQuota !== savedProviderQuota);
+  const nearLimit = reconciled.used >= Math.max(0, effectiveLimit - QUOTA_PRECISE_WINDOW);
+  const missingAuthoritativeUsage = authoritativeUsed === null;
+  const shouldWriteCheckpoint = providerQuotaChanged
+    || currentBucket > previousBucket
+    || nearLimit
+    || missingAuthoritativeUsage;
+
+  if (!shouldWriteCheckpoint) return reconciled;
 
   try {
     await namespace.put(window.key, JSON.stringify(reconciled), {
@@ -334,9 +323,9 @@ async function writeCache(context, key, payload, ttl) {
 }
 
 async function watchmodeJson(context, url) {
-  const reservation = await reserveUpstreamCredit(context);
+  const checkpoint = await checkUpstreamBudget(context);
   const response = await fetch(url, { headers: { Accept: 'application/json' } });
-  await reconcileUpstreamQuota(context, response, reservation);
+  await reconcileUpstreamQuota(context, response, checkpoint);
   if (!response.ok) {
     if (response.status === 429) {
       const retryAfter = Math.max(60, Number(response.headers.get('retry-after') || 0) || (15 * 60));
@@ -351,7 +340,7 @@ async function watchmodeJson(context, url) {
   return response.json();
 }
 
-async function findTitleMatch(context, identity, apiKey, forceReview = false) {
+async function findTitleMatch(context, identity, apiKey, forceReview = false, cacheOnly = false) {
   const key = await cacheKey('match', {
     title: identity.names[0],
     aliases: identity.names.slice(1).join('|'),
@@ -362,6 +351,10 @@ async function findTitleMatch(context, identity, apiKey, forceReview = false) {
   if (!forceReview) {
     const cached = await readCache(context, key);
     if (cached) return { payload: cached.payload, cache: cached.source };
+  }
+
+  if (cacheOnly) {
+    return { payload: { status: 'cache_miss' }, cache: 'MISS' };
   }
 
   const url = new URL('https://api.watchmode.com/v1/search/');
@@ -405,13 +398,20 @@ async function findTitleMatch(context, identity, apiKey, forceReview = false) {
   return { payload, cache: 'MISS' };
 }
 
-async function fetchProviders(context, watchmodeId, region, apiKey) {
+async function fetchProviders(context, watchmodeId, region, apiKey, cacheOnly = false) {
   const key = await cacheKey('providers', { watchmodeId, region });
   const cached = await readCache(context, key);
   const cachedProviders = Array.isArray(cached?.payload?.providers) ? cached.payload.providers : null;
   const freshUntil = Number(cached?.payload?.freshUntil || 0);
   const isFresh = Boolean(cachedProviders && (!freshUntil || freshUntil > Date.now()));
   if (isFresh) return { providers: cachedProviders, cache: cached.source, stale: false };
+
+  if (cacheOnly) {
+    if (cachedProviders) {
+      return { providers: cachedProviders, cache: `${cached.source}_STALE`, stale: true };
+    }
+    return { providers: [], cache: 'MISS', stale: false, cacheMiss: true };
+  }
 
   const url = new URL(`https://api.watchmode.com/v1/title/${watchmodeId}/sources/`);
   url.searchParams.set('apiKey', apiKey);
@@ -470,13 +470,11 @@ export async function onRequestOptions() {
 
 export async function onRequestGet(context) {
   try {
-    const apiKey = String(context.env.WATCHMODE_API_KEY || '').trim();
-    if (!apiKey) return json({ error: 'Where to Watch is not configured.' }, 503);
-
     const requestUrl = new URL(context.request.url);
     const cacheBackend = sharedCacheBackend(context);
     const requestMode = String(requestUrl.searchParams.get('requestMode') || 'interactive').toLowerCase();
-    if (requestMode !== 'interactive') {
+    const cacheOnly = requestMode === 'cache-only';
+    if (requestMode !== 'interactive' && !cacheOnly) {
       return json({
         status: 'disabled',
         error: 'Automatic Watchmode catalog indexing is disabled in zero-dollar mode.',
@@ -484,6 +482,17 @@ export async function onRequestGet(context) {
         cacheBackend
       }, 403);
     }
+    if (cacheOnly && cacheBackend !== 'KV') {
+      return json({
+        status: 'shared_cache_required',
+        error: 'Shared Watchmode cache discovery requires the global cache.',
+        zeroDollarMode: true,
+        cacheBackend
+      }, 503);
+    }
+
+    const apiKey = String(context.env.WATCHMODE_API_KEY || '').trim();
+    if (!cacheOnly && !apiKey) return json({ error: 'Where to Watch is not configured.' }, 503);
     const title = String(requestUrl.searchParams.get('title') || '').trim().slice(0, 180);
     const region = String(requestUrl.searchParams.get('region') || '').toUpperCase();
     const regions = allowedRegions(context.env);
@@ -515,10 +524,11 @@ export async function onRequestGet(context) {
       match = { id: requestedId, name: title, year, type: requestedType, confirmed: true };
       matchCache = 'CONFIRMED';
     } else {
-      const result = await findTitleMatch(context, identity, apiKey, forceReview);
+      const result = await findTitleMatch(context, identity, apiKey, forceReview, cacheOnly);
       if (result.payload.status !== 'matched') {
         return json({
           ...result.payload,
+          requestMode,
           zeroDollarMode: true,
           cacheBackend,
           cache: { match: result.cache }
@@ -528,13 +538,28 @@ export async function onRequestGet(context) {
       matchCache = result.cache;
     }
 
-    const providerResult = await fetchProviders(context, match.id, region, apiKey);
+    const providerResult = await fetchProviders(context, match.id, region, apiKey, cacheOnly);
+    if (providerResult.cacheMiss) {
+      return json({
+        status: 'cache_miss',
+        match,
+        region,
+        requestMode,
+        zeroDollarMode: true,
+        cacheBackend,
+        cache: {
+          match: matchCache,
+          providers: providerResult.cache
+        }
+      });
+    }
     return json({
       status: 'ready',
       match,
       region,
       providers: providerResult.providers,
       stale: Boolean(providerResult.stale),
+      requestMode,
       zeroDollarMode: true,
       monthlyCreditLimit: monthlyCreditLimit(context.env),
       cacheBackend,
