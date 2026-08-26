@@ -695,7 +695,7 @@ export function Dashboard({
         )}
 
         {(hasStreamingApps && onServices.length > 0) && (
-          <Panel className="homeDecisionServices" eyebrow="Personal matches available now" title="On Your Services" subtitle="Cached streaming availability by Watchmode." pending={servicesPending} action="View All" onAction={() => setView?.('discover')}>
+          <Panel className="homeDecisionServices" eyebrow="Personal matches available now" title="On Your Services" subtitle="Saved streaming links, with regional verification when available." pending={servicesPending} action="View All" onAction={() => setView?.('discover')}>
             <div className={`homeDecisionRail${onServices.length === 1 ? ' is-single' : ''}`}>
               {onServices.map(({ item, preferredProvider }) => <DecisionCard key={item.id || titleOf(item)} anime={item} badge="STREAM" detail={(item.genres || []).slice(0, 2).join(' + ') || 'Personal match'} provider={preferredProvider?.name} actions={serviceActions(item, preferredProvider)} busy={libraryActionKey.startsWith(`${item.kitsuId || item.id || titleOf(item)}:`)} onOpen={() => setSelected?.(item)} />)}
             </div>

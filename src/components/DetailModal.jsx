@@ -17,6 +17,8 @@ import {
   groupWatchProvidersByPreference,
   saveWatchRegion
 } from '../services/watchmodeService';
+import { primeKitsuStreamingLinks } from '../services/kitsuStreamingService';
+import { getCachedStreamingAvailability } from '../services/streamingAvailabilityService';
 import { openExternalUrl } from '../platform/runtime';
 import '../styles/detail-metadata-repair.css';
 import '../styles/library-release-readiness.css';
@@ -159,18 +161,39 @@ export function DetailModal({
 
   useEffect(() => {
     let active = true;
-    setWatchState({ status: 'loading', providers: [], candidates: [] });
+    const cached = getCachedStreamingAvailability(anime, {
+      region: watchRegion,
+      allowStale: true
+    });
+    setWatchState(cached?.status
+      ? cached
+      : { status: 'loading', providers: [], candidates: [], source: 'kitsu' });
 
-    fetchWhereToWatch(anime, { region: watchRegion })
-      .then((result) => {
-        if (active) setWatchState(result);
+    primeKitsuStreamingLinks([anime])
+      .then(() => {
+        if (!active) return;
+        const result = getCachedStreamingAvailability(anime, {
+          region: watchRegion,
+          allowStale: true
+        });
+        if (result?.status) setWatchState(result);
+        else if (!cached?.status) {
+          setWatchState({
+            status: 'not_found',
+            providers: [],
+            candidates: [],
+            source: 'kitsu',
+            regional: false
+          });
+        }
       })
       .catch((error) => {
-        if (active) {
+        if (active && !cached?.status) {
           setWatchState({
             status: 'error',
             providers: [],
             candidates: [],
+            source: 'kitsu',
             error: String(error?.message || error || 'Where to Watch is unavailable.')
           });
         }
@@ -180,6 +203,26 @@ export function DetailModal({
       active = false;
     };
   }, [anime.id, anime.title, anime.year, anime.type, watchRegion]);
+
+  async function checkWatchmodeAvailability({ forceReview = false } = {}) {
+    setWatchState((current) => ({ ...current, status: 'loading' }));
+    try {
+      const result = await fetchWhereToWatch(anime, {
+        region: watchRegion,
+        forceReview,
+        requestMode: 'interactive'
+      });
+      setWatchState({ ...result, source: 'watchmode', regional: true });
+    } catch (error) {
+      setWatchState({
+        status: 'error',
+        providers: [],
+        candidates: [],
+        source: 'watchmode',
+        error: String(error?.message || error || 'Where to Watch is unavailable.')
+      });
+    }
+  }
 
   function changeWatchRegion(event) {
     const nextRegion = event.target.value;
@@ -191,7 +234,7 @@ export function DetailModal({
     setWatchState((current) => ({ ...current, status: 'loading' }));
     try {
       const result = await confirmWatchmodeMatch(anime, candidate.id, { region: watchRegion });
-      setWatchState(result);
+      setWatchState({ ...result, source: 'watchmode', regional: true });
     } catch (error) {
       setWatchState({
         status: 'error',
@@ -204,15 +247,7 @@ export function DetailModal({
 
   function changeWatchmodeMatch() {
     forgetWatchmodeMatch(anime);
-    setWatchState({ status: 'loading', providers: [], candidates: [] });
-    fetchWhereToWatch(anime, { region: watchRegion, forceReview: true })
-      .then(setWatchState)
-      .catch((error) => setWatchState({
-        status: 'error',
-        providers: [],
-        candidates: [],
-        error: String(error?.message || error || 'Where to Watch is unavailable.')
-      }));
+    void checkWatchmodeAvailability({ forceReview: true });
   }
 
   function handleDetailNavigation(direction) {
@@ -1111,7 +1146,7 @@ export function DetailModal({
               </label>
             </div>
 
-            {watchState.status === 'loading' && <p role="status">Checking subscription services...</p>}
+            {watchState.status === 'loading' && <p role="status">Loading saved streaming links...</p>}
 
             {watchState.status === 'needs_review' && (
               <div className="watchmodeReview" role="status">
@@ -1127,8 +1162,24 @@ export function DetailModal({
               </div>
             )}
 
-            {watchState.status === 'not_found' && <p>No confident Watchmode title match was found.</p>}
-            {watchState.status === 'error' && <p role="alert">{watchState.error}</p>}
+            {watchState.status === 'not_found' && (
+              <div className="watchmodeMatchMeta">
+                <span>No saved Kitsu streaming links were found for this title.</span>
+                <button type="button" onClick={() => checkWatchmodeAvailability()}>
+                  Check with Watchmode
+                </button>
+              </div>
+            )}
+            {watchState.status === 'error' && (
+              <div className="watchmodeMatchMeta" role="alert">
+                <span>{watchState.error}</span>
+                {watchState.source !== 'watchmode' && (
+                  <button type="button" onClick={() => checkWatchmodeAvailability()}>
+                    Check with Watchmode
+                  </button>
+                )}
+              </div>
+            )}
 
             {watchState.status === 'ready' && (
               <>
@@ -1155,7 +1206,7 @@ export function DetailModal({
                       </div>
                     ) : streamingApps.length ? (
                       <p className="watchPreferenceHint">
-                        None of your selected streaming apps currently have this title. Showing other options.
+                        None of your selected streaming apps are listed for this title. Showing other options.
                       </p>
                     ) : (
                       <p className="watchPreferenceHint">
@@ -1184,8 +1235,19 @@ export function DetailModal({
                   <p>No subscription streaming options were found in this region.</p>
                 )}
                 <p className="watchmodeMatchMeta">
-                  <span>Streaming availability by Watchmode · Matched to {watchState.match?.name || anime.title}</span>
-                  <button type="button" onClick={changeWatchmodeMatch}>Change match</button>
+                  {watchState.source === 'watchmode' ? (
+                    <>
+                      <span>Region-checked by Watchmode · Matched to {watchState.match?.name || anime.title}</span>
+                      <button type="button" onClick={changeWatchmodeMatch}>Change match</button>
+                    </>
+                  ) : (
+                    <>
+                      <span>Streaming links by Kitsu · Availability may vary by region</span>
+                      <button type="button" onClick={() => checkWatchmodeAvailability()}>
+                        Verify {WATCHMODE_REGIONS.find((region) => region.code === watchRegion)?.label || watchRegion}
+                      </button>
+                    </>
+                  )}
                 </p>
               </>
             )}

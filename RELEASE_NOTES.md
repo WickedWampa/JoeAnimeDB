@@ -1,150 +1,114 @@
-# JoeAnimeDB 5.0.0-beta.21
+# JoeAnimeDB 5.0.0-beta.22
 
-## JoeAnimeDB TV is here
+## The Home Decision Engine
 
-Beta 21 brings JoeAnimeDB to Android TV.
+Beta 22 turns Home into a place that helps answer the question that matters: what should I watch next?
 
-This started as a quick "I wonder if the Android APK will run on a TV" test and turned into a full couch interface.
+The new Home experience is shared across Windows, Linux, web, Android phones and tablets, and Android TV. Platform differences affect layout and navigation, not the underlying recommendations.
 
-The same JoeAnimeDB library, JoeAI, Anime DNA, discovery tools, cloud sync, and metadata system now have a TV layout built around a remote instead of a mouse or touchscreen.
+## Continue Watching
 
-## Built for a D-pad
+Every title marked Watching now appears in a dedicated Continue Watching shelf directly below the hero.
 
-The TV interface is not just the phone layout stretched across a bigger screen.
+- Available on every supported platform
+- Poster-first cards with reliable artwork fallbacks
+- Click, touch, and D-pad access to Anime Details
+- Horizontal browsing controls on desktop and touch scrolling on mobile
+- Dynamic hero suggestions do not replace or hide the shelf
 
-Beta 21 adds dedicated TV navigation and focus handling across the app:
+## Returning For You and You Missed a Sequel
 
-- Home
-- JoeAI
-- Library
-- Favorites
-- Discover
-- Following
-- Analytics
-- Upcoming
-- Settings
-- About / Help
-- Anime Details
+JoeAnimeDB now follows verified Kitsu sequel relationships to separate two useful ideas:
 
-Focus movement is now deterministic where it matters. Up and Down stay inside poster grids, page controls no longer randomly throw focus back into the sidebar, and search fields are kept out of the way unless you actually want them.
+- Returning For You: current, upcoming, and recently released direct continuations
+- You Missed a Sequel: older legitimate direct sequels that are not in your library
 
-The goal was simple: if you can use a remote, you should be able to use JoeAnimeDB.
+Both shelves support Details, Add, Watched, and Follow actions where appropriate. Empty shelves stay hidden, and single-result shelves use the available space without leaving a giant empty box.
 
-## Six titles across
+## JoeAI Quick Pick
 
-Library, Favorites, Discover, Analytics results, and Upcoming have all been reworked for couch-distance viewing.
+Quick Pick adds seven ways to choose tonight's anime:
 
-TV layouts now use:
+- Quick
+- Movie
+- Binge
+- Dark
+- Comfort
+- Different
+- Surprise Me
 
-- Six-across poster grids on standard TV widths
-- Compact page heroes
-- Smaller TV toolbars
-- Larger, clearer focus states
-- Reduced button clutter inside poster cards
-- Fewer unnecessary D-pad stops
-- Smooth section-to-section navigation
+Each intent uses its own constrained candidate pool. Repeated presses perform a controlled weighted reroll, so JoeAI can offer variety without abandoning recommendation quality. Dark and Comfort use factual genre, theme, and synopsis signals instead of inferred taste labels.
 
-Poster cards are treated as the main target. Extra actions are moved out of the browsing path where possible so scrolling through a library does not feel like navigating a spreadsheet.
+Quick Pick pools are built off the UI thread, persisted locally, and restored on the next launch. Cached intent changes and rerolls are effectively immediate after Home becomes interactive. On a first cache miss, the selected intent shows a clear Preparing picks state while the current result stays visible and navigation remains responsive.
 
-## Home got a TV pass
+## On Your Services
 
-The Home screen now works as a compact launchpad.
+Home and Discover can now surface anime available on the streaming services selected in Settings.
 
-The hero uses full-bleed artwork, with Ask JoeAI and Open Library positioned as the primary TV actions. Continue Watching and JoeAI Pick of the Day sit directly underneath so the useful stuff stays close together.
+Beta 22 uses a cost-conscious Kitsu-first strategy:
 
-The page is designed to get you from launching the app to watching or finding something with as little remote gymnastics as possible.
+- Saved Kitsu streaming links provide broad, fast coverage
+- Kitsu requests are batched and cached locally
+- Watchmode is reserved for explicit regional verification and Quick Watch actions
+- Region-confirmed Watchmode results override general Kitsu links when available
+- Discover reads saved provider data and remains responsive
+- Provider filtering happens locally when the user changes streaming services
+- Stale provider data can remain useful when a service is offline or rate limited
 
-## Library and Favorites
+Kitsu links are general availability links and may vary by region. Use the Watchmode verification action in Anime Details when a regional check is needed.
 
-Library and Favorites now match the rest of the TV interface instead of behaving like desktop pages.
+## Safer Kitsu identity linkage
 
-Both pages now follow the same structure:
+Missing identity is safer than incorrect identity.
 
-```text
-Hero
-View / Update / Search toolbar
-Titles
-```
+MAL imports and database maintenance now save a Kitsu ID only when the existing resolver considers the match safe for automatic use. Ambiguous matches remain intact, keep all personal MAL data, and are marked for review instead of being attached to the wrong season or franchise entry.
 
-The control bar is smaller, the hero comes first, and the title grid starts immediately underneath.
+Update Database now includes a paced full-library linkage repair pass for unlinked records. Safe repairs update identity linkage only and preserve:
 
-Library and Favorites navigation was also tightened so entering the page lands in useful content instead of bouncing around the sidebar or search box.
+- Score and ranking
+- Watch status and episode progress
+- Rewatches and favorites
+- Notes and tags
+- Personal dates and other user-owned fields
 
-## Discover without the D-pad workout
+Home also keeps its smaller opportunistic repair path when relationship discovery encounters a safely resolvable title.
 
-Discover got one of the biggest TV cleanups.
+## Android TV responsiveness and navigation
 
-The page now has:
+TV startup now establishes TV mode before React renders and prioritizes the shell, local library, hero, Continue Watching, and cached Quick Pick state before secondary enrichment.
 
-- A compact hero
-- A two-row action bar
-- Six-across recommendation shelves
-- Better shelf-to-shelf navigation
-- View All routes that return cleanly to their shelf
-- A compact Daily Pick
-- A cleaned-up Entire Catalog view
-- Fewer secondary actions inside cards
+Additional TV work includes:
 
-The Entire Catalog browser also drops Quick Add and Follow buttons from TV cards. Open the title and use the full Details screen instead.
+- Immediate D-pad response during cold launch
+- Persisted Quick Pick pools
+- Deferred relationship and provider refreshes
+- Deterministic Home shelf navigation
+- Up navigation that restores the top of page heroes
+- Improved Anime Details navigation, score adjustment, status access, and return paths
+- Strong focus states kept distinct from selected Quick Pick intent states
+- Roughly six posters across on standard TV layouts
 
-Much less clicking. Much less accidental keyboard summoning.
+## Mobile, desktop, and visual polish
 
-## Following, Analytics, and Upcoming
+- Responsive Home shelves on phones, tablets, desktop, web, and TV
+- Mobile continuation shelves support horizontal scrolling
+- Quick Pick keeps the recommendation visually dominant while remaining compact on phones
+- Desktop Home rails resize correctly inside application windows
+- Home hero artwork is preserved without the heavy gradient treatment
+- Empty Home shelves and prototype-style empty boxes were removed
+- Excessive borders were reduced in favor of spacing, artwork, and theme surfaces
+- The large incomplete-metadata warning was replaced by a subtle Repair Metadata attention state
+- Needs Review badges were removed from Library poster art
+- Updated onboarding highlights the current Home, Quick Pick, streaming, sync, and TV features
 
-Following now uses a compact TV layout and removes controls that only make sense on Windows.
+## Reliability and compatibility
 
-Analytics has a smaller hero, tighter Studio and Genre DNA sections, six-across title results, and a cleaner focus loop between the hero, DNA controls, and results.
+Beta 22 preserves the existing MAL XML import/export, AniList file import/export, backups, Cloud Sync, Quick Add, Needs Review, Quick Watch, Anime DNA, and JoeAI routing behavior.
 
-Upcoming now has a compact hero and toolbar with six titles across. Follow and Add were removed from the TV cards so the grid stays clean and the Details screen remains the place for title actions.
-
-## Anime Details stayed big on purpose
-
-The Details screen already carried a lot of useful information, so Beta 21 does not try to turn it into a tiny TV card.
-
-Instead, the poster was reduced just enough to keep the action buttons visible on the first screen.
-
-The left-side controls now behave as a predictable vertical D-pad stack, including Favorite, Follow where available, and Repair Metadata.
-
-Synopsis scrolling and the existing title navigation remain intact.
-
-Details is still supposed to feel like Details.
-
-## TV Settings cleanup
-
-Settings no longer shows a pile of desktop file-management controls on Android TV.
-
-TV keeps the useful stuff:
-
-- Appearance and themes
-- Content Safety
-- Profile
-- JoeAI Memory
-- Cloud Sync
-- Provider status
-- Database and metadata tools
-- Replay Tutorial
-- Reset Local Data
-
-Desktop-oriented file backup/import/export controls, Open Data Folder, View Logs, Export Diagnostics, and similar couch-unfriendly controls are hidden on TV.
-
-Cloud Sync is the sane way to move a TV install between devices.
-
-## Same library, different screen
-
-JoeAnimeDB TV uses the same cloud sync system as the desktop, web, and Android builds.
-
-That means you can keep JoeAnimeDB on your main computer, restore it on Android TV, and carry the same library data across devices without maintaining a separate TV library.
-
-The TV work does not replace the existing desktop, web, or mobile layouts. It is its own interface layer on top of the same app.
-
-## Beta 21 in one sentence
-
-JoeAnimeDB can now live on the biggest screen in the house without feeling like somebody plugged a keyboard app into a television.
-
-That was the goal.
+The release gate covers shared Home selection, platform-independent sequel classification, Quick Pick constraints and rerolls, Kitsu caching, identity safety, import/export, reliability, and sync behavior.
 
 ---
 
-**JoeAnimeDB 5.0.0-beta.21**
+**JoeAnimeDB 5.0.0-beta.22**
 
-*Track it. Understand it. Find the next obsession.*
+*Remember every anime. Find the next obsession.*

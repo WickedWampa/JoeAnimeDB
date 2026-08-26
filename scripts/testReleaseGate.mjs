@@ -74,6 +74,8 @@ const titleIdentity = await viteTestServer.ssrLoadModule('/src/services/titleIde
 const libraryLinkageRepair = await viteTestServer.ssrLoadModule('/src/services/libraryKitsuLinkageRepair.js');
 const discoverServicePool = await viteTestServer.ssrLoadModule('/src/services/discoverServicePool.js');
 const watchmodeService = await viteTestServer.ssrLoadModule('/src/services/watchmodeService.js');
+const kitsuStreamingService = await viteTestServer.ssrLoadModule('/src/services/kitsuStreamingService.js');
+const streamingAvailabilityService = await viteTestServer.ssrLoadModule('/src/services/streamingAvailabilityService.js');
 const watchmodeCatalogIndexer = await viteTestServer.ssrLoadModule('/src/services/watchmodeCatalogIndexer.js');
 const watchmodeSharedCacheDiscovery = await viteTestServer.ssrLoadModule('/src/services/watchmodeSharedCacheDiscovery.js');
 const watchmodeProxy = await viteTestServer.ssrLoadModule('/functions/api/watchmode.js');
@@ -860,6 +862,109 @@ check('Discover On Your Services uses the saved provider cache without network l
   assert.match(dashboardSource, /action="View All"[\s\S]*?setView\?\.\('discover'\)/);
   assert.match(watchmodeSource, /joeanime:watchmode-cache-changed/);
   assert.match(watchmodeSource, /joeanime:watch-region-changed/);
+});
+
+check('Kitsu-first streaming cache is batched, persistent, and overridden by region-verified Watchmode data', async () => {
+  localStorage.clear();
+  const originalFetch = globalThis.fetch;
+  let fetchCalls = 0;
+  globalThis.fetch = async () => {
+    fetchCalls += 1;
+    return {
+      ok: true,
+      json: async () => ({
+        data: [
+          {
+            id: '101',
+            type: 'anime',
+            relationships: {
+              streamingLinks: { data: [{ id: 'stream-1', type: 'streamingLinks' }] }
+            }
+          },
+          {
+            id: '102',
+            type: 'anime',
+            relationships: { streamingLinks: { data: [] } }
+          }
+        ],
+        included: [
+          {
+            id: 'stream-1',
+            type: 'streamingLinks',
+            attributes: {
+              url: 'https://www.crunchyroll.com/series/example',
+              subs: ['en'],
+              dubs: []
+            }
+          }
+        ]
+      })
+    };
+  };
+
+  try {
+    const items = [
+      { title: 'Kitsu Match', kitsuId: '101', year: 2024, type: 'TV' },
+      { title: 'Kitsu Empty', kitsuId: '102', year: 2024, type: 'TV' }
+    ];
+    const first = await kitsuStreamingService.primeKitsuStreamingLinks(items);
+    assert.equal(first.requested, 2);
+    assert.equal(first.ready, 1);
+    assert.equal(first.empty, 1);
+    assert.equal(fetchCalls, 1, 'two Kitsu IDs should share one batched request');
+
+    const cachedReady = kitsuStreamingService.getCachedKitsuStreamingLinks(items[0]);
+    const cachedEmpty = kitsuStreamingService.getCachedKitsuStreamingLinks(items[1]);
+    assert.equal(cachedReady.status, 'ready');
+    assert.equal(cachedReady.providers[0].name, 'Crunchyroll');
+    assert.equal(cachedReady.source, 'kitsu');
+    assert.equal(cachedReady.regional, false);
+    assert.equal(cachedEmpty.status, 'not_found');
+
+    const second = await kitsuStreamingService.primeKitsuStreamingLinks(items);
+    assert.equal(second.requested, 0);
+    assert.equal(fetchCalls, 1, 'fresh Kitsu streaming cache must prevent repeat requests');
+
+    localStorage.setItem('joeanime-watchmode-provider-results-v1', JSON.stringify({
+      'US|kitsu match|2024|tv': {
+        savedAt: Date.now(),
+        payload: {
+          status: 'ready',
+          providers: [{ name: 'Hulu', url: 'https://www.hulu.com/example' }]
+        }
+      }
+    }));
+    const preferred = streamingAvailabilityService.getCachedStreamingAvailability(items[0], {
+      region: 'US'
+    });
+    assert.equal(preferred.source, 'watchmode');
+    assert.equal(preferred.regional, true);
+    assert.equal(preferred.providers[0].name, 'Hulu');
+
+    const kitsuOnlyPool = discoverServicePool.buildCachedServiceDiscoverPool(
+      items,
+      ['crunchyroll'],
+      'US',
+      {},
+      kitsuStreamingService.getKitsuStreamingCacheSnapshot()
+    );
+    assert.equal(kitsuOnlyPool.length, 1);
+    assert.equal(kitsuOnlyPool[0].discoverServiceSource, 'kitsu');
+  } finally {
+    globalThis.fetch = originalFetch;
+    localStorage.clear();
+  }
+
+  const [homeSource, discoverSource, detailSource] = await Promise.all([
+    source('src/hooks/useHomeDecisionData.js'),
+    source('src/pages/Discover.jsx'),
+    source('src/components/DetailModal.jsx')
+  ]);
+  assert.match(homeSource, /primeKitsuStreamingLinks/);
+  assert.match(discoverSource, /KITSU_STREAMING_DISCOVER_LIMIT/);
+  assert.match(discoverSource, /kitsuGaps/);
+  assert.match(detailSource, /Check with Watchmode/);
+  assert.match(detailSource, /Availability may vary by region/);
 });
 
 check('Discover samples the shared Watchmode cache safely and rotates through titles', async () => {

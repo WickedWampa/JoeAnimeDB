@@ -38,6 +38,11 @@ import {
   getWatchmodeProviderCacheSnapshot
 } from '../services/watchmodeService';
 import {
+  getCachedKitsuStreamingLinks,
+  getKitsuStreamingCacheSnapshot,
+  primeKitsuStreamingLinks
+} from '../services/kitsuStreamingService';
+import {
   contentSafetyModeLabel,
   filterContentBySafety,
   getContentRating
@@ -274,6 +279,7 @@ function identityKeys(item = {}) {
 const LIVE_DISCOVER_CACHE_KEY = 'joeanime-live-discover-cache-v1';
 const LIVE_DISCOVER_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const DISCOVER_FINAL_STAGE = 4;
+const KITSU_STREAMING_DISCOVER_LIMIT = 160;
 
 function readLiveDiscoverCacheSnapshot() {
   try {
@@ -1080,10 +1086,12 @@ function DiscoverPage({
     const refreshServicePool = () => setServiceCacheRevision((current) => current + 1);
     refreshServicePool();
     window.addEventListener('joeanime:watchmode-cache-changed', refreshServicePool);
+    window.addEventListener('joeanime:kitsu-streaming-cache-changed', refreshServicePool);
     window.addEventListener('joeanime:streaming-apps-changed', refreshServicePool);
     window.addEventListener('joeanime:watch-region-changed', refreshServicePool);
     return () => {
       window.removeEventListener('joeanime:watchmode-cache-changed', refreshServicePool);
+      window.removeEventListener('joeanime:kitsu-streaming-cache-changed', refreshServicePool);
       window.removeEventListener('joeanime:streaming-apps-changed', refreshServicePool);
       window.removeEventListener('joeanime:watch-region-changed', refreshServicePool);
     };
@@ -1298,7 +1306,8 @@ function DiscoverPage({
       unseenCatalog,
       getSavedStreamingApps(),
       getSavedWatchRegion(),
-      getWatchmodeProviderCacheSnapshot()
+      getWatchmodeProviderCacheSnapshot(),
+      getKitsuStreamingCacheSnapshot()
     );
   }, [catalogStageReady, serviceCacheRevision, unseenCatalog]);
 
@@ -1309,10 +1318,49 @@ function DiscoverPage({
     const controller = new AbortController();
     let idleHandle = null;
     const timeoutHandle = window.setTimeout(() => {
+      const primeFreeStreamingLinks = () => {
+        void primeKitsuStreamingLinks(
+          unseenCatalog.slice(0, KITSU_STREAMING_DISCOVER_LIMIT),
+          { signal: controller.signal }
+        ).catch(() => {});
+      };
+
+      if (typeof window.requestIdleCallback === 'function') {
+        idleHandle = window.requestIdleCallback(primeFreeStreamingLinks, { timeout: 1200 });
+      } else {
+        primeFreeStreamingLinks();
+      }
+    }, mobileDiscover ? 1200 : 600);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeoutHandle);
+      if (idleHandle !== null && typeof window.cancelIdleCallback === 'function') {
+        window.cancelIdleCallback(idleHandle);
+      }
+    };
+  }, [active, catalogStageReady, mobileDiscover, unseenCatalog]);
+
+  useEffect(() => {
+    if (!active || !catalogStageReady || !unseenCatalog.length) return undefined;
+    if (!getSavedStreamingApps().length) return undefined;
+
+    const kitsuCacheSnapshot = getKitsuStreamingCacheSnapshot();
+    const kitsuGaps = unseenCatalog.filter((item) => (
+      getCachedKitsuStreamingLinks(item, {
+        allowStale: true,
+        cacheSnapshot: kitsuCacheSnapshot
+      })?.status === 'not_found'
+    ));
+    if (!kitsuGaps.length) return undefined;
+
+    const controller = new AbortController();
+    let idleHandle = null;
+    const timeoutHandle = window.setTimeout(() => {
       const discoverSharedResults = () => {
         void runWatchmodeSharedCacheDiscovery({
           library: anime,
-          catalog: unseenCatalog,
+          catalog: kitsuGaps,
           region: getSavedWatchRegion(),
           signal: controller.signal
         });
@@ -1332,7 +1380,7 @@ function DiscoverPage({
         window.cancelIdleCallback(idleHandle);
       }
     };
-  }, [active, anime, catalogStageReady, mobileDiscover, unseenCatalog]);
+  }, [active, anime, catalogStageReady, mobileDiscover, serviceCacheRevision, unseenCatalog]);
 
   const airingNow = useMemo(
     () => [...unseenCatalog]
@@ -1852,7 +1900,7 @@ function DiscoverPage({
       <Shelf
         icon={<Wifi />}
         title="On Your Services"
-        subtitle="Matches already found on your selected streaming services. Cached availability by Watchmode."
+        subtitle="Saved Kitsu streaming links, with cached Watchmode regional verification when available."
         items={cachedServicePool}
         onOpen={setSelected}
         onAddWatching={addWatching}

@@ -1,7 +1,5 @@
-import {
-  getCachedWhereToWatch,
-  groupWatchProvidersByPreference
-} from './watchmodeService';
+import { groupWatchProvidersByPreference } from './watchmodeService';
+import { getCachedStreamingAvailability } from './streamingAvailabilityService';
 
 function titleOf(item = {}) {
   return String(item.officialTitle || item.title || '').trim();
@@ -21,7 +19,8 @@ export function buildCachedServiceDiscoverPool(
   candidates = [],
   selectedApps = [],
   region = 'US',
-  cacheSnapshot = {}
+  watchmodeCacheSnapshot = {},
+  kitsuCacheSnapshot = {}
 ) {
   if (!Array.isArray(selectedApps) || !selectedApps.length) return [];
 
@@ -32,10 +31,11 @@ export function buildCachedServiceDiscoverPool(
     const key = identityKey(item);
     if (!key || seen.has(key)) continue;
 
-    const payload = getCachedWhereToWatch(item, {
+    const payload = getCachedStreamingAvailability(item, {
       region,
       allowStale: true,
-      cacheSnapshot
+      watchmodeCacheSnapshot,
+      kitsuCacheSnapshot
     });
     if (payload?.status !== 'ready') continue;
 
@@ -47,7 +47,8 @@ export function buildCachedServiceDiscoverPool(
       ...item,
       discoverPreferredProvider: preferred[0],
       discoverServiceProviders: preferred,
-      discoverServiceLabel: preferred.map((provider) => provider.name).filter(Boolean).join(' + ')
+      discoverServiceLabel: preferred.map((provider) => provider.name).filter(Boolean).join(' + '),
+      discoverServiceSource: payload.source || 'unknown'
     });
   }
 

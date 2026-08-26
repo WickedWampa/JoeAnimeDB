@@ -7,13 +7,17 @@ import {
 import { selectHomeDecisionData } from '../services/homeDecisionSelector';
 import { isNativeAndroid } from '../platform/runtime';
 import {
-  getCachedWhereToWatch,
   getWatchmodeProviderCacheSnapshot,
   getSavedStreamingApps,
   getSavedWatchRegion,
   groupWatchProvidersByPreference,
   STREAMING_APPS_KEY
 } from '../services/watchmodeService';
+import {
+  getKitsuStreamingCacheSnapshot,
+  primeKitsuStreamingLinks
+} from '../services/kitsuStreamingService';
+import { getCachedStreamingAvailability } from '../services/streamingAvailabilityService';
 import {
   deferUntilAfterFirstPaint,
   measureAsyncStartupTask,
@@ -95,20 +99,41 @@ export function buildHomeServiceCandidates(library = [], catalog = [], dailyPick
     .slice(0, SERVICE_CANDIDATE_LIMIT);
 }
 
-function preferredServiceResult(item, selectedApps, region, { allowStale = false, cacheSnapshot } = {}) {
-  const payload = getCachedWhereToWatch(item, { region, allowStale, cacheSnapshot });
+function preferredServiceResult(item, selectedApps, region, {
+  allowStale = false,
+  watchmodeCacheSnapshot,
+  kitsuCacheSnapshot
+} = {}) {
+  const payload = getCachedStreamingAvailability(item, {
+    region,
+    allowStale,
+    watchmodeCacheSnapshot,
+    kitsuCacheSnapshot
+  });
   if (payload?.status !== 'ready') return null;
   const { preferred } = groupWatchProvidersByPreference(payload.providers, selectedApps);
   if (!preferred.length) return null;
-  return { item, providers: preferred, preferredProvider: preferred[0] };
+  return {
+    item,
+    providers: preferred,
+    preferredProvider: preferred[0],
+    source: payload.source || 'unknown'
+  };
 }
 
 function cachedServiceResults(candidates, selectedApps, region) {
   if (!selectedApps.length) return [];
-  const cacheSnapshot = getWatchmodeProviderCacheSnapshot();
+  const watchmodeCacheSnapshot = getWatchmodeProviderCacheSnapshot();
+  const kitsuCacheSnapshot = getKitsuStreamingCacheSnapshot();
   return candidates
-    .map((item) => preferredServiceResult(item, selectedApps, region, { cacheSnapshot })
-      || preferredServiceResult(item, selectedApps, region, { allowStale: true, cacheSnapshot }))
+    .map((item) => preferredServiceResult(item, selectedApps, region, {
+      watchmodeCacheSnapshot,
+      kitsuCacheSnapshot
+    }) || preferredServiceResult(item, selectedApps, region, {
+      allowStale: true,
+      watchmodeCacheSnapshot,
+      kitsuCacheSnapshot
+    }))
     .filter(Boolean)
     .slice(0, SERVICE_RESULT_LIMIT);
 }
@@ -156,15 +181,30 @@ export function useHomeDecisionData({
     };
     window.addEventListener('joeanime:streaming-apps-changed', refresh);
     window.addEventListener('joeanime:watchmode-cache-changed', refreshCache);
+    window.addEventListener('joeanime:kitsu-streaming-cache-changed', refreshCache);
     window.addEventListener('joeanime:watch-region-changed', refreshRegion);
     window.addEventListener('storage', storage);
     return () => {
       window.removeEventListener('joeanime:streaming-apps-changed', refresh);
       window.removeEventListener('joeanime:watchmode-cache-changed', refreshCache);
+      window.removeEventListener('joeanime:kitsu-streaming-cache-changed', refreshCache);
       window.removeEventListener('joeanime:watch-region-changed', refreshRegion);
       window.removeEventListener('storage', storage);
     };
   }, []);
+
+  useEffect(() => {
+    if (!streamingApps.length || !candidates.length) return undefined;
+    const controller = new AbortController();
+    const cancelSchedule = deferUntilAfterFirstPaint(() => {
+      void primeKitsuStreamingLinks(candidates, { signal: controller.signal })
+        .catch(() => {});
+    });
+    return () => {
+      controller.abort();
+      cancelSchedule();
+    };
+  }, [candidates, streamingApps.length]);
 
   useEffect(() => {
     let cancelled = false;
@@ -268,7 +308,8 @@ export function useHomeDecisionData({
             resultCount: cached.length,
             requestCount: 0,
             cacheOnly: true,
-            zeroDollarMode: true
+            zeroDollarMode: true,
+            providerStrategy: 'kitsu-first-with-watchmode-verified-override'
           });
         }
       })();
