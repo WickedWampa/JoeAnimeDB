@@ -135,6 +135,52 @@ export function animeIdentityKeys(item = {}) {
   return keys;
 }
 
+function providerId(item = {}, ...fields) {
+  const value = fields.map((field) => item[field]).find((candidate) => candidate != null && String(candidate).trim());
+  return value == null ? '' : String(value).trim();
+}
+
+function isExplicitContinuationSource(left = {}, right = {}) {
+  const leftId = providerId(left, 'id');
+  const rightId = providerId(right, 'id');
+  const leftKitsu = providerId(left, 'kitsuId', 'kitsu_id');
+  const rightKitsu = providerId(right, 'kitsuId', 'kitsu_id');
+  const leftSourceId = providerId(left, 'returningFromId');
+  const rightSourceId = providerId(right, 'returningFromId');
+  const leftSourceKitsu = providerId(left, 'returningFromKitsuId');
+  const rightSourceKitsu = providerId(right, 'returningFromKitsuId');
+
+  return Boolean(
+    (leftSourceId && rightId && leftSourceId === rightId)
+    || (rightSourceId && leftId && rightSourceId === leftId)
+    || (leftSourceKitsu && rightKitsu && leftSourceKitsu === rightKitsu)
+    || (rightSourceKitsu && leftKitsu && rightSourceKitsu === leftKitsu)
+  );
+}
+
+function primaryTitleIdentity(item = {}) {
+  return parseTitleIdentity(item.officialTitle || item.title || item.englishTitle || item.romajiTitle || '');
+}
+
+function isNestedFranchiseTitle(left = {}, right = {}) {
+  const leftIdentity = primaryTitleIdentity(left);
+  const rightIdentity = primaryTitleIdentity(right);
+  if (!leftIdentity.base || !rightIdentity.base || leftIdentity.base === rightIdentity.base) return false;
+
+  const leftTokens = new Set(leftIdentity.base.split(' ').filter(Boolean));
+  const rightTokens = new Set(rightIdentity.base.split(' ').filter(Boolean));
+  const smaller = leftTokens.size <= rightTokens.size ? leftTokens : rightTokens;
+  const larger = smaller === leftTokens ? rightTokens : leftTokens;
+  const nested = smaller.size > 0 && [...smaller].every((token) => larger.has(token));
+  if (!nested) return false;
+
+  const sameYear = left.year && right.year && String(left.year) === String(right.year);
+  const leftEpisodes = Number(left.episodeCount || left.episodes || 0);
+  const rightEpisodes = Number(right.episodeCount || right.episodes || 0);
+  const sameEpisodes = leftEpisodes && rightEpisodes && leftEpisodes === rightEpisodes;
+  return !sameYear && !sameEpisodes;
+}
+
 export function sameAnimeIdentity(a = {}, b = {}) {
   const aKitsu = a.kitsuId || a.kitsu_id;
   const bKitsu = b.kitsuId || b.kitsu_id;
@@ -145,6 +191,16 @@ export function sameAnimeIdentity(a = {}, b = {}) {
   const aMal = a.malId || a.mal_id;
   const bMal = b.malId || b.mal_id;
   if (aMal && bMal) return String(aMal) === String(bMal);
+
+  // A discovered continuation must never collapse into the prerequisite that
+  // produced it, even when a broad provider synonym contains the franchise's
+  // base title (for example BLEACH and BLEACH: TYBW Part 2).
+  if (isExplicitContinuationSource(a, b)) return false;
+
+  // Provider synonym lists often include an ambiguous franchise-only alias.
+  // Do not let that generic alias merge a distinct sequel, arc, or adaptation
+  // into the shorter legacy library title unless year/episode metadata agrees.
+  if (isNestedFranchiseTitle(a, b)) return false;
 
   const aTitles = titleAliases(a).map(parseTitleIdentity);
   const bTitles = titleAliases(b).map(parseTitleIdentity);
@@ -169,6 +225,16 @@ export function sameAnimeIdentity(a = {}, b = {}) {
         const bEpisodes = Number(b.episodeCount || b.episodes || 0);
         const sameEpisodes = aEpisodes && bEpisodes && aEpisodes === bEpisodes;
         if (!sameYear && !sameEpisodes) continue;
+      }
+
+      const onePartMissing = Boolean(left.part) !== Boolean(right.part);
+      const oneCourMissing = Boolean(left.cour) !== Boolean(right.cour);
+      if (onePartMissing || oneCourMissing) {
+        const sameYear = a.year && b.year && String(a.year) === String(b.year);
+        const aEpisodes = Number(a.episodeCount || a.episodes || 0);
+        const bEpisodes = Number(b.episodeCount || b.episodes || 0);
+        const sameEpisodes = aEpisodes && bEpisodes && aEpisodes === bEpisodes;
+        if (!sameYear || !sameEpisodes) continue;
       }
 
       return true;

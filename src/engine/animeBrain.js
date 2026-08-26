@@ -53,7 +53,8 @@ export function createAnimeBrain(library = [], catalog = [], intelligence = {}) 
     return recommendAnime(anime, animeCatalog, {
       limit,
       joeAIState: request.joeAIState || intelligence.joeAIState || {},
-      prompt: request.prompt || ''
+      prompt: request.prompt || '',
+      onTiming: request.onTiming
     });
   }
 

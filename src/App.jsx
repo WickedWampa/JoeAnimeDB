@@ -42,15 +42,16 @@ import { useAnimeLibrary } from './hooks/useAnimeLibrary';
 import { sortAnimeByUserScore } from './utils/animeUtils';
 import {
   beginOnboarding,
+  beginUpdateOnboarding,
   clearOnboardingState,
   dismissOnboardingTip,
   finishOnboarding,
-  markExistingUserOnboardingComplete,
   readOnboardingState,
   updateOnboardingStep
 } from './services/onboardingState';
 import { installAndroidBackHandler } from './platform/runtime';
 import { normalizeContentSafetyMode } from './services/contentSafety';
+import { sameAnimeIdentity } from './services/titleIdentity';
 
 const UPDATE_THEME_APPEARANCE = {
   neon: { icon: '⚡', label: 'Neon Signal' },
@@ -198,6 +199,7 @@ function AppUpdateNotice({ status, onOpen, onDismiss }) {
 
 export function App() {
   const [view, setView] = useState('dashboard');
+  const [discoverVisited, setDiscoverVisited] = useState(false);
   const [selected, setSelected] = useState(null);
   const [mode, setMode] = useState('poster');
   const [onboardingState, setOnboardingState] = useState(() => readOnboardingState());
@@ -284,6 +286,10 @@ export function App() {
     return () => window.cancelAnimationFrame(frame);
   }, [view]);
 
+  useEffect(() => {
+    if (view === 'discover') setDiscoverVisited(true);
+  }, [view]);
+
   useEffect(() => installAndroidBackHandler(() => {
     if (selected) {
       setSelected(null);
@@ -349,6 +355,10 @@ export function App() {
 
     try {
       const summary = await syncMetadata();
+      if (summary) {
+        localStorage.setItem('joeanime-last-update-summary-v1', JSON.stringify(summary));
+        window.dispatchEvent(new CustomEvent('joeanime:database-update-summary', { detail: summary }));
+      }
       request?.resolve(summary);
     } catch (error) {
       request?.reject(error);
@@ -441,7 +451,9 @@ export function App() {
       return;
     }
 
-    setOnboardingState(markExistingUserOnboardingComplete());
+    const updateTour = beginUpdateOnboarding();
+    setOnboardingState(updateTour);
+    setOnboardingOpen(true);
   }, [loading]);
 
   async function handleSaveDisplayName(nextName) {
@@ -565,31 +577,22 @@ export function App() {
   async function handleUpdateAnime(updatedAnime) {
     const saved = await updateAnime(updatedAnime);
     const savedAnime = saved.anime || [];
-    const refreshed = savedAnime.find((item) => String(item.id) === String(updatedAnime.id));
+    const refreshed = savedAnime.find((item) => String(item.id) === String(updatedAnime.id))
+      || savedAnime.find((item) => sameAnimeIdentity(item, updatedAnime));
 
     setSelected((current) => {
-      if (!current || String(current.id) !== String(updatedAnime.id)) return current;
+      if (!current || (
+        String(current.id) !== String(updatedAnime.id)
+        && !sameAnimeIdentity(current, updatedAnime)
+      )) return current;
       return refreshed || updatedAnime;
     });
 
     return saved;
   }
 
-  if (loading) {
-    return (
-      <main className={`shell theme-${theme} bootScreen`}>
-        <div className="bootCard">
-          <h1>JoeAnimeDB</h1>
-          <p>Remember Every Anime.</p>
-          <p className="bootSubline">Loading your library...</p>
-          <div className="loader" />
-        </div>
-      </main>
-    );
-  }
-
   return (
-    <main className={`shell theme-${theme}`}>
+    <main className={`shell theme-${theme}${loading ? ' appStarting' : ''}`} aria-busy={loading ? 'true' : undefined}>
       <Sidebar
         view={view}
         setView={setView}
@@ -637,7 +640,8 @@ export function App() {
             catalog={catalog}
             stats={stats}
             setSelected={setSelected}
-            updateAnime={handleUpdateAnime}
+            updateAnime={loading ? undefined : handleUpdateAnime}
+            updateCatalogAnime={loading ? undefined : updateCatalogAnime}
             setView={setView}
             onOpenFilter={handleOpenFilter}
             joeAIState={joeAI}
@@ -658,20 +662,28 @@ export function App() {
             title={view === 'rankings' ? 'Rankings' : 'Library'}
           />
         )}
-        {view === 'discover' && (
-          <Discover
-            anime={anime}
-            catalog={catalog}
-            setSelected={setSelected}
-            setView={setView}
-            updateAnime={handleUpdateAnime}
-            updateCatalogAnime={updateCatalogAnime}
-            joeAIState={joeAI}
-            onRecommendationFeedback={recordJoeAIFeedback}
-            fetchMoreCatalogTitles={fetchMoreCatalogTitles}
-            refreshLiveDiscover={refreshLiveDiscover}
-            contentSafetyMode={contentSafetyMode}
-          />
+        {(view === 'discover' || discoverVisited) && (
+          <div
+            className="discoverKeepAlive"
+            hidden={view !== 'discover'}
+            inert={view !== 'discover' ? '' : undefined}
+            aria-hidden={view !== 'discover'}
+          >
+            <Discover
+              active={view === 'discover'}
+              anime={anime}
+              catalog={catalog}
+              setSelected={setSelected}
+              setView={setView}
+              updateAnime={handleUpdateAnime}
+              updateCatalogAnime={updateCatalogAnime}
+              joeAIState={joeAI}
+              onRecommendationFeedback={recordJoeAIFeedback}
+              fetchMoreCatalogTitles={fetchMoreCatalogTitles}
+              refreshLiveDiscover={refreshLiveDiscover}
+              contentSafetyMode={contentSafetyMode}
+            />
+          </div>
         )}
         {view === 'favorites' && (
           <FavoritesPage
@@ -790,6 +802,7 @@ export function App() {
       <FirstTimeOnboarding
         open={onboardingOpen}
         initialStep={onboardingState?.step || 0}
+        source={onboardingState?.source || ''}
         displayName={displayName}
         theme={theme}
         anime={anime}

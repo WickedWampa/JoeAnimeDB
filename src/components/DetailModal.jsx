@@ -5,7 +5,8 @@ import { fetchKitsuMetadata } from '../services/kitsuProvider';
 import { enrichMissingMetadata } from '../services/wikidataRepair';
 import { mergeAnimeMetadata } from '../services/animeImporter';
 import { preservePersonalAnimeData } from '../services/personalAnimeData';
-import { clearLibraryReview } from '../services/quickAdd';
+import { buildQuickAddEntry, clearLibraryReview } from '../services/quickAdd';
+import { sameAnimeIdentity } from '../services/titleIdentity';
 import {
   WATCHMODE_REGIONS,
   confirmWatchmodeMatch,
@@ -68,9 +69,17 @@ export function DetailModal({
   const [metadataProgressText, setMetadataProgressText] = useState('');
   const [scoreDraft, setScoreDraft] = useState(Number(anime.joeScore ?? score(anime) ?? 0));
   const [scoreSaving, setScoreSaving] = useState(false);
+  const scoreDraftRef = useRef(Number(anime.joeScore ?? score(anime) ?? 0));
+  const scorePersistedRef = useRef(Number(anime.joeScore ?? score(anime) ?? 0));
+  const scoreSaveTimerRef = useRef(null);
+  const scoreSaveInFlightRef = useRef(false);
+  const scoreQueuedValueRef = useRef(null);
+  const scoreEditingRef = useRef(false);
+  const scoreAnimeIdRef = useRef(String(anime.id || ''));
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteMessage, setDeleteMessage] = useState('');
+  const [catalogActionBusy, setCatalogActionBusy] = useState('');
   const [watchRegion, setWatchRegion] = useState(() => getSavedWatchRegion());
   const [streamingApps, setStreamingApps] = useState(() => getSavedStreamingApps());
   const [watchState, setWatchState] = useState({ status: 'loading', providers: [], candidates: [] });
@@ -102,13 +111,40 @@ export function DetailModal({
   );
 
   useEffect(() => {
-    setScoreDraft(Number(anime.joeScore ?? score(anime) ?? 0));
+    const nextScore = Number(anime.joeScore ?? score(anime) ?? 0);
+    if (scoreSaveTimerRef.current) window.clearTimeout(scoreSaveTimerRef.current);
+    scoreSaveTimerRef.current = null;
+    scoreSaveInFlightRef.current = false;
+    scoreQueuedValueRef.current = null;
+    scoreEditingRef.current = false;
+    scoreAnimeIdRef.current = String(anime.id || '');
+    scoreDraftRef.current = nextScore;
+    scorePersistedRef.current = nextScore;
+    setScoreDraft(nextScore);
+    setScoreSaving(false);
     setMetadataMessage('');
     setMetadataMessageType('');
     setMetadataProgressText('');
     setConfirmingDelete(false);
     setDeleteMessage('');
-  }, [anime.id, anime.joeScore]);
+  }, [anime.id]);
+
+  useEffect(() => {
+    const savedScore = Number(anime.joeScore ?? score(anime) ?? 0);
+    scorePersistedRef.current = savedScore;
+
+    // A TV D-pad sequence can outpace SQLite. While the slider is being
+    // edited, its local draft is authoritative; an older persisted value must
+    // not flow back through props and snap the thumb toward a lower score.
+    if (!scoreEditingRef.current && !scoreSaveInFlightRef.current) {
+      scoreDraftRef.current = savedScore;
+      setScoreDraft(savedScore);
+    }
+  }, [anime.joeScore]);
+
+  useEffect(() => () => {
+    if (scoreSaveTimerRef.current) window.clearTimeout(scoreSaveTimerRef.current);
+  }, []);
 
   useEffect(() => {
     const syncStreamingApps = (event) => {
@@ -286,6 +322,20 @@ export function DetailModal({
     ).filter(isTvDetailFocusable);
   }
 
+  function focusTvDetailHeader() {
+    const root = detailModalRef.current;
+    if (!root) return false;
+
+    const target = root.querySelector(
+      '.detailNavigationButton:not([disabled]), .close:not([disabled])'
+    );
+    if (!(target instanceof HTMLElement)) return false;
+
+    target.focus({ preventScroll: true });
+    root.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
+    return true;
+  }
+
   function moveInsideTvDetailRail(active, direction) {
     if (!(active instanceof HTMLElement)) return false;
     if (direction !== 'ArrowUp' && direction !== 'ArrowDown') return false;
@@ -297,6 +347,13 @@ export function DetailModal({
 
     const offset = direction === 'ArrowDown' ? 1 : -1;
     const next = controls[index + offset];
+
+    // Up from the first poster-side action returns to the modal header instead
+    // of becoming a dead end. This also scrolls long TV detail cards back to
+    // their title and previous/next controls.
+    if (direction === 'ArrowUp' && index === 0) {
+      return focusTvDetailHeader();
+    }
 
     // Keep vertical D-pad movement inside the poster-side action stack.
     // At an edge, consume the key rather than letting spatial navigation
@@ -316,6 +373,39 @@ export function DetailModal({
     if (!root) return;
 
     const active = event.target;
+    const scoreSlider = root.querySelector('[data-tv-detail-score]');
+    const statusSelect = root.querySelector('[data-tv-detail-status]');
+    const rewatchDecrease = root.querySelector('[data-tv-detail-rewatch="decrease"]');
+
+    if (active === scoreSlider && event.key === 'ArrowDown' && focusTvDetailControl(statusSelect)) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
+    if (active === statusSelect && event.key === 'ArrowUp' && focusTvDetailControl(scoreSlider)) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
+    if (active === statusSelect && event.key === 'ArrowDown' && focusTvDetailControl(rewatchDecrease)) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
+    if (
+      active instanceof HTMLElement
+      && active.matches('[data-tv-detail-rewatch]')
+      && event.key === 'ArrowUp'
+      && focusTvDetailControl(statusSelect)
+    ) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
     const isTextField = active instanceof HTMLElement && (
       active.isContentEditable ||
       active.tagName === 'TEXTAREA' ||
@@ -337,6 +427,7 @@ export function DetailModal({
 
     if (!(active instanceof HTMLElement) || !root.contains(active)) {
       const preferred = root.querySelector(
+        '.catalogLibraryAction:not([disabled]), ' +
         '.detailLibraryReview button:not([disabled]), ' +
         '.favoriteToggle:not([disabled]), ' +
         '.detailNavigationButton:not([disabled]), ' +
@@ -413,6 +504,7 @@ export function DetailModal({
       }
 
       const preferred = root.querySelector(
+        '.catalogLibraryAction:not([disabled]), ' +
         '.detailLibraryReview button:not([disabled]), ' +
         '.favoriteToggle:not([disabled]), ' +
         '.detailNavigationButton:not([disabled]), ' +
@@ -473,26 +565,126 @@ export function DetailModal({
     });
   }
 
+  async function addCatalogToLibrary(status = 'Plan to Watch') {
+    if (!updateAnime || !isCatalogTitle || catalogActionBusy) return;
+
+    setCatalogActionBusy(status);
+    try {
+      const existing = (library || []).find((item) => sameAnimeIdentity(item, anime));
+      if (existing) {
+        if (status === 'Completed' && String(existing.status || '').toLowerCase() !== 'completed') {
+          await updateAnime({ ...existing, status: 'Completed', listUpdatedAt: new Date().toISOString() });
+        }
+        return;
+      }
+
+      await updateAnime(buildQuickAddEntry(anime, {
+        source: 'Home Details',
+        librarySize: library.length,
+        status
+      }));
+    } catch (error) {
+      console.warn(`Could not add ${anime.title} from Details:`, error);
+    } finally {
+      setCatalogActionBusy('');
+    }
+  }
+
   function updateRewatches(delta) {
     const next = Math.max(0, Number(anime.rewatches || 0) + delta);
     updateField('rewatches', next);
   }
 
-  async function commitScore() {
-    if (!updateAnime || isCatalogTitle || scoreSaving) return;
+  function normalizedScore(value) {
+    return Math.max(0, Math.min(10, Math.round(Number(value || 0) * 10) / 10));
+  }
 
-    const nextScore = Math.max(0, Math.min(10, Math.round(Number(scoreDraft || 0) * 10) / 10));
-    const savedScore = Number(anime.joeScore ?? score(anime) ?? 0);
-    setScoreDraft(nextScore);
+  async function persistScoreDraft(nextScore) {
+    if (!updateAnime || isCatalogTitle) {
+      scoreEditingRef.current = false;
+      return;
+    }
 
-    if (nextScore === savedScore) return;
+    const targetAnimeId = scoreAnimeIdRef.current;
 
+    if (scoreSaveInFlightRef.current) {
+      scoreQueuedValueRef.current = nextScore;
+      return;
+    }
+
+    if (nextScore === scorePersistedRef.current) {
+      scoreEditingRef.current = false;
+      setScoreSaving(false);
+      return;
+    }
+
+    scoreSaveInFlightRef.current = true;
     setScoreSaving(true);
+    let saved = false;
+
     try {
       await updateField('joeScore', nextScore);
+      saved = true;
+      if (scoreAnimeIdRef.current === targetAnimeId) {
+        scorePersistedRef.current = nextScore;
+      }
+    } catch (error) {
+      console.warn(`Could not save score for ${anime.title}:`, error);
     } finally {
+      if (scoreAnimeIdRef.current !== targetAnimeId) return;
+
+      scoreSaveInFlightRef.current = false;
+      const queuedScore = scoreQueuedValueRef.current;
+      scoreQueuedValueRef.current = null;
+      const latestScore = normalizedScore(scoreDraftRef.current);
+
+      if (!saved) {
+        scoreEditingRef.current = false;
+        scoreDraftRef.current = scorePersistedRef.current;
+        setScoreDraft(scorePersistedRef.current);
+        setScoreSaving(false);
+        return;
+      }
+
+      // If more D-pad input arrived during the save, persist only the newest
+      // value next. Saves stay ordered and an older completion can never win.
+      if (
+        (queuedScore !== null && normalizedScore(queuedScore) !== scorePersistedRef.current)
+        || latestScore !== scorePersistedRef.current
+      ) {
+        void persistScoreDraft(latestScore);
+        return;
+      }
+
+      scoreEditingRef.current = false;
       setScoreSaving(false);
     }
+  }
+
+  function commitScore() {
+    if (scoreSaveTimerRef.current) window.clearTimeout(scoreSaveTimerRef.current);
+    scoreSaveTimerRef.current = null;
+
+    const nextScore = normalizedScore(scoreDraftRef.current);
+    scoreDraftRef.current = nextScore;
+    setScoreDraft(nextScore);
+    void persistScoreDraft(nextScore);
+  }
+
+  function scheduleScoreCommit() {
+    if (scoreSaveTimerRef.current) window.clearTimeout(scoreSaveTimerRef.current);
+    scoreSaveTimerRef.current = window.setTimeout(() => {
+      scoreSaveTimerRef.current = null;
+      commitScore();
+    }, 350);
+  }
+
+  function changeScoreDraft(event) {
+    const nextScore = normalizedScore(event.target.value);
+    scoreEditingRef.current = true;
+    scoreDraftRef.current = nextScore;
+    setScoreDraft(nextScore);
+    scheduleScoreCommit();
   }
 
   async function confirmDelete() {
@@ -527,6 +719,13 @@ export function DetailModal({
 
   async function repairMetadata() {
     if (!updateAnime || repairingMetadata) return;
+
+    if (anime.identityNeedsReview) {
+      setMetadataMessage('This title has an ambiguous Kitsu identity. Choose the correct match from Settings → Needs Review.');
+      setMetadataMessageType('warning');
+      setMetadataProgressText('');
+      return;
+    }
 
     setRepairingMetadata(true);
     setMetadataMessage('');
@@ -727,6 +926,26 @@ export function DetailModal({
         <button className="close" onClick={onClose}>×</button>
         <aside className="detailArtRail">
           <Poster anime={anime} className="detailPoster" />
+          {isCatalogTitle && (
+            <>
+              <button
+                className="repairMetadataButton catalogLibraryAction"
+                type="button"
+                onClick={() => addCatalogToLibrary('Plan to Watch')}
+                disabled={!updateAnime || Boolean(catalogActionBusy)}
+              >
+                {catalogActionBusy === 'Plan to Watch' ? 'Adding…' : 'Add to Library'}
+              </button>
+              <button
+                className="repairMetadataButton catalogLibraryAction"
+                type="button"
+                onClick={() => addCatalogToLibrary('Completed')}
+                disabled={!updateAnime || Boolean(catalogActionBusy)}
+              >
+                {catalogActionBusy === 'Completed' ? 'Saving…' : 'Already Watched'}
+              </button>
+            </>
+          )}
           <button
             className={`favoriteToggle heroFavorite ${anime.favorite ? 'active' : ''}`}
             type="button"
@@ -747,7 +966,7 @@ export function DetailModal({
           )}
 
           <button
-            className="repairMetadataButton"
+            className={`repairMetadataButton ${needsMetadataReview ? 'needsMetadataRepair' : ''}`}
             type="button"
             onClick={repairMetadata}
             disabled={repairingMetadata || !updateAnime}
@@ -801,16 +1020,6 @@ export function DetailModal({
           <h1>{anime.title}</h1>
           <p className="muted">{displayMetadataLine || 'Metadata pending'}</p>
 
-          {needsMetadataReview && (
-            <section className={`detailMetadataReview ${anime.metadataNeedsReview ? 'identityReview' : ''}`} role="status">
-              <strong>⚠ {anime.metadataNeedsReview ? 'Title match needs review' : 'Metadata is incomplete'}</strong>
-              <p>
-                {anime.metadataReviewReason ||
-                  'Some provider details are missing or uncertain. Your score, status, favorites, rewatches, and notes will be preserved if you repair it.'}
-              </p>
-            </section>
-          )}
-
           {anime.libraryNeedsReview && (
             <section className="detailLibraryReview" role="status">
               <div>
@@ -830,6 +1039,7 @@ export function DetailModal({
             </div>
             <strong>{currentScore.toFixed(1)}</strong>
             <input
+              data-tv-detail-score="true"
               type="range"
               min="0"
               max="10"
@@ -837,9 +1047,8 @@ export function DetailModal({
               value={currentScore}
               aria-label="My Score"
               aria-valuetext={`${currentScore.toFixed(1)} out of 10`}
-              onChange={(event) => setScoreDraft(Number(event.target.value))}
+              onChange={changeScoreDraft}
               onPointerUp={commitScore}
-              onKeyUp={commitScore}
               onBlur={commitScore}
             />
             {scoreSaving && <small className="scoreSaving" role="status">Saving…</small>}
@@ -859,6 +1068,7 @@ export function DetailModal({
                 {currentStatus || 'Not Set'}
               </div>
               <select
+                data-tv-detail-status="true"
                 value={currentStatus}
                 onChange={(event) => updateField('status', event.target.value)}
               >
@@ -871,9 +1081,9 @@ export function DetailModal({
             <div className="rewatchControl">
               <span className="controlLabel">Rewatches</span>
               <div className="stepper">
-                <button type="button" onClick={() => updateRewatches(-1)} aria-label="Decrease rewatches">−</button>
+                <button type="button" data-tv-detail-rewatch="decrease" onClick={() => updateRewatches(-1)} aria-label="Decrease rewatches">−</button>
                 <strong>{anime.rewatches || 0}</strong>
-                <button type="button" onClick={() => updateRewatches(1)} aria-label="Increase rewatches">+</button>
+                <button type="button" data-tv-detail-rewatch="increase" onClick={() => updateRewatches(1)} aria-label="Increase rewatches">+</button>
               </div>
             </div>
 
@@ -974,7 +1184,7 @@ export function DetailModal({
                   <p>No subscription streaming options were found in this region.</p>
                 )}
                 <p className="watchmodeMatchMeta">
-                  Matched to {watchState.match?.name || anime.title}
+                  <span>Streaming availability by Watchmode · Matched to {watchState.match?.name || anime.title}</span>
                   <button type="button" onClick={changeWatchmodeMatch}>Change match</button>
                 </p>
               </>

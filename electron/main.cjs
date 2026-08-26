@@ -135,6 +135,9 @@ function registerDatabaseHandlers() {
     return database.restoreDatabase(snapshot);
   });
   ipcMain.handle('db:updateAnime', async (_event, anime) => database.upsertAnime(anime));
+  ipcMain.handle('db:updateAnimeIdentityLinkage', async (_event, patch) =>
+    database.updateAnimeIdentityLinkage(patch)
+  );
   ipcMain.handle('db:importCatalog', async (_event, catalog) => database.importCatalog(catalog));
   ipcMain.handle('db:updateCatalogAnime', async (_event, anime) => database.upsertCatalogAnime(anime));
   ipcMain.handle('db:getJoeAIState', async () => database.getJoeAIState());

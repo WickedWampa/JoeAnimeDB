@@ -17,7 +17,15 @@ function rankTierClass(rank, totalCount = 0) {
   return 'rank-common';
 }
 
-export function AnimeCard({ anime, setSelected, updateAnime, displayRank, totalCount, showRank = true }) {
+export function AnimeCard({
+  anime,
+  setSelected,
+  updateAnime,
+  displayRank,
+  totalCount,
+  showRank = true,
+  showReviewBadge = true
+}) {
   const rank = showRank ? Number(displayRank || anime.finalRank || 0) : 0;
   const ribbon = rank > 0 ? `#${rank}` : '';
   const rankTier = rankTierClass(rank, totalCount);
@@ -72,7 +80,7 @@ export function AnimeCard({ anime, setSelected, updateAnime, displayRank, totalC
 
       {ribbon && <div className="rankRibbon">{ribbon}</div>}
 
-      {reviewLabel && (
+      {showReviewBadge && reviewLabel && (
         <div
           className={`metadataReviewBadge cardReviewBadge ${anime.metadataNeedsReview ? 'identityReview' : ''}`}
           title={anime.libraryReviewReason || anime.metadataReviewReason || 'Some details still need review'}

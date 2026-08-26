@@ -19,6 +19,7 @@ const CONTENT_FOCUS_SELECTOR = [
 
 const TV_CARD_SELECTOR = '[data-tv-card="true"]';
 const TV_SKIP_FOCUS_SELECTOR = '[data-tv-skip-focus="true"]';
+const TV_LAYOUT_STORAGE_KEY = 'joeanime-tv-layout-v1';
 const TV_CARD_CHILD_SELECTOR = [
   'button',
   'a[href]',
@@ -34,6 +35,8 @@ let suppressedCardControls = new Map();
 let suppressedTvSkipControls = new Map();
 let promotedJoeAIMessages = new Map();
 let lastContentFocus = null;
+let touchDeviceSeen = false;
+let pendingInitialHomeFocus = false;
 
 function isVisibleFocusable(element) {
   if (!(element instanceof HTMLElement)) return false;
@@ -170,6 +173,46 @@ function scrollJoeAIConversation(active, direction, isRepeat = false) {
 
 let joeAIActiveRecommendationCard = null;
 let joeAIScrollFrame = 0;
+const HOME_FOCUS_SHELVES = [
+  '.homeV3Hero',
+  '.homeDecisionContinue',
+  '.homeDecisionReturning',
+  '.homeDecisionMissed',
+  '.homeDecisionServices',
+  '.homeDecisionQuickPick'
+];
+
+function firstFocusableInHomeShelf(selector) {
+  const shelf = document.querySelector(selector);
+  if (!(shelf instanceof HTMLElement)) return null;
+  return Array.from(shelf.querySelectorAll(CONTENT_FOCUS_SELECTOR)).find(isVisibleFocusable) || null;
+}
+
+function restoreHomeFocusAfterShelfRemoval(previousFocus) {
+  if (
+    !(previousFocus instanceof HTMLElement)
+    || previousFocus.isConnected
+    || !document.body?.classList.contains('tvLayoutMode')
+    || !document.body?.classList.contains('tvInputMode')
+  ) return false;
+
+  const oldIndex = HOME_FOCUS_SHELVES.findIndex((selector) => previousFocus.closest(selector));
+  if (oldIndex < 0) return false;
+
+  for (let distance = 0; distance < HOME_FOCUS_SHELVES.length; distance += 1) {
+    for (const index of [oldIndex + distance, oldIndex - distance]) {
+      if (index < 0 || index >= HOME_FOCUS_SHELVES.length) continue;
+      const target = firstFocusableInHomeShelf(HOME_FOCUS_SHELVES[index]);
+      if (!(target instanceof HTMLElement)) continue;
+      target.focus({ preventScroll: true });
+      target.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      lastContentFocus = target;
+      return true;
+    }
+  }
+
+  return false;
+}
 
 function joeAIRecommendationCards() {
   return Array.from(document.querySelectorAll(
@@ -462,6 +505,14 @@ function moveBetweenTvCards(active, direction) {
   if (!candidate) return false;
 
   candidate.focus({ preventScroll: true });
+
+  // Home's focusin handler already performs one nearest-edge snap. Starting a
+  // second centered smooth scroll here makes Android WebView queue competing
+  // animations and causes remote input to feel delayed on TV emulators.
+  if (active.closest('.homeDecisionHome') && candidate.closest('.homeDecisionHome')) {
+    return true;
+  }
+
   candidate.scrollIntoView({
     block: direction === 'ArrowUp' || direction === 'ArrowDown' ? 'center' : 'nearest',
     inline: 'nearest',
@@ -695,7 +746,7 @@ function focusAboutHelpTarget(target) {
   );
 
   (section || target).scrollIntoView({
-    block: 'center',
+    block: section?.classList.contains('aboutHelpHero') ? 'start' : 'center',
     inline: 'nearest',
     behavior: 'smooth'
   });
@@ -931,8 +982,36 @@ function isAndroidLandscape() {
     && window.innerWidth > window.innerHeight * 1.25;
 }
 
+function hasRememberedTvLayout() {
+  try {
+    return localStorage.getItem(TV_LAYOUT_STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function rememberTvLayout() {
+  try {
+    localStorage.setItem(TV_LAYOUT_STORAGE_KEY, 'true');
+  } catch {}
+}
+
+function forgetTvLayout() {
+  try {
+    localStorage.removeItem(TV_LAYOUT_STORAGE_KEY);
+  } catch {}
+}
+
+function hasLivingRoomViewport() {
+  const width = Math.max(window.innerWidth || 0, window.screen?.width || 0);
+  const height = Math.max(window.innerHeight || 0, window.screen?.height || 0);
+  const ratio = height > 0 ? width / height : 0;
+  return width >= 960 && height >= 520 && ratio >= 1.68 && ratio <= 1.92;
+}
+
 function isLikelyAndroidTv() {
   if (!isAndroidLandscape()) return false;
+  if (touchDeviceSeen) return false;
 
   const userAgent = navigator.userAgent || '';
   const explicitTvAgent = /Android TV|GoogleTV|Google TV|BRAVIA|SHIELD|AFT[A-Z0-9]*|ADT-|sdk_google_atv|sdk_google_tv|SmartTV|MiTV/i
@@ -942,7 +1021,7 @@ function isLikelyAndroidTv() {
   // points. Phones/tablets do, so this keeps their landscape UI untouched.
   const noTouchInput = Number(navigator.maxTouchPoints || 0) === 0;
 
-  return explicitTvAgent || noTouchInput;
+  return explicitTvAgent || noTouchInput || hasRememberedTvLayout() || hasLivingRoomViewport();
 }
 
 function updateTvLayoutMode() {
@@ -961,6 +1040,10 @@ function updateTvLayoutMode() {
   body.classList.toggle('tvLayoutMode', shouldUseTvLayout);
 }
 
+export function primeTvLayoutMode() {
+  updateTvLayoutMode();
+}
+
 
 function homeHeroActionTargets() {
   return Array.from(
@@ -975,6 +1058,30 @@ function focusHomeHeroAction(target) {
   // Android WebView otherwise tries to center the button and makes the hero
   // look like it jumped / got chopped in half.
   target.focus({ preventScroll: true });
+  return true;
+}
+
+const TV_PAGE_HERO_SELECTOR = [
+  '.homeV3Hero',
+  '.libraryArchiveHeroLive',
+  '.favoritesHero',
+  '.discoverHero',
+  '.followingHero',
+  '.joeAIHero',
+  '.analyticsLabHero',
+  '.upcomingHero',
+  '.settingsPageHeader',
+  '.aboutHelpHero',
+  '.cleanupHero'
+].join(', ');
+
+function revealFocusedPageHero(active, direction) {
+  if (direction !== 'ArrowUp' || !(active instanceof HTMLElement)) return false;
+  const hero = active.closest(TV_PAGE_HERO_SELECTOR);
+  if (!(hero instanceof HTMLElement)) return false;
+
+  active.focus({ preventScroll: true });
+  hero.scrollIntoView({ block: 'start', inline: 'nearest', behavior: 'smooth' });
   return true;
 }
 
@@ -1006,9 +1113,16 @@ function moveInsideHomeHero(active, direction) {
     return focusHomeHeroAction(first);
   }
 
-  // Do not let Up make WebView spatial-scroll the page.
+  // Up from either hero action is a deliberate "show me the hero" command.
+  // Keep focus stable, then reveal the hero from its top instead of allowing
+  // Android WebView to center the button and leave the heading off-screen.
   if (direction === 'ArrowUp') {
-    return focusHomeHeroAction(active);
+    focusHomeHeroAction(active);
+    const hero = active.closest('.homeV3Hero');
+    if (hero instanceof HTMLElement) {
+      hero.scrollIntoView({ block: 'start', inline: 'nearest', behavior: 'smooth' });
+    }
+    return true;
   }
 
   return false;
@@ -1023,20 +1137,94 @@ function moveFromHomeHeroToContinueWatching(active, direction) {
     return false;
   }
 
-  const firstWatchingCard = Array.from(
-    document.querySelectorAll('.homeV3TvContinue [data-tv-card="true"]')
-  ).find(isVisibleFocusable);
+  const firstWatchingCard = [
+    '.homeV3TvContinue [data-tv-card="true"]',
+    '.homeDecisionReturning [data-tv-card="true"]',
+    '.homeDecisionMissed [data-tv-card="true"]',
+    '.homeDecisionServices [data-tv-card="true"]',
+    '.homeDecisionQuickPick [data-tv-card="true"]'
+  ]
+    .flatMap((selector) => Array.from(document.querySelectorAll(selector)))
+    .find(isVisibleFocusable);
 
   if (!(firstWatchingCard instanceof HTMLElement)) return false;
 
   firstWatchingCard.focus({ preventScroll: true });
-  firstWatchingCard.scrollIntoView({
-    block: 'nearest',
-    inline: 'nearest',
-    behavior: 'smooth'
-  });
 
   return true;
+}
+
+function moveInsideHomeDecisionCard(active, direction) {
+  if (!(active instanceof HTMLElement)) return false;
+
+  const card = active.closest('.homeDecisionCard');
+  if (!(card instanceof HTMLElement)) return false;
+
+  const actions = Array.from(
+    card.querySelectorAll('[data-tv-home-action="true"]:not([disabled])')
+  ).filter(isVisibleFocusable);
+  if (!actions.length) return false;
+
+  if (active === card) {
+    if (direction !== 'ArrowDown') return false;
+    actions[0].focus({ preventScroll: true });
+    return true;
+  }
+
+  const index = actions.indexOf(active);
+  if (index < 0) return false;
+
+  if (direction === 'ArrowLeft' || direction === 'ArrowRight') {
+    const offset = direction === 'ArrowRight' ? 1 : -1;
+    const next = actions[index + offset];
+    if (next instanceof HTMLElement) next.focus({ preventScroll: true });
+    return true;
+  }
+
+  if (direction === 'ArrowUp') {
+    const activeRect = active.getBoundingClientRect();
+    const activeX = activeRect.left + (activeRect.width / 2);
+    const previousRow = actions
+      .filter((candidate) => candidate !== active)
+      .map((candidate) => {
+        const rect = candidate.getBoundingClientRect();
+        return {
+          candidate,
+          dy: activeRect.top - rect.top,
+          dx: Math.abs((rect.left + (rect.width / 2)) - activeX)
+        };
+      })
+      .filter(({ dy }) => dy > 4)
+      .sort((a, b) => (a.dy + (a.dx * 2)) - (b.dy + (b.dx * 2)))[0]?.candidate;
+    (previousRow || card).focus({ preventScroll: true });
+    return true;
+  }
+
+  if (direction === 'ArrowDown') {
+    const activeRect = active.getBoundingClientRect();
+    const activeX = activeRect.left + (activeRect.width / 2);
+    const nextRow = actions
+      .filter((candidate) => candidate !== active)
+      .map((candidate) => {
+        const rect = candidate.getBoundingClientRect();
+        return {
+          candidate,
+          dy: rect.top - activeRect.top,
+          dx: Math.abs((rect.left + (rect.width / 2)) - activeX)
+        };
+      })
+      .filter(({ dy }) => dy > 4)
+      .sort((a, b) => (a.dy + (a.dx * 2)) - (b.dy + (b.dx * 2)))[0]?.candidate;
+    if (nextRow instanceof HTMLElement) {
+      nextRow.focus({ preventScroll: true });
+      return true;
+    }
+
+    moveBetweenTvCards(card, direction);
+    return true;
+  }
+
+  return false;
 }
 
 
@@ -1286,6 +1474,10 @@ function moveIntoDiscoverShelfCards(active, direction) {
       return focusDiscoverCard(firstVisibleDiscoverShelfCard());
     }
 
+    const hero = document.querySelector('.discoverPage .discoverHero');
+    if (hero instanceof HTMLElement) {
+      hero.scrollIntoView({ block: 'start', inline: 'nearest', behavior: 'smooth' });
+    }
     return true;
   }
 
@@ -1512,7 +1704,7 @@ function focusFollowingTarget(target) {
 
   const section = target.closest('.followingUpdates, .followingCard, .followingHero');
   (section || target).scrollIntoView({
-    block: 'center',
+    block: section?.classList.contains('followingHero') ? 'start' : 'center',
     inline: 'nearest',
     behavior: 'smooth'
   });
@@ -1619,7 +1811,7 @@ function focusAnalyticsTarget(target) {
   );
 
   (section || target).scrollIntoView({
-    block: 'center',
+    block: target.classList.contains('analyticsLabHero') ? 'start' : 'center',
     inline: 'nearest',
     behavior: 'smooth'
   });
@@ -1796,7 +1988,7 @@ function focusUpcomingTarget(target) {
 
   const section = target.closest('.upcomingHero, .upcomingToolbar, .upcomingCard');
   (section || target).scrollIntoView({
-    block: 'center',
+    block: section?.classList.contains('upcomingHero') ? 'start' : 'center',
     inline: 'nearest',
     behavior: 'smooth'
   });
@@ -1888,9 +2080,23 @@ export function initializeTvFocusManager() {
   updateTvLayoutMode();
   window.requestAnimationFrame(updateTvLayoutMode);
   window.setTimeout(updateTvLayoutMode, 80);
+  const focusMutationObserver = new MutationObserver(() => {
+    if (pendingInitialHomeFocus && !hasUsefulFocus()) {
+      window.requestAnimationFrame(() => {
+        if (focusFirstContentControl()) pendingInitialHomeFocus = false;
+      });
+    }
+    if (!lastContentFocus || lastContentFocus.isConnected) return;
+    window.requestAnimationFrame(() => restoreHomeFocusAfterShelfRemoval(lastContentFocus));
+  });
+  focusMutationObserver.observe(document.getElementById('root') || document.body, {
+    childList: true,
+    subtree: true
+  });
 
   function enableTvInputMode() {
     document.body?.classList.add('tvInputMode');
+    if (isAndroidLandscape()) rememberTvLayout();
     updateTvLayoutMode();
 
     if (document.body?.classList.contains('tvLayoutMode')) {
@@ -1906,7 +2112,11 @@ export function initializeTvFocusManager() {
     }
   }
 
-  function disableTvInputMode() {
+  function disableTvInputMode(event) {
+    if (event?.type === 'touchstart' || event?.pointerType === 'touch') {
+      touchDeviceSeen = true;
+      forgetTvLayout();
+    }
     document.body?.classList.remove('tvInputMode');
 
     // Re-evaluate after pointer/touch input. This protects landscape Android
@@ -1925,9 +2135,31 @@ export function initializeTvFocusManager() {
 
     const active = document.activeElement;
 
+    // DetailModal owns its complete D-pad graph. Do not let the global
+    // geometry fallback overwrite the target selected by the modal handler.
+    if (
+      document.body?.classList.contains('tvLayoutMode')
+      && active instanceof HTMLElement
+      && active.closest('[data-tv-detail-modal="true"]')
+      && event.key.startsWith('Arrow')
+    ) {
+      return;
+    }
+
     const joeAIPageVisible = Boolean(document.querySelector('.joeAICommandCenter'));
     const activeInSidebar = active instanceof HTMLElement && Boolean(active.closest('.sidebar'));
     const activeInJoeAI = active instanceof HTMLElement && Boolean(active.closest('.joeAICommandCenter'));
+
+    // Every page hero follows the same TV contract: one UP from a focused
+    // hero control reveals the hero from its top without changing focus.
+    if (
+      document.body?.classList.contains('tvLayoutMode')
+      && revealFocusedPageHero(active, event.key)
+    ) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
 
     // Home hero entry + horizontal movement are deterministic and deliberately
     // do not scroll the document. This prevents Android WebView from centering
@@ -1945,6 +2177,18 @@ export function initializeTvFocusManager() {
     if (
       document.body?.classList.contains('tvLayoutMode')
       && moveFromHomeHeroToContinueWatching(active, event.key)
+    ) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
+    // Home decision cards expose their actions as a compact remote-friendly
+    // row. DOWN enters the row, Left/Right moves across it, and DOWN at the
+    // bottom continues to the next Home shelf.
+    if (
+      document.body?.classList.contains('tvLayoutMode')
+      && moveInsideHomeDecisionCard(active, event.key)
     ) {
       event.preventDefault();
       event.stopPropagation();
@@ -2159,7 +2403,9 @@ export function initializeTvFocusManager() {
     // If a page opens with focus nowhere useful, give WebView a real starting
     // point. ArrowLeft is left alone so Sidebar.jsx can bridge straight into
     // the command rail when appropriate.
-    if (event.key !== 'ArrowLeft' && focusFirstContentControl()) {
+    if (event.key !== 'ArrowLeft') {
+      if (focusFirstContentControl()) pendingInitialHomeFocus = false;
+      else pendingInitialHomeFocus = true;
       event.preventDefault();
     }
   }
@@ -2207,6 +2453,7 @@ export function initializeTvFocusManager() {
 
   cleanupFocusManager = () => {
     window.removeEventListener('keydown', handleKeyDown, true);
+    focusMutationObserver.disconnect();
     window.removeEventListener('scroll', scheduleJoeAIActiveCardUpdate);
     window.removeEventListener('resize', updateTvLayoutMode);
     document.removeEventListener('focusin', handleFocusIn);
@@ -2222,6 +2469,7 @@ export function initializeTvFocusManager() {
     }
     document.body?.classList.remove('tvLayoutMode');
     lastContentFocus = null;
+    pendingInitialHomeFocus = false;
     cleanupFocusManager = null;
   };
 

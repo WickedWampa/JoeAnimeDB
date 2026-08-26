@@ -200,6 +200,20 @@ export function applyBackupPreferences(preferences = {}) {
       }
     } catch {}
   });
+
+  // Writes to localStorage in this window do not emit a native storage event.
+  // Wake any mounted Home/Details views after backup or Cloud Sync restores
+  // the user's service selections.
+  if (Object.prototype.hasOwnProperty.call(preferences, 'streamingApps')) {
+    let streamingApps = [];
+    try {
+      const parsed = JSON.parse(localStorage.getItem('joeanime-streaming-apps-v1') || '[]');
+      if (Array.isArray(parsed)) streamingApps = parsed;
+    } catch {}
+    try {
+      window.dispatchEvent(new CustomEvent('joeanime:streaming-apps-changed', { detail: streamingApps }));
+    } catch {}
+  }
 }
 
 export function exportDiagnostics({

@@ -20,6 +20,7 @@ import {
   Radio,
   CalendarClock,
   RefreshCw,
+  Wifi,
   Grid2X2,
   List,
   } from 'lucide-react';
@@ -27,8 +28,14 @@ import { Poster } from '../components/Poster';
 import { sameAnimeIdentity } from '../services/titleIdentity';
 import { classifyAnimeRelease } from '../services/releaseState';
 import { buildDiscoverPlan } from '../services/recommendationEngineV3';
-import { isNativeAndroid } from '../platform/runtime';
+import { isNativeAndroid, openExternalUrl } from '../platform/runtime';
 import { buildQuickAddEntry } from '../services/quickAdd';
+import { buildCachedServiceDiscoverPool } from '../services/discoverServicePool';
+import {
+  getSavedStreamingApps,
+  getSavedWatchRegion,
+  getWatchmodeProviderCacheSnapshot
+} from '../services/watchmodeService';
 import {
   contentSafetyModeLabel,
   filterContentBySafety,
@@ -502,6 +509,9 @@ function DiscoverCard({
       <div className="discoverCardCopy">
         <strong>{titleOf(item)}</strong>
         <small>{(item.genres || []).slice(0, 2).join(' + ') || item.studio || 'Recommendation catalog'}</small>
+        {item.discoverServiceLabel && (
+          <small className="discoverServiceLine">On {item.discoverServiceLabel}</small>
+        )}
         <span>
           {item.year && <b>{item.year}</b>}
           {item.type && <b>{item.type}</b>}
@@ -555,6 +565,18 @@ function DiscoverCard({
         )}
 
         <div className="discoverCardActions">
+          {item.discoverPreferredProvider?.url && (
+            <button
+              type="button"
+              className="discoverWatchNow"
+              onClick={(event) => {
+                event.stopPropagation();
+                openExternalUrl(item.discoverPreferredProvider.url);
+              }}
+            >
+              Watch
+            </button>
+          )}
           <button
             type="button"
             className="discoverQuickAdd"
@@ -997,6 +1019,7 @@ function CatalogBrowser({
 }
 
 function DiscoverPage({
+  active = true,
   anime = [],
   catalog: rawCatalog = [],
   setSelected,
@@ -1042,13 +1065,28 @@ function DiscoverPage({
       item?.discoverBucket === 'upcoming'
     );
   });
+  const [serviceCacheRevision, setServiceCacheRevision] = useState(0);
+
+  useEffect(() => {
+    if (!active) return undefined;
+    const refreshServicePool = () => setServiceCacheRevision((current) => current + 1);
+    refreshServicePool();
+    window.addEventListener('joeanime:watchmode-cache-changed', refreshServicePool);
+    window.addEventListener('joeanime:streaming-apps-changed', refreshServicePool);
+    window.addEventListener('joeanime:watch-region-changed', refreshServicePool);
+    return () => {
+      window.removeEventListener('joeanime:watchmode-cache-changed', refreshServicePool);
+      window.removeEventListener('joeanime:streaming-apps-changed', refreshServicePool);
+      window.removeEventListener('joeanime:watch-region-changed', refreshServicePool);
+    };
+  }, [active]);
 
   // Paint the hero and page foundation before creating the catalog engine and
   // poster shelves. Android gets wider breathing room between stages; desktop
   // advances quickly but still yields between each group so the first visit
   // feels immediate. Desktop remains mounted by App.jsx after this finishes.
   useEffect(() => {
-    if (renderStage >= DISCOVER_FINAL_STAGE) {
+    if (!active || renderStage >= DISCOVER_FINAL_STAGE) {
       return undefined;
     }
 
@@ -1075,13 +1113,13 @@ function DiscoverPage({
         window.cancelIdleCallback(idleHandle);
       }
     };
-  }, [mobileDiscover, renderStage]);
+  }, [active, mobileDiscover, renderStage]);
 
   // The desktop stages normally finish before a status card would help. Only
   // reveal it when loading lasts long enough to be perceived; Android keeps
   // the immediate progress feedback that works well on smaller devices.
   useEffect(() => {
-    if (mobileDiscover || discoverReady) {
+    if (!active || mobileDiscover || discoverReady) {
       setShowDesktopProgress(false);
       return undefined;
     }
@@ -1091,10 +1129,10 @@ function DiscoverPage({
     }, 260);
 
     return () => window.clearTimeout(timeoutHandle);
-  }, [discoverReady, mobileDiscover]);
+  }, [active, discoverReady, mobileDiscover]);
 
   useEffect(() => {
-    if (!catalogStageReady || lastCatalogSyncedRef.current === catalog) return;
+    if (!active || !catalogStageReady || lastCatalogSyncedRef.current === catalog) return;
     lastCatalogSyncedRef.current = catalog;
 
     const tagged = (catalog || []).filter((item) =>
@@ -1113,9 +1151,10 @@ function DiscoverPage({
         current === 'idle' || current === 'cached' ? 'cached' : current
       );
     }
-  }, [catalog, catalogStageReady]);
+  }, [active, catalog, catalogStageReady]);
 
   useEffect(() => {
+    if (!active) return;
     if (!refreshLiveDiscover) return;
     if (!discoverReady) return;
     if (liveDiscoverCacheIsFresh()) return;
@@ -1128,7 +1167,7 @@ function DiscoverPage({
     if (!Number.isFinite(lastSync) || Date.now() - lastSync > oneDay) {
       void refreshLive();
     }
-  }, [discoverReady, refreshLiveDiscover]);
+  }, [active, discoverReady, refreshLiveDiscover]);
 
   const libraryLookup = useMemo(() => {
     const kitsuIds = new Set();
@@ -1244,6 +1283,16 @@ function DiscoverPage({
       );
     });
   }, [discoverCatalog, joeAIState, libraryLookup, catalogStageReady]);
+
+  const cachedServicePool = useMemo(() => {
+    if (!catalogStageReady) return [];
+    return buildCachedServiceDiscoverPool(
+      unseenCatalog,
+      getSavedStreamingApps(),
+      getSavedWatchRegion(),
+      getWatchmodeProviderCacheSnapshot()
+    );
+  }, [catalogStageReady, serviceCacheRevision, unseenCatalog]);
 
   const airingNow = useMemo(
     () => [...unseenCatalog]
@@ -1761,6 +1810,20 @@ function DiscoverPage({
       {hubMode === 'recommendations' && (<>
       {stageReady(1) && (<>
       <Shelf
+        icon={<Wifi />}
+        title="On Your Services"
+        subtitle="Matches already found on your selected streaming services. Cached availability by Watchmode."
+        items={cachedServicePool}
+        onOpen={setSelected}
+        onAddWatching={addWatching}
+        onToggleFollow={toggleFollow}
+        onAddCompleted={addCompleted}
+        onShowAnother={showAnother}
+        onRecommendationFeedback={saveDiscoverFeedback}
+        addingKey={addingKey}
+      />
+
+      <Shelf
         icon={<Radio />}
         title="Airing Now"
         subtitle="Live current-season anime, ranked against your taste and filtered against your library."
@@ -2057,13 +2120,16 @@ function DiscoverPage({
   );
 }
 
-// Navigation state lives in App, so it changes whenever the user switches
-// pages. Ignore callback identity churn from those parent renders and only
-// rebuild Discover when its actual data changes. Internal state updates (live
-// refreshes, browsing, feedback, etc.) still render normally.
+// Discover is mounted lazily and then retained by App. Once hidden, ignore all
+// parent updates until it becomes active again. The activating render receives
+// the latest props, while Home and the other pages pay no hidden Discover CPU
+// cost. Internal Discover state remains intact between visits.
 function discoverDataIsEqual(previous, next) {
+  if (!previous.active && !next.active) return true;
+
   return (
-    previous.anime === next.anime
+    previous.active === next.active
+    && previous.anime === next.anime
     && previous.catalog === next.catalog
     && previous.joeAIState === next.joeAIState
     && previous.contentSafetyMode === next.contentSafetyMode

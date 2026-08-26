@@ -18,7 +18,58 @@ import { auditGenomeCoverage } from '../ai/genome/runtime/autoGenomeRuntime';
 import { preservePersonalAnimeData } from '../services/personalAnimeData';
 import { promoteCatalogTitleToLibrary } from '../services/quickAdd';
 import { sanitizeJoeAIConversationMessages } from '../ai/intelligence/joeAIIntelligence';
+import {
+  deferUntilAfterFirstPaint,
+  measureAsyncStartupTask,
+  measureStartupTask
+} from '../services/startupPerformance';
+import { repairLibraryKitsuLinkages } from '../services/libraryKitsuLinkageRepair';
+import { kitsuIdOf } from '../services/kitsuRelationshipService';
 
+const HOME_BOOTSTRAP_KEY = 'joeanime-home-bootstrap-v1';
+
+function homeBootstrapItem(item = {}) {
+  const fields = [
+    'id', 'kitsuId', 'kitsu_id', 'malId', 'title', 'officialTitle', 'englishTitle',
+    'cover', 'poster', 'posterUrl', 'image', 'imageUrl', 'status', 'watchedEpisodes',
+    'episodesWatched', 'episodeProgress', 'progress', 'watchedEpisodeCount',
+    'currentEpisode', 'episodeCount', 'episodes', 'totalEpisodes', 'favorite',
+    'joeScore', 'score', 'rating', 'rewatches', 'type', 'year', 'genres', 'followed'
+  ];
+  return Object.fromEntries(fields.filter((field) => item[field] != null).map((field) => [field, item[field]]));
+}
+
+export function readHomeBootstrapSnapshot() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(HOME_BOOTSTRAP_KEY) || 'null');
+    if (!parsed || !Array.isArray(parsed.anime)) return null;
+    return {
+      ...seedData,
+      anime: parsed.anime,
+      catalog: Array.isArray(parsed.catalog) ? parsed.catalog : [],
+      profile: parsed.profile && typeof parsed.profile === 'object' ? parsed.profile : seedData.profile
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function writeHomeBootstrapSnapshot(database = {}) {
+  try {
+    const snapshot = {
+      savedAt: Date.now(),
+      anime: (Array.isArray(database.anime) ? database.anime : []).map(homeBootstrapItem),
+      catalog: (Array.isArray(database.catalog) ? database.catalog : [])
+        .filter((item) => item.followed)
+        .map(homeBootstrapItem),
+      profile: database.profile || {}
+    };
+    localStorage.setItem(HOME_BOOTSTRAP_KEY, JSON.stringify(snapshot));
+    return snapshot;
+  } catch {
+    return null;
+  }
+}
 
 function hasGoodMetadata(item = {}) {
   const hasGenres = Array.isArray(item.genres) && item.genres.length > 0;
@@ -48,6 +99,11 @@ function metadataIsStale(item = {}) {
 }
 
 function shouldRefreshMetadata(item = {}) {
+  // Identity-review titles must be resolved by the existing Needs Review flow.
+  // A background metadata refresh must never turn an ambiguous candidate into
+  // a persisted Kitsu identity merely because it ranked first.
+  if (item.identityNeedsReview) return false;
+
   const studioRepairAttempts = Number(
     item.studioRepairAttempts ??
     item.syncStatus?.studioRepairAttempts ??
@@ -144,7 +200,14 @@ function bootstrapCatalog(database = {}) {
 }
 
 export function useAnimeLibrary() {
-  const [data, setData] = useState(() => ({ ...seedData, anime: [], catalog: [] }));
+  const initialDataRef = useRef(undefined);
+  if (initialDataRef.current === undefined) {
+    initialDataRef.current = measureStartupTask(
+      'homeBootstrapRead',
+      () => readHomeBootstrapSnapshot()
+    );
+  }
+  const [data, setData] = useState(() => initialDataRef.current || { ...seedData, anime: [], catalog: [] });
   const dataRef = useRef(data);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
@@ -158,8 +221,18 @@ export function useAnimeLibrary() {
   }, [data]);
 
   useEffect(() => {
+    if (loading) return undefined;
+    return deferUntilAfterFirstPaint(() => {
+      measureStartupTask('homeBootstrapWrite', () => writeHomeBootstrapSnapshot(data), {
+        libraryTitleCount: data.anime?.length || 0
+      });
+    });
+  }, [data, loading]);
+
+  useEffect(() => {
     let alive = true;
     let contentRatingTimer;
+    let cancelCatalogBootstrap;
 
     function startContentRatingBackfill(database) {
       contentRatingTimer = window.setTimeout(async () => {
@@ -195,15 +268,32 @@ export function useAnimeLibrary() {
           return;
         }
 
-        const loaded = await animeRepository.getDatabase();
+        const loaded = await measureAsyncStartupTask(
+          'localLibraryRetrieval',
+          () => animeRepository.getDatabase()
+        );
         if (alive) {
           if (requestedNewUserMode && window.JoeAnimeDB?.desktop) {
             localStorage.removeItem('joeanime-new-user-mode');
             setNewUserMode(false);
           }
-          const bootstrapped = bootstrapCatalog(loaded);
-          setData(bootstrapped);
-          startContentRatingBackfill(bootstrapped);
+          dataRef.current = loaded;
+          setData(loaded);
+          setLoading(false);
+
+          // Live Discover merging and metadata backfill are useful, but neither
+          // belongs on the critical path to an interactive Home screen.
+          cancelCatalogBootstrap = deferUntilAfterFirstPaint(() => {
+            if (!alive || dataRef.current !== loaded) return;
+            const bootstrapped = measureStartupTask(
+              'catalogBootstrapMerge',
+              () => bootstrapCatalog(loaded),
+              { catalogTitleCount: loaded.catalog?.length || 0 }
+            );
+            dataRef.current = bootstrapped;
+            setData(bootstrapped);
+            startContentRatingBackfill(bootstrapped);
+          });
         }
       } catch (error) {
         console.error('Failed to load JoeAnimeDB database.', error);
@@ -216,6 +306,7 @@ export function useAnimeLibrary() {
     load();
     return () => {
       alive = false;
+      cancelCatalogBootstrap?.();
       window.clearTimeout(contentRatingTimer);
     };
   }, []);
@@ -1056,6 +1147,69 @@ export function useAnimeLibrary() {
       }
     }
 
+    // Phase 2: after the existing updater has completed, use the same safe
+    // identity rules as MAL import and Home to repair missing Kitsu links
+    // across every library status. Ambiguous or failed titles never abort the
+    // pass and never receive an untrusted Kitsu ID.
+    const linkageSummary = await repairLibraryKitsuLinkages({
+      library: savedData.anime || nextAnime,
+      catalog: savedData.catalog || [],
+      onProgress: ({ index, total, title }) => {
+        const percent = total ? 90 + Math.round((index / total) * 9) : 99;
+        setSyncProgress({
+          step: 2,
+          stepTotal: 2,
+          label: 'Safe Kitsu Linkage Repair',
+          processed: index,
+          total,
+          percent: Math.min(99, percent),
+          current: title
+        });
+        setSyncText(`Checking Kitsu linkage ${index}/${total}: ${title}`);
+      }
+    });
+
+    // Persist identity-only patches by JoeAnimeDB record ID. Never route this
+    // maintenance pass through replaceAll/upsert dedupe: a linkage repair must
+    // not replace, merge, or delete any library row.
+    const linkageCountBefore = (savedData.anime || nextAnime).length;
+    const newReviewUpdates = linkageSummary.updates.filter((update) => update.kind === 'review');
+    const preexistingReviewCount = linkageSummary.needsReview - newReviewUpdates.length;
+    let repairedPersisted = 0;
+    let reviewPersisted = 0;
+    let rejected = 0;
+
+    for (let index = 0; index < linkageSummary.updates.length; index += 1) {
+      const update = linkageSummary.updates[index];
+      setSyncText(`Saving safe Kitsu linkage ${index + 1}/${linkageSummary.updates.length}`);
+      const outcome = await animeRepository.updateAnimeIdentityLinkage(update.item);
+      if (outcome?.ok) {
+        if (update.kind === 'repaired') repairedPersisted += 1;
+        else reviewPersisted += 1;
+      } else {
+        rejected += 1;
+        console.warn('Safe Kitsu linkage update rejected:', {
+          id: update.item?.id,
+          title: update.item?.title,
+          reason: outcome?.reason || 'unknown'
+        });
+      }
+    }
+
+    savedData = await animeRepository.getDatabase();
+    const linkageCountAfter = (savedData.anime || []).length;
+    if (linkageCountAfter !== linkageCountBefore) {
+      throw new Error(
+        `Safe Kitsu linkage repair changed library count from ${linkageCountBefore} to ${linkageCountAfter}.`
+      );
+    }
+
+    linkageSummary.repaired = repairedPersisted;
+    linkageSummary.needsReview = preexistingReviewCount + reviewPersisted;
+    linkageSummary.unresolved += rejected;
+    linkageSummary.rejected = rejected;
+    linkageSummary.linkedAfter = (savedData.anime || []).filter((item) => Boolean(kitsuIdOf(item))).length;
+
     setSyncProgress({
       step: 2,
       stepTotal: 2,
@@ -1083,14 +1237,24 @@ export function useAnimeLibrary() {
         contentRatingsFailed: Number(catalogResult.contentRatings?.failed || 0),
         contentRatingsRemaining: Number(catalogResult.contentRatings?.remaining || 0)
       },
-      genome: genomeSummary
+      genome: genomeSummary,
+      kitsuLinkage: {
+        scanned: linkageSummary.scanned,
+        eligible: linkageSummary.eligible,
+        skippedLinked: linkageSummary.skippedLinked,
+        repaired: linkageSummary.repaired,
+        needsReview: linkageSummary.needsReview,
+        unresolved: linkageSummary.unresolved,
+        linkedBefore: linkageSummary.linkedBefore,
+        linkedAfter: linkageSummary.linkedAfter,
+        rejected: linkageSummary.rejected
+      }
     };
 
-    setSyncText(
-      missing
-        ? `Done — ${alreadyReady} skipped locally, ${updateQueue.length} refreshed, ${missing} poster(s) still need manual art. Catalog/genomes updated.`
-        : `Done — ${alreadyReady} skipped locally, ${updateQueue.length} refreshed. Catalog/genomes updated.`
-    );
+    const linkageText = `${linkageSummary.repaired} Kitsu link${linkageSummary.repaired === 1 ? '' : 's'} repaired, ` +
+      `${linkageSummary.needsReview} need review, ${linkageSummary.unresolved} unresolved` +
+      (linkageSummary.rejected ? ` (${linkageSummary.rejected} unsafe update${linkageSummary.rejected === 1 ? '' : 's'} rejected)` : '');
+    setSyncText(`Database updated — ${linkageText}${missing ? `; ${missing} poster(s) still need manual art` : ''}.`);
 
     await sleep(2200);
     document.body.style.cursor = 'default';

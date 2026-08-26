@@ -34,6 +34,25 @@
     0 0 24px color-mix(in srgb, var(--cyan) 15%, transparent);
 }
 
+.repairMetadataButton.needsMetadataRepair:not(:disabled) {
+  border-color: color-mix(in srgb, var(--detail-accent, var(--cyan)) 68%, var(--line));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--detail-accent, var(--cyan)) 18%, transparent),
+    0 0 20px color-mix(in srgb, var(--detail-accent, var(--cyan)) 24%, transparent);
+  animation: metadataRepairAttention 3.2s ease-in-out infinite;
+}
+
+.repairMetadataButton.needsMetadataRepair:not(:disabled):focus,
+.repairMetadataButton.needsMetadataRepair:not(:disabled):focus-visible {
+  outline: 3px solid var(--detail-accent, var(--cyan));
+  outline-offset: 3px;
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--bg) 88%, transparent),
+    0 0 0 6px color-mix(in srgb, var(--detail-accent, var(--cyan)) 88%, transparent),
+    0 0 28px color-mix(in srgb, var(--detail-accent, var(--cyan)) 32%, transparent);
+  animation-play-state: paused;
+}
+
 .repairMetadataButton:disabled {
   cursor: wait;
   opacity: .68;
@@ -82,8 +101,22 @@
   50% { opacity: 1; }
 }
 
+@keyframes metadataRepairAttention {
+  0%, 100% {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--detail-accent, var(--cyan)) 14%, transparent),
+      0 0 14px color-mix(in srgb, var(--detail-accent, var(--cyan)) 17%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--detail-accent, var(--cyan)) 24%, transparent),
+      0 0 24px color-mix(in srgb, var(--detail-accent, var(--cyan)) 29%, transparent);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .metadataRepairProgress {
+  .metadataRepairProgress,
+  .repairMetadataButton.needsMetadataRepair {
     animation: none;
   }
 }

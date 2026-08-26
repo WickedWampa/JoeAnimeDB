@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { AnimeCard } from '../components/AnimeCard';
 import { Poster } from '../components/Poster';
 import { buildLiveRankMap, score, sortAnimeByUserScore } from '../utils/animeUtils';
@@ -749,6 +749,15 @@ export function LibraryPage({
     [anime, showNeedsReview]
   );
 
+  // Reviewing the final Quick Add removes the review banner that normally
+  // contains the exit button. Return to the complete Library immediately so
+  // the user cannot be stranded on an empty review-only view.
+  useEffect(() => {
+    if (showNeedsReview && needsReviewCount === 0) {
+      setShowNeedsReview(false);
+    }
+  }, [needsReviewCount, showNeedsReview]);
+
   // finalRank is legacy persisted data, so it can become stale whenever a score changes.
   // Build the visible ranking from the current Joe scores on every render instead.
   const liveRankMap = useMemo(() => buildLiveRankMap(libraryForDupes), [libraryForDupes]);
@@ -847,15 +856,20 @@ export function LibraryPage({
       {rankedAnime.length === 0 ? (
         <section className={`libraryStateCard ${hasNoResults ? 'noResults' : 'emptyLibrary'}`} role="status">
           <span className="libraryStateIcon" aria-hidden="true">{hasNoResults ? '⌕' : '▤'}</span>
-          <p className="eyebrow">{hasNoResults ? 'No Matches' : 'Your Archive Awaits'}</p>
-          <h2>{hasNoResults ? 'No titles match this search' : 'Build your anime library'}</h2>
+          <p className="eyebrow">{showNeedsReview ? 'Review Complete' : hasNoResults ? 'No Matches' : 'Your Archive Awaits'}</p>
+          <h2>{showNeedsReview ? 'No titles remain in this review view' : hasNoResults ? 'No titles match this search' : 'Build your anime library'}</h2>
           <p>
-            {hasNoResults
+            {showNeedsReview
+              ? 'Return to the complete Library to keep browsing your collection.'
+              : hasNoResults
               ? `Nothing in your library matches “${query.trim()}”. Try a title, studio, genre, status, year, or priority.`
               : (emptyMessage || 'Add a title, paste a watch list, or import a saved list from Settings to get started.')}
           </p>
           <div className="libraryStateActions">
-            {hasNoResults && onClearSearch && (
+            {showNeedsReview && (
+              <button type="button" onClick={() => setShowNeedsReview(false)}>Show All Titles</button>
+            )}
+            {hasNoResults && query.trim() && onClearSearch && (
               <button type="button" onClick={onClearSearch}>Clear Search</button>
             )}
             {canAddAnime && (
@@ -941,6 +955,7 @@ export function LibraryPage({
               totalCount={libraryForDupes.length}
               setSelected={setSelected}
               updateAnime={updateAnime}
+              showReviewBadge={false}
             />
           ))}
         </section>

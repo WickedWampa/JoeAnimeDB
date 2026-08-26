@@ -1,6 +1,11 @@
 const MATCH_TTL_SECONDS = 60 * 60 * 24 * 30;
-const PROVIDER_TTL_SECONDS = 60 * 60 * 24 * 7;
+const PROVIDER_TTL_SECONDS = 60 * 60 * 24 * 28;
+const PROVIDER_STALE_TTL_SECONDS = 60 * 60 * 24 * 30;
 const REVIEW_TTL_SECONDS = 60 * 60 * 24;
+const DEFAULT_MONTHLY_CREDIT_LIMIT = 2000;
+const MAX_FREE_PLAN_CREDIT_LIMIT = 2400;
+const QUOTA_KEY_PREFIX = 'watchmode:quota:v1';
+const UPSTREAM_PAUSE_KEY = 'watchmode:quota:v1:upstream-pause';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -9,15 +14,26 @@ const CORS_HEADERS = {
   'X-Content-Type-Options': 'nosniff'
 };
 
-function json(payload, status = 200, cacheControl = 'no-store') {
+function json(payload, status = 200, cacheControl = 'no-store', extraHeaders = {}) {
   return new Response(JSON.stringify(payload), {
     status,
     headers: {
       ...CORS_HEADERS,
       'Content-Type': 'application/json; charset=utf-8',
-      'Cache-Control': cacheControl
+      'Cache-Control': cacheControl,
+      ...extraHeaders
     }
   });
+}
+
+class WatchmodePolicyError extends Error {
+  constructor(message, { code, status, retryAfterSeconds = 0 } = {}) {
+    super(message);
+    this.name = 'WatchmodePolicyError';
+    this.code = code;
+    this.status = status;
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
 }
 
 function fold(value = '') {
@@ -110,6 +126,171 @@ function edgeCacheRequest(key) {
   return new Request(`https://joeanimedb-watchmode-cache.invalid/${key}`, { method: 'GET' });
 }
 
+function sharedCacheBackend(context) {
+  const namespace = context.env.WATCHMODE_CACHE;
+  return namespace?.get && namespace?.put ? 'KV' : 'EDGE';
+}
+
+function monthlyCreditLimit(env = {}) {
+  const configured = Number(env.WATCHMODE_MONTHLY_CREDIT_LIMIT);
+  if (!Number.isFinite(configured)) return DEFAULT_MONTHLY_CREDIT_LIMIT;
+  return Math.max(0, Math.min(MAX_FREE_PLAN_CREDIT_LIMIT, Math.floor(configured)));
+}
+
+function quotaWindow(now = new Date()) {
+  const year = now.getUTCFullYear();
+  const month = now.getUTCMonth();
+  const resetAt = new Date(Date.UTC(year, month + 1, 1));
+  return {
+    key: `${QUOTA_KEY_PREFIX}:${year}-${String(month + 1).padStart(2, '0')}`,
+    resetAt,
+    retryAfterSeconds: Math.max(60, Math.ceil((resetAt.getTime() - now.getTime()) / 1000))
+  };
+}
+
+async function reserveUpstreamCredit(context) {
+  const namespace = context.env.WATCHMODE_CACHE;
+  if (!namespace?.get || !namespace?.put) {
+    throw new WatchmodePolicyError(
+      'Where to Watch needs its shared cache before a fresh lookup can run.',
+      { code: 'shared_cache_required', status: 503, retryAfterSeconds: 3600 }
+    );
+  }
+
+  const limit = monthlyCreditLimit(context.env);
+  const window = quotaWindow();
+  let current;
+  try {
+    const pause = await namespace.get(UPSTREAM_PAUSE_KEY, { type: 'json' });
+    const pausedUntil = Number(pause?.pausedUntil || 0);
+    if (pausedUntil > Date.now()) {
+      throw new WatchmodePolicyError(
+        'Watchmode temporarily rate-limited fresh lookups. Cached results are still available.',
+        {
+          code: 'upstream_paused',
+          status: 429,
+          retryAfterSeconds: Math.max(60, Math.ceil((pausedUntil - Date.now()) / 1000))
+        }
+      );
+    }
+    current = await namespace.get(window.key, { type: 'json' });
+  } catch (error) {
+    if (error instanceof WatchmodePolicyError) throw error;
+    throw new WatchmodePolicyError(
+      'Where to Watch could not verify the free monthly request budget.',
+      { code: 'quota_unavailable', status: 503, retryAfterSeconds: 3600 }
+    );
+  }
+
+  const providerQuota = Math.max(0, Number(current?.providerQuota || 0));
+  const effectiveLimit = providerQuota > 0 ? Math.min(limit, providerQuota) : limit;
+  const used = Math.max(0, Number(current?.used || 0));
+  if (used >= effectiveLimit) {
+    throw new WatchmodePolicyError(
+      'The free monthly Where to Watch lookup budget is exhausted. Cached results are still available.',
+      { code: 'quota_exhausted', status: 429, retryAfterSeconds: window.retryAfterSeconds }
+    );
+  }
+
+  const next = {
+    used: used + 1,
+    limit,
+    effectiveLimit,
+    providerQuota: providerQuota || null,
+    accounting: current?.accounting || 'estimated-upstream-call',
+    mode: 'zero-dollar',
+    updatedAt: new Date().toISOString(),
+    resetsAt: window.resetAt.toISOString()
+  };
+  try {
+    await namespace.put(window.key, JSON.stringify(next), {
+      expirationTtl: window.retryAfterSeconds + (24 * 60 * 60)
+    });
+  } catch {
+    throw new WatchmodePolicyError(
+      'Where to Watch could not reserve a free monthly request credit.',
+      { code: 'quota_unavailable', status: 503, retryAfterSeconds: 3600 }
+    );
+  }
+
+  return next;
+}
+
+function quotaHeader(response, name) {
+  const value = String(response?.headers?.get?.(name) || '').trim();
+  if (!/^\d+$/.test(value)) return null;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
+}
+
+async function reconcileUpstreamQuota(context, response, reservation) {
+  const authoritativeUsed = quotaHeader(response, 'X-Account-Quota-Used');
+  const providerQuota = quotaHeader(response, 'X-Account-Quota');
+  if (authoritativeUsed === null && providerQuota === null) return reservation;
+
+  const namespace = context.env.WATCHMODE_CACHE;
+  const window = quotaWindow();
+  const configuredLimit = monthlyCreditLimit(context.env);
+  let current;
+  try {
+    current = await namespace.get(window.key, { type: 'json' });
+  } catch {
+    throw new WatchmodePolicyError(
+      'Where to Watch could not reconcile the authoritative monthly request budget.',
+      { code: 'quota_unavailable', status: 503, retryAfterSeconds: 3600 }
+    );
+  }
+
+  const savedProviderQuota = Math.max(0, Number(current?.providerQuota || 0)) || null;
+  const confirmedProviderQuota = providerQuota ?? savedProviderQuota;
+  const effectiveLimit = confirmedProviderQuota
+    ? Math.min(configuredLimit, confirmedProviderQuota)
+    : configuredLimit;
+  const reconciled = {
+    ...reservation,
+    used: Math.max(
+      Number(reservation?.used || 0),
+      Number(current?.used || 0),
+      authoritativeUsed ?? 0
+    ),
+    limit: configuredLimit,
+    effectiveLimit,
+    providerQuota: confirmedProviderQuota,
+    authoritativeUsed: authoritativeUsed ?? current?.authoritativeUsed ?? null,
+    accounting: authoritativeUsed === null ? 'estimated-upstream-call' : 'watchmode-account-header',
+    updatedAt: new Date().toISOString(),
+    resetsAt: window.resetAt.toISOString()
+  };
+
+  try {
+    await namespace.put(window.key, JSON.stringify(reconciled), {
+      expirationTtl: window.retryAfterSeconds + (24 * 60 * 60)
+    });
+  } catch {
+    throw new WatchmodePolicyError(
+      'Where to Watch could not save the authoritative monthly request budget.',
+      { code: 'quota_unavailable', status: 503, retryAfterSeconds: 3600 }
+    );
+  }
+
+  return reconciled;
+}
+
+async function pauseUpstream(context, retryAfterSeconds) {
+  const namespace = context.env.WATCHMODE_CACHE;
+  if (!namespace?.put) return;
+  const seconds = Math.max(60, Number(retryAfterSeconds || 0) || (15 * 60));
+  try {
+    await namespace.put(UPSTREAM_PAUSE_KEY, JSON.stringify({
+      pausedUntil: Date.now() + (seconds * 1000),
+      reason: 'rate_limited',
+      updatedAt: new Date().toISOString()
+    }), { expirationTtl: seconds });
+  } catch (error) {
+    console.warn('Could not persist the Watchmode rate-limit pause.', error);
+  }
+}
+
 async function readCache(context, key) {
   const namespace = context.env.WATCHMODE_CACHE;
   if (namespace?.get) {
@@ -152,9 +333,21 @@ async function writeCache(context, key, payload, ttl) {
   else await operation;
 }
 
-async function watchmodeJson(url) {
+async function watchmodeJson(context, url) {
+  const reservation = await reserveUpstreamCredit(context);
   const response = await fetch(url, { headers: { Accept: 'application/json' } });
-  if (!response.ok) throw new Error(`Watchmode request failed with status ${response.status}.`);
+  await reconcileUpstreamQuota(context, response, reservation);
+  if (!response.ok) {
+    if (response.status === 429) {
+      const retryAfter = Math.max(60, Number(response.headers.get('retry-after') || 0) || (15 * 60));
+      await pauseUpstream(context, retryAfter);
+      throw new WatchmodePolicyError(
+        'Watchmode temporarily rate-limited fresh lookups. Cached results are still available.',
+        { code: 'upstream_rate_limited', status: 429, retryAfterSeconds: retryAfter }
+      );
+    }
+    throw new Error(`Watchmode request failed with status ${response.status}.`);
+  }
   return response.json();
 }
 
@@ -163,7 +356,8 @@ async function findTitleMatch(context, identity, apiKey, forceReview = false) {
     title: identity.names[0],
     aliases: identity.names.slice(1).join('|'),
     year: identity.year || '',
-    type: identity.types.join(',')
+    type: identity.types.join(','),
+    region: identity.region
   });
   if (!forceReview) {
     const cached = await readCache(context, key);
@@ -175,7 +369,7 @@ async function findTitleMatch(context, identity, apiKey, forceReview = false) {
   url.searchParams.set('search_field', 'name');
   url.searchParams.set('search_value', identity.searchTitle);
 
-  const result = await watchmodeJson(url);
+  const result = await watchmodeJson(context, url);
   const candidates = (Array.isArray(result.title_results) ? result.title_results : [])
     .map((candidate) => scoreCandidate(candidate, identity))
     .filter((candidate) => Number.isInteger(candidate.id) && candidate.id > 0 && candidate.name)
@@ -214,13 +408,26 @@ async function findTitleMatch(context, identity, apiKey, forceReview = false) {
 async function fetchProviders(context, watchmodeId, region, apiKey) {
   const key = await cacheKey('providers', { watchmodeId, region });
   const cached = await readCache(context, key);
-  if (cached) return { providers: cached.payload.providers || [], cache: cached.source };
+  const cachedProviders = Array.isArray(cached?.payload?.providers) ? cached.payload.providers : null;
+  const freshUntil = Number(cached?.payload?.freshUntil || 0);
+  const isFresh = Boolean(cachedProviders && (!freshUntil || freshUntil > Date.now()));
+  if (isFresh) return { providers: cachedProviders, cache: cached.source, stale: false };
 
   const url = new URL(`https://api.watchmode.com/v1/title/${watchmodeId}/sources/`);
   url.searchParams.set('apiKey', apiKey);
   url.searchParams.set('regions', region);
 
-  const sources = await watchmodeJson(url);
+  let sources;
+  try {
+    sources = await watchmodeJson(context, url);
+  } catch (error) {
+    const mayUseStale = error instanceof WatchmodePolicyError
+      && ['quota_exhausted', 'quota_unavailable', 'shared_cache_required', 'upstream_paused', 'upstream_rate_limited'].includes(error.code);
+    if (cachedProviders?.length && mayUseStale) {
+      return { providers: cachedProviders, cache: `${cached.source}_STALE`, stale: true };
+    }
+    throw error;
+  }
   const seen = new Set();
   const providers = (Array.isArray(sources) ? sources : [])
     .filter((source) => source.type === 'sub')
@@ -239,8 +446,14 @@ async function fetchProviders(context, watchmodeId, region, apiKey) {
     })
     .sort((left, right) => left.name.localeCompare(right.name));
 
-  await writeCache(context, key, { providers }, PROVIDER_TTL_SECONDS);
-  return { providers, cache: 'MISS' };
+  const hasProviders = providers.length > 0;
+  const freshnessTtl = hasProviders ? PROVIDER_TTL_SECONDS : REVIEW_TTL_SECONDS;
+  const storageTtl = hasProviders ? PROVIDER_STALE_TTL_SECONDS : REVIEW_TTL_SECONDS;
+  await writeCache(context, key, {
+    providers,
+    freshUntil: Date.now() + (freshnessTtl * 1000)
+  }, storageTtl);
+  return { providers, cache: 'MISS', stale: false };
 }
 
 function allowedRegions(env) {
@@ -261,6 +474,16 @@ export async function onRequestGet(context) {
     if (!apiKey) return json({ error: 'Where to Watch is not configured.' }, 503);
 
     const requestUrl = new URL(context.request.url);
+    const cacheBackend = sharedCacheBackend(context);
+    const requestMode = String(requestUrl.searchParams.get('requestMode') || 'interactive').toLowerCase();
+    if (requestMode !== 'interactive') {
+      return json({
+        status: 'disabled',
+        error: 'Automatic Watchmode catalog indexing is disabled in zero-dollar mode.',
+        zeroDollarMode: true,
+        cacheBackend
+      }, 403);
+    }
     const title = String(requestUrl.searchParams.get('title') || '').trim().slice(0, 180);
     const region = String(requestUrl.searchParams.get('region') || '').toUpperCase();
     const regions = allowedRegions(context.env);
@@ -282,7 +505,8 @@ export async function onRequestGet(context) {
       searchTitle: title,
       names: [...new Set([primaryName, ...aliases])],
       year,
-      types: requestedTypeFamily(requestedType)
+      types: requestedTypeFamily(requestedType),
+      region
     };
 
     let match;
@@ -295,6 +519,8 @@ export async function onRequestGet(context) {
       if (result.payload.status !== 'matched') {
         return json({
           ...result.payload,
+          zeroDollarMode: true,
+          cacheBackend,
           cache: { match: result.cache }
         });
       }
@@ -308,12 +534,25 @@ export async function onRequestGet(context) {
       match,
       region,
       providers: providerResult.providers,
+      stale: Boolean(providerResult.stale),
+      zeroDollarMode: true,
+      monthlyCreditLimit: monthlyCreditLimit(context.env),
+      cacheBackend,
       cache: {
         match: matchCache,
         providers: providerResult.cache
       }
     });
   } catch (error) {
+    if (error instanceof WatchmodePolicyError) {
+      return json({
+        status: error.code,
+        error: error.message,
+        zeroDollarMode: true
+      }, error.status || 503, 'no-store', error.retryAfterSeconds ? {
+        'Retry-After': String(error.retryAfterSeconds)
+      } : {});
+    }
     console.error('Watchmode proxy failed:', error);
     return json({ error: 'Where to Watch is temporarily unavailable.' }, 502);
   }

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { initials } from '../utils/animeUtils';
 
 function getPosterSources(anime) {
@@ -15,10 +15,14 @@ function getPosterSources(anime) {
   ].filter(Boolean);
 }
 
-export function Poster({ anime, className = 'poster', mode = 'fill' }) {
+export function Poster({ anime, className = 'poster', mode = 'fill', loading = 'lazy', onLoad }) {
   const sources = useMemo(() => getPosterSources(anime), [anime]);
   const [sourceIndex, setSourceIndex] = useState(0);
   const src = sources[sourceIndex];
+
+  useEffect(() => {
+    setSourceIndex(0);
+  }, [sources]);
 
   function handleImageError() {
     setSourceIndex((current) => current + 1);
@@ -37,7 +41,9 @@ export function Poster({ anime, className = 'poster', mode = 'fill' }) {
         <img
           src={src}
           alt={`${anime.title} poster`}
-          loading="lazy"
+          loading={loading}
+          decoding="async"
+          onLoad={onLoad}
           onError={handleImageError}
           style={mode === 'library'
             ? {

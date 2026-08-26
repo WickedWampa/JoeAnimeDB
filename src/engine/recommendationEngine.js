@@ -36,6 +36,10 @@ const TITLE_ALIASES = {
   kimetsunoyaiba: 'demonslayerkimetsunoyaiba'
 };
 
+function clockNow() {
+  return globalThis.performance?.now?.() ?? Date.now();
+}
+
 function norm(value) {
   return normalizeText(value).toLowerCase();
 }
@@ -268,26 +272,39 @@ function requestConstraints(prompt = '', library = [], catalog = []) {
     referenceEpisodes: getEpisodes(comparisonItem),
     wantsShorter: /\b(shorter|short binge|quick watch)\b/.test(text),
     wantsLonger: /\b(longer|long journey|long-form)\b/.test(text),
-    wantsDarker: /\b(darker|dark fantasy|more intense|bleak)\b/.test(text),
+    wantsDarker: /\b(dark|darker|dark fantasy|grim|more intense|bleak)\b/.test(text),
     wantsLighter: /\b(lighter|less bleak|less dark|feel good|wholesome)\b/.test(text),
     wantsFunny: /\b(funnier|funny|comedy|make me laugh|hilarious)\b/.test(text),
     wantsSad: /\b(sad|emotional|tearjerker|heartbreaking|make me cry|tragedy)\b/.test(text),
     wantsMovie: /\b(movie|film)\b/.test(text),
+    wantsBinge: /\b(binge|bingeable)\b/.test(text),
+    wantsFinished: /\b(finished|complete series|completed series)\b/.test(text),
+    wantsComfort: /\b(comfort|comforting|cozy|healing|wholesome)\b/.test(text),
+    wantsDifferent: /\b(outside my usual taste|different from my usual|different|unexpected)\b/.test(text),
     excludeHorror: /\b(?:not|without|no)\s+horror\b/.test(text),
     excludedTerms: requestExclusions(prompt)
   };
 }
 
 function requestAdjustment(candidate = {}, constraints = {}) {
-  const text = normalizeText([
+  const factualText = normalizeText([
     candidate.synopsis,
     candidate.description,
     ...(candidate.genres || []),
-    ...(candidate.themes || []),
+    ...(candidate.themes || [])
+  ].filter(Boolean).join(' ')).toLowerCase();
+  const text = normalizeText([
+    factualText,
     ...(candidate.genomeTraits || [])
   ].filter(Boolean).join(' ')).toLowerCase();
   const episodes = getEpisodes(candidate);
   const type = String(candidate.type || candidate.format || '').toLowerCase();
+  const releaseStatus = normalizeText(candidate.airingStatus || candidate.releaseStatus || candidate.broadcastStatus || '')
+    .toLowerCase().replace(/[^a-z]+/g, '');
+  const endTime = Date.parse(String(candidate.endDate || candidate.airedTo || ''));
+  const isFinished = ['finished', 'completed', 'complete', 'ended'].includes(releaseStatus)
+    || (Number.isFinite(endTime) && endTime <= Date.now())
+    || (!releaseStatus && getYear(candidate) > 0 && getYear(candidate) < new Date().getFullYear());
   const normalizedCandidateText = ` ${normalizeText(text).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()} `;
   let adjustment = 0;
   let excluded = false;
@@ -301,6 +318,8 @@ function requestAdjustment(candidate = {}, constraints = {}) {
   if (constraints.maxEpisodes && episodes && episodes > constraints.maxEpisodes) excluded = true;
   if (constraints.maxEpisodes && !episodes) excluded = true;
   if (constraints.wantsMovie && !/\b(movie|film)\b/.test(type)) excluded = true;
+  if (constraints.wantsBinge && (/\b(movie|film)\b/.test(type) || !episodes || episodes > 52)) excluded = true;
+  if ((constraints.wantsBinge || constraints.wantsFinished) && !isFinished) excluded = true;
   if (constraints.referenceEpisodes && episodes) {
     if (constraints.wantsShorter && episodes < constraints.referenceEpisodes) {
       adjustment += 10;
@@ -321,9 +340,11 @@ function requestAdjustment(candidate = {}, constraints = {}) {
     reasons.push('offers the longer journey you asked for');
   }
 
-  const isDark = /\b(dark|horror|gore|violent|survival|tragedy|psychological)\b/.test(text);
-  const isFunny = /\b(comedy|funny|humor|parody|lighthearted)\b/.test(text);
-  const isSad = /\b(drama|emotional|tragedy|tearjerker|heartbreak|melancholy|grief)\b/.test(text);
+  const isDark = /\b(dark|horror|gore|violent|violence|survival|tragedy|psychological|grim|bleak)\b/.test(factualText);
+  const isFunny = /\b(comedy|funny|humor|parody|lighthearted)\b/.test(factualText);
+  const isSad = /\b(drama|emotional|tragedy|tearjerker|heartbreak|melancholy|grief)\b/.test(factualText);
+  const isComfort = /\b(comfort|comforting|cozy|healing|wholesome|heartwarming|gentle|friendship|family|iyashikei|slice of life)\b/.test(factualText)
+    && !isDark;
   if (constraints.wantsDarker && isDark) {
     adjustment += 9;
     reasons.push('matches the darker tone in your request');
@@ -339,6 +360,27 @@ function requestAdjustment(candidate = {}, constraints = {}) {
   if (constraints.wantsFunny && !isFunny) excluded = true;
   if (constraints.wantsDarker && !isDark) excluded = true;
   if (constraints.wantsSad && !isSad) excluded = true;
+  if (constraints.wantsComfort && !isComfort) excluded = true;
+  if (constraints.wantsComfort && isComfort) {
+    adjustment += 10;
+    reasons.push('matches the comforting tone you asked for');
+  }
+  if (constraints.wantsBinge && !excluded) {
+    adjustment += 8;
+    reasons.push('is a finished, manageable binge');
+  }
+  if (constraints.wantsDifferent) {
+    const strongGenres = new Set((constraints.strongGenres || []).map(norm));
+    const candidateGenres = [...new Set(getAnimeTasteSignals(candidate).map(norm).filter(Boolean))];
+    const familiarCount = candidateGenres.filter((genre) => strongGenres.has(genre)).length;
+    const unfamiliarCount = candidateGenres.length - familiarCount;
+    if (!candidateGenres.length || unfamiliarCount === 0 || familiarCount > unfamiliarCount) {
+      excluded = true;
+    } else {
+      adjustment += familiarCount === 0 ? 12 : 8;
+      reasons.push('moves outside the strongest genres in your Anime DNA');
+    }
+  }
   if (constraints.excludeHorror && /\bhorror\b/.test(text)) excluded = true;
 
   return { adjustment, excluded, reasons };
@@ -363,12 +405,17 @@ export function getUnseenCatalog(library = [], catalog = [], options = {}) {
 }
 
 export function recommendAnime(library = [], catalog = [], options = {}) {
+  const totalStartedAt = clockNow();
   const limit = options.limit || 5;
   const anime = asList(library);
   const joeAIState = options.joeAIState || {};
+  const candidateStartedAt = clockNow();
   const candidates = getUnseenCatalog(anime, catalog, { joeAIState });
+  const candidateCollectionMs = clockNow() - candidateStartedAt;
+  const profileStartedAt = clockNow();
   const dna = generateAnimeDNA(anime);
   const constraints = requestConstraints(options.prompt || '', anime, asList(catalog));
+  constraints.strongGenres = asList(dna.topGenres).slice(0, 5).map((entry) => entry?.name).filter(Boolean);
   const genomeProfile = buildLibraryGenomeProfile(anime);
 
   const genreScores = scoreMap(dna.topGenres);
@@ -379,8 +426,11 @@ export function recommendAnime(library = [], catalog = [], options = {}) {
   const preferredEpisodes = averagePreferredEpisodes(anime) || Number(dna.averages?.episodes || 0);
   const anchors = getStrongTasteAnchors(anime);
   const era = preferredEra(anime);
+  const profileMs = clockNow() - profileStartedAt;
+  let genomeMs = 0;
+  const scoringStartedAt = clockNow();
 
-  return candidates
+  const scored = candidates
     .map((candidate) => {
       const learning = applyLearnedSignals(candidate, joeAIState);
       if (learning.excluded) return null;
@@ -479,7 +529,9 @@ export function recommendAnime(library = [], catalog = [], options = {}) {
       if (candidate.synopsis) rawScore += 1.5;
       if (candidate.year) rawScore += 1;
 
+      const genomeStartedAt = clockNow();
       const genome = scoreGenomeFit(candidate, genomeProfile);
+      genomeMs += clockNow() - genomeStartedAt;
       rawScore += genome.score;
       evidenceCount += genome.evidenceCount;
       reasons.push(...genome.reasons);
@@ -518,13 +570,29 @@ export function recommendAnime(library = [], catalog = [], options = {}) {
         ]
       };
     })
-    .filter((candidate) => candidate && candidate.match > 1)
-    .sort((a, b) => {
+    .filter((candidate) => candidate && candidate.match > 1);
+  const scoringMs = clockNow() - scoringStartedAt;
+  const selectionStartedAt = clockNow();
+  const selected = scored.sort((a, b) => {
       if (b.metadataReady !== a.metadataReady) return Number(b.metadataReady) - Number(a.metadataReady);
       if (b.match !== a.match) return b.match - a.match;
       return getCommunityScore(b) - getCommunityScore(a);
     })
     .slice(0, limit);
+  const sortSelectionMs = clockNow() - selectionStartedAt;
+
+  options.onTiming?.({
+    candidateCollectionMs,
+    catalogFilteringMs: candidateCollectionMs,
+    profileMs,
+    metadataGenomeMs: genomeMs,
+    scoringMs,
+    sortSelectionMs,
+    candidateCount: candidates.length,
+    qualifiedCount: scored.length,
+    totalMs: clockNow() - totalStartedAt
+  });
+  return selected;
 }
 
 export function getRecommendationDiagnostics(library = [], catalog = []) {

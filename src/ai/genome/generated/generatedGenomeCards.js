@@ -4,6 +4,90 @@
 
 export const GENERATED_GENOME_CARDS = [
   {
+    "id": "initial-d-first-stage",
+    "titles": [
+      "Initial D First Stage",
+      "頭文字〈イニシャル〉D",
+      "ID"
+    ],
+    "malId": null,
+    "quality": "generated",
+    "generationQuality": "medium-heuristic",
+    "confidence": 0.66,
+    "generated": true,
+    "needsReview": true,
+    "generatedAt": "2026-08-24T04:20:10.440Z",
+    "source": {
+      "metadata": "kitsu-library",
+      "generator": "heuristic-v2",
+      "model": null
+    },
+    "domain": "sports / mastery",
+    "subdomain": "",
+    "signature": "Initial D First Stage looks like a sports / mastery story, but this draft needs review because metadata alone is limited.",
+    "coreFantasy": "A provisional read based on the metadata already stored in JoeAnimeDB.",
+    "fantasyPillars": [
+      "Present",
+      "Earth",
+      "Japan",
+      "Motorsport",
+      "Street Racing"
+    ],
+    "emotionalJourney": [
+      "unknown"
+    ],
+    "rewardLoop": [
+      "watch and review"
+    ],
+    "dopamineSources": [
+      "Present",
+      "Earth",
+      "Japan",
+      "Motorsport"
+    ],
+    "viewerType": [
+      "genre explorer"
+    ],
+    "pacing": "unknown",
+    "complexity": 5,
+    "viewerMotivations": [
+      "Present",
+      "Earth",
+      "Japan",
+      "Motorsport",
+      "Street Racing",
+      "Plot Continuity"
+    ],
+    "themes": [
+      "Present",
+      "Earth",
+      "Japan",
+      "Motorsport",
+      "Street Racing",
+      "Plot Continuity",
+      "Asia",
+      "Action",
+      "Sports",
+      "Drifting"
+    ],
+    "emotionalProfile": [],
+    "atmosphere": [],
+    "vibes": {
+      "cyberpunk": 3,
+      "action": 3,
+      "mastery": 3
+    },
+    "accessibility": "Generated draft. Confidence 66%. Needs review.",
+    "idealFollowUps": [],
+    "antiRecommendations": [],
+    "recommendationWeight": 0.66,
+    "rewatchValue": "Promising, but still needs human review.",
+    "whyFansLove": [],
+    "whoShouldWatch": "Viewers interested in this show’s listed genres and themes.",
+    "whoShouldAvoid": "Unknown from metadata alone. Review needed.",
+    "joeNote": "Generated metadata-only draft. Needs a human pass."
+  },
+  {
     "id": "the-promised-neverland",
     "titles": [
       "The Promised Neverland",

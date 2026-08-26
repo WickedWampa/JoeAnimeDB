@@ -293,7 +293,7 @@
 .homeV3Comfort { grid-area: comfort; }
 .homeV3Studio { grid-area: studio; }
 .homeV3Seed { grid-area: seed; border-color: color-mix(in srgb, var(--home-accent-2) 40%, var(--line)); }
-.homeV3Continue { grid-area: continue; display: none; }
+.homeV3Continue { grid-area: continue; }
 .homeV3Learning { grid-area: learning; }
 
 .homeV3Thought p {
@@ -692,6 +692,426 @@
     gap: 8px;
     padding: 10px 12px;
   }
+}
+
+/* Home decision engine --------------------------------------------------- */
+.homeDecisionHome {
+  --decision-border: color-mix(in srgb, var(--home-accent) 38%, var(--line) 62%);
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: clip;
+}
+
+.homeDecisionHero {
+  min-height: 430px;
+  background:
+    linear-gradient(90deg, rgba(3, 8, 15, .94) 0%, rgba(3, 8, 15, .76) 42%, rgba(3, 8, 15, .20) 100%),
+    var(--home-hero-image) center right / cover no-repeat,
+    var(--home-card);
+}
+
+.homeDecisionHero::after,
+.homeDecisionHero .homeV3HeroShade {
+  z-index: 1;
+}
+
+.homeDecisionHero .homeV3HeroShade {
+  background: linear-gradient(90deg, rgba(3, 8, 15, .94) 0%, rgba(3, 8, 15, .76) 42%, rgba(3, 8, 15, .20) 100%);
+}
+
+.homeDecisionHero .homeV3HeroCopy {
+  width: min(680px, 67%);
+}
+
+.homeDecisionHero h1 {
+  max-width: 660px;
+  display: -webkit-box;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  font-size: clamp(40px, 4.7vw, 68px);
+  line-height: .98;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.homeDecisionGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.homeDecisionPanel {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  padding: 18px 20px 20px;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: 18px;
+  background:
+    linear-gradient(110deg, color-mix(in srgb, var(--home-panel-tint) 13%, var(--home-card)) 0%, var(--home-card) 62%, color-mix(in srgb, var(--home-soft) 24%, var(--home-card)) 100%);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, .12);
+}
+
+.homeDecisionPanelHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 42px;
+  margin-bottom: 14px;
+}
+
+.homeDecisionPanelHeader > div:first-child {
+  min-width: 0;
+  margin-right: auto;
+}
+.homeDecisionPanelActions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+.homeDecisionPanelHeader .homeDecisionScrollButton {
+  width: 36px;
+  min-width: 36px;
+  padding-inline: 0;
+  font-size: 22px;
+  line-height: 1;
+}
+.homeDecisionPanelHeader small {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--home-accent);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+}
+.homeDecisionPanelHeader h2 { margin: 0; color: var(--text); font-size: 21px; }
+.homeDecisionPanelHeader p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+.homeDecisionPanelHeader button,
+.homeDecisionEmpty button {
+  min-height: 36px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--home-soft) 72%, transparent);
+  color: var(--text);
+  padding: 7px 12px;
+  font-weight: 850;
+  cursor: pointer;
+}
+.homeDecisionPending {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.homeDecisionRail {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(174px, 214px);
+  gap: 12px;
+  overflow-x: auto;
+  padding: 2px 2px 10px;
+  scroll-snap-type: x proximity;
+  scrollbar-width: thin;
+  overscroll-behavior-inline: contain;
+}
+
+.homeDecisionRail.is-single {
+  grid-auto-flow: row;
+  grid-template-columns: minmax(0, 700px);
+  overflow: visible;
+  padding-bottom: 2px;
+}
+
+.homeDecisionCard {
+  display: grid;
+  grid-template-rows: 168px auto auto;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: 15px;
+  background: color-mix(in srgb, var(--home-card-strong) 90%, var(--home-soft) 10%);
+  color: var(--text);
+  cursor: pointer;
+  scroll-snap-align: start;
+  transition: border-color .15s ease, transform .15s ease, box-shadow .15s ease;
+}
+.homeDecisionCard:hover,
+.homeDecisionCard:focus-visible {
+  outline: none;
+  border-color: var(--home-accent);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .22), 0 0 20px var(--home-glow);
+}
+.homeDecisionRail.is-single .homeDecisionCard {
+  grid-template-columns: 180px minmax(0, 1fr);
+  grid-template-rows: minmax(120px, auto) auto;
+}
+.homeDecisionRail.is-single .homeDecisionPoster { grid-column: 1; grid-row: 1 / -1; }
+.homeDecisionRail.is-single .homeDecisionCardCopy { grid-column: 2; grid-row: 1; min-height: 0; align-self: center; padding: 18px 20px 10px; }
+.homeDecisionRail.is-single .homeDecisionCardActions { grid-column: 2; grid-row: 2; }
+.homeDecisionPoster { position: relative; min-height: 0; overflow: hidden; background: #07101a; }
+.homeDecisionPoster > .posterThumb,
+.homeDecisionPoster > .poster {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  border-radius: inherit;
+}
+.homeDecisionPoster img { width: 100%; height: 100%; object-fit: cover; }
+.homeDecisionPoster > span {
+  position: absolute;
+  top: 9px;
+  left: 9px;
+  border: 1px solid color-mix(in srgb, var(--home-accent) 56%, transparent);
+  border-radius: 999px;
+  background: rgba(3, 8, 15, .88);
+  color: var(--home-accent);
+  padding: 4px 8px;
+  font-size: 9px;
+  font-weight: 1000;
+  letter-spacing: .06em;
+}
+.homeDecisionCardCopy { min-height: 98px; padding: 12px 12px 8px; }
+.homeDecisionCardCopy h3 {
+  display: -webkit-box;
+  margin: 0 0 5px;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.25;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.homeDecisionCardCopy small { color: color-mix(in srgb, var(--muted) 78%, var(--home-accent) 22%); font-size: 10px; }
+.homeDecisionCardCopy p {
+  display: -webkit-box;
+  margin: 7px 0 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+.homeDecisionProvider { display: block; margin-top: 8px; color: var(--home-accent-3); font-size: 10px; }
+.homeDecisionCardActions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; padding: 0 10px 10px; }
+.homeDecisionCardActions button {
+  min-width: 0;
+  min-height: 32px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--home-soft) 54%, transparent);
+  color: var(--text);
+  padding: 5px 7px;
+  font-size: 10px;
+  font-weight: 900;
+  cursor: pointer;
+}
+.homeDecisionCardActions button.primary {
+  background: var(--home-accent);
+  color: color-mix(in srgb, #000 84%, var(--home-card));
+}
+.homeDecisionCardActions button:only-child { grid-column: 1 / -1; }
+
+.homeDecisionQuickLayout { display: grid; grid-template-columns: minmax(260px, 38%) minmax(0, 62%); gap: 18px; align-items: stretch; }
+.homeDecisionQuickLayout > .homeDecisionCard {
+  grid-template-columns: minmax(176px, 34%) minmax(0, 1fr);
+  grid-template-rows: minmax(218px, auto) auto;
+  min-height: 300px;
+}
+.homeDecisionQuickLayout > .homeDecisionCard .homeDecisionPoster { grid-column: 1; grid-row: 1 / -1; }
+.homeDecisionQuickLayout > .homeDecisionCard .homeDecisionCardCopy { grid-column: 2; grid-row: 1; min-height: 0; align-self: center; padding: 24px 24px 12px; }
+.homeDecisionQuickLayout > .homeDecisionCard .homeDecisionCardCopy h3 { font-size: clamp(22px, 2.2vw, 34px); line-height: 1.06; }
+.homeDecisionQuickLayout > .homeDecisionCard .homeDecisionCardCopy small { font-size: 11px; font-weight: 850; }
+.homeDecisionQuickLayout > .homeDecisionCard .homeDecisionCardCopy p { font-size: 13px; line-height: 1.48; -webkit-line-clamp: 4; }
+.homeDecisionQuickLayout > .homeDecisionCard .homeDecisionCardActions { grid-column: 2; grid-row: 2; display: flex; flex-wrap: wrap; padding: 0 24px 20px; }
+.homeDecisionQuickLayout > .homeDecisionCard .homeDecisionCardActions button { flex: 0 1 auto; min-width: 82px; padding-inline: 13px; }
+.homeDecisionQuickLayout > .homeDecisionCard .homeDecisionCardActions button.primary { min-width: 128px; }
+.homeDecisionReasonLabel { display: block; margin-top: 18px; color: var(--home-accent); font-size: 10px; letter-spacing: .09em; text-transform: uppercase; }
+.homeDecisionIntentGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; align-content: stretch; }
+.homeDecisionIntentGrid button {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: center;
+  align-content: center;
+  gap: 9px;
+  min-height: 68px;
+  border: 1px solid color-mix(in srgb, var(--home-accent) 13%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--home-card-strong) 91%, var(--home-soft) 9%);
+  color: var(--text);
+  padding: 10px 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 130ms ease, border-color 130ms ease, color 130ms ease, box-shadow 130ms ease;
+}
+.homeDecisionIntentGrid button[data-intent="surprise"] {
+  grid-column: 1 / -1;
+  grid-template-columns: 30px auto;
+  justify-content: center;
+  min-height: 60px;
+  background: color-mix(in srgb, var(--home-accent) 8%, var(--home-card-strong) 92%);
+  text-align: left;
+}
+.homeDecisionIntentIcon {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--home-accent) 16%, transparent);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--home-accent) 7%, transparent);
+  color: color-mix(in srgb, var(--muted) 78%, var(--home-accent) 22%);
+}
+.homeDecisionIntentIcon svg { width: 16px; height: 16px; stroke: currentColor; }
+.homeDecisionIntentCopy { display: grid; min-width: 0; gap: 2px; }
+.homeDecisionIntentGrid button strong { font-size: 13px; font-weight: 950; }
+.homeDecisionIntentGrid button small { color: var(--muted); font-size: 9px; font-weight: 700; line-height: 1.2; }
+.homeDecisionPreparingDot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  vertical-align: 1px;
+  animation: homeDecisionPreparingPulse .9s ease-in-out infinite alternate;
+}
+@keyframes homeDecisionPreparingPulse { to { opacity: .28; } }
+@media (prefers-reduced-motion: reduce) {
+  .homeDecisionPreparingDot { animation: none; }
+}
+.homeDecisionIntentGrid button:hover {
+  border-color: color-mix(in srgb, var(--home-accent) 32%, transparent);
+  background: color-mix(in srgb, var(--home-accent) 10%, var(--home-card-strong) 90%);
+}
+.homeDecisionIntentGrid button:hover .homeDecisionIntentIcon { color: color-mix(in srgb, var(--home-accent) 72%, var(--text)); }
+.homeDecisionIntentGrid button:focus-visible {
+  outline: 3px solid var(--home-accent);
+  outline-offset: 2px;
+  border-color: var(--home-accent);
+  color: var(--home-accent);
+  box-shadow: 0 0 0 1px var(--home-card-strong), 0 0 18px var(--home-glow);
+}
+.homeDecisionIntentGrid button[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--home-accent) 62%, transparent);
+  background: color-mix(in srgb, var(--home-accent) 15%, var(--home-card-strong) 85%);
+  color: var(--home-accent);
+  box-shadow: inset 3px 0 0 var(--home-accent), 0 0 13px var(--home-glow);
+}
+.homeDecisionIntentGrid button[aria-pressed="true"] .homeDecisionIntentIcon {
+  border-color: color-mix(in srgb, var(--home-accent) 68%, transparent);
+  background: color-mix(in srgb, var(--home-accent) 22%, transparent);
+  color: var(--home-accent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--home-accent) 18%, transparent);
+}
+.homeDecisionIntentGrid button[aria-pressed="true"] small { color: color-mix(in srgb, var(--home-accent) 62%, var(--text)); }
+.homeDecisionIntentGrid button[aria-pressed="true"]:focus-visible {
+  box-shadow: inset 3px 0 0 var(--home-accent), 0 0 0 1px var(--home-card-strong), 0 0 20px var(--home-glow);
+}
+
+.homeDecisionEmpty { min-height: 104px; padding: 17px; border: 1px dashed var(--decision-border); border-radius: 13px; }
+.homeDecisionEmpty strong { color: var(--text); }
+.homeDecisionEmpty p { margin: 6px 0 12px; color: var(--muted); font-size: 13px; }
+.homeDecisionSkeletonRow { display: grid; grid-template-columns: repeat(3, minmax(0, 220px)); gap: 12px; }
+.homeDecisionSkeletonRow i {
+  height: 238px;
+  border-radius: 14px;
+  background: linear-gradient(100deg, var(--home-card-strong) 20%, var(--home-soft) 45%, var(--home-card-strong) 70%);
+  background-size: 220% 100%;
+  animation: homeDecisionShimmer 1.35s ease-in-out infinite;
+}
+@keyframes homeDecisionShimmer { to { background-position: -120% 0; } }
+
+@media (max-width: 900px) {
+  .homeDecisionQuickLayout { grid-template-columns: 1fr; }
+  .homeDecisionIntentGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 780px) {
+  .homeDecisionHero { min-height: 420px; }
+  .homeDecisionHero .homeV3HeroCopy { width: 100%; padding: 28px 24px 20px; }
+  .homeDecisionHero h1 { font-size: clamp(34px, 10vw, 52px); }
+  .homeDecisionPanel { padding: 15px; border-radius: 17px; }
+  .homeDecisionRail { grid-auto-columns: minmax(158px, 68vw); }
+  .homeDecisionRail.is-single { grid-template-columns: minmax(0, 100%); }
+  .homeDecisionCard { grid-template-rows: 202px auto auto; }
+  .homeDecisionIntentGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .homeDecisionIntentGrid button[data-intent="surprise"] { grid-column: 1 / -1; }
+  .homeDecisionQuickLayout > .homeDecisionCard { grid-template-columns: 128px minmax(0, 1fr); grid-template-rows: minmax(170px, auto) auto; min-height: 232px; }
+  .homeDecisionQuickLayout > .homeDecisionCard .homeDecisionCardCopy { padding: 18px 18px 8px; }
+  .homeDecisionQuickLayout > .homeDecisionCard .homeDecisionCardActions { padding: 0 18px 16px; }
+}
+
+@media (max-width: 480px) {
+  .homeDecisionPanelHeader { align-items: flex-end; }
+  .homeDecisionPanelHeader h2 { font-size: 18px; }
+  .homeDecisionRail { grid-auto-columns: minmax(150px, 74vw); }
+  .homeDecisionCard { grid-template-rows: 186px auto auto; }
+  .homeDecisionRail.is-single .homeDecisionCard { grid-template-columns: 118px minmax(0, 1fr); }
+  .homeDecisionQuickLayout,
+  .homeDecisionQuickLayout > .homeDecisionCard { min-width: 0; max-width: 100%; }
+  .homeDecisionQuickLayout > .homeDecisionCard {
+    grid-template-columns: 112px minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    min-height: 0;
+  }
+  .homeDecisionQuickLayout > .homeDecisionCard .homeDecisionPoster {
+    grid-column: 1;
+    grid-row: 1;
+    min-height: 168px;
+    aspect-ratio: 2 / 3;
+  }
+  .homeDecisionQuickLayout > .homeDecisionCard .homeDecisionCardCopy {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: stretch;
+    padding: 14px 12px 8px;
+  }
+  .homeDecisionQuickLayout > .homeDecisionCard .homeDecisionCardCopy h3 { font-size: 18px; }
+  .homeDecisionQuickLayout > .homeDecisionCard .homeDecisionCardCopy p {
+    font-size: 11px;
+    -webkit-line-clamp: 3;
+  }
+  .homeDecisionQuickLayout > .homeDecisionCard .homeDecisionReasonLabel { margin-top: 12px; }
+  .homeDecisionQuickLayout > .homeDecisionCard .homeDecisionCardActions {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    min-width: 0;
+    gap: 7px;
+    padding: 10px;
+  }
+  .homeDecisionQuickLayout > .homeDecisionCard .homeDecisionCardActions button,
+  .homeDecisionQuickLayout > .homeDecisionCard .homeDecisionCardActions button.primary {
+    width: 100%;
+    min-width: 0;
+    padding-inline: 7px;
+  }
+  .homeDecisionIntentGrid button { grid-template-columns: 27px minmax(0, 1fr); min-height: 64px; gap: 7px; padding-inline: 9px; }
+  .homeDecisionIntentGrid button[data-intent="surprise"] { grid-template-columns: 27px auto; }
+  .homeDecisionIntentIcon { width: 27px; height: 27px; border-radius: 8px; }
+  .homeDecisionIntentIcon svg { width: 15px; height: 15px; }
 }
 
 
@@ -1498,4 +1918,59 @@
   .homeV3LearningGrid div,
   .homeV3LearningGrid div:nth-child(odd) { padding: 10px 0; border-right: 0; border-bottom: 1px solid color-mix(in srgb, var(--line) 44%, transparent); }
   .homeV3LearningGrid div:last-child { border-bottom: 0; }
+}
+
+/* Beta 22 Home hero artwork pass.
+   Let the selected theme artwork render cleanly without a color/black gradient
+   laid over it. Text keeps a small shadow for contrast without tinting the art. */
+.homeV3Hero.homeDecisionHero {
+  background:
+    var(--home-hero-image) center right / cover no-repeat,
+    var(--home-card);
+}
+
+.homeV3Hero.homeDecisionHero::after,
+.homeV3Hero.homeDecisionHero .homeV3HeroShade {
+  display: none;
+}
+
+.homeV3Hero.homeDecisionHero .homeV3HeroCopy {
+  text-shadow: 0 2px 12px rgba(0, 0, 0, .78);
+}
+
+/* Size the desktop hero stat rail to the metrics that actually render. */
+@media (min-width: 781px) {
+  .homeDecisionHero .homeV3HeroStats:not(:has(> .homeV3StatPill)) {
+    display: none;
+  }
+
+  .homeDecisionHero .homeV3HeroStats:has(> .homeV3StatPill:only-child) {
+    width: min(190px, calc(100% - 88px));
+    max-width: 190px;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .homeDecisionHero .homeV3HeroStats:has(> .homeV3StatPill:nth-child(2):last-child) {
+    width: min(380px, calc(100% - 88px));
+    max-width: 380px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .homeDecisionHero .homeV3HeroStats:has(> .homeV3StatPill:nth-child(3):last-child) {
+    width: min(570px, calc(100% - 88px));
+    max-width: 570px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 780px) {
+  .homeV3Hero.homeDecisionHero {
+    background:
+      var(--home-hero-image) center bottom / cover no-repeat,
+      var(--home-card);
+  }
+
+  .homeDecisionScrollButton {
+    display: none;
+  }
 }

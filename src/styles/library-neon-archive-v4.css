@@ -1086,7 +1086,17 @@
   text-align: center;
 }
 @media (max-width: 760px) {
-  .libraryArchiveLiveCopy { width: 100%; }
+  .libraryArchiveLiveCopy {
+    width: 100%;
+    /* Reserve a dedicated footer lane for the absolutely positioned action. */
+    padding-bottom: 84px;
+  }
   .libraryArchiveLiveStats { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .libraryArchiveLiveAdd {
+    left: 22px;
+    right: 22px;
+    bottom: 18px;
+    width: auto;
+    min-width: 0;
+  }
 }
-

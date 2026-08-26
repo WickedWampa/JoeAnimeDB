@@ -185,6 +185,76 @@
   color: var(--muted, #9fb1c7);
 }
 
+.firstLaunchStreaming {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(255, 255, 255, .1);
+}
+
+.firstLaunchStreaming > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.firstLaunchStreaming > header div,
+.firstLaunchStreaming > header strong,
+.firstLaunchStreaming > header small {
+  display: block;
+}
+
+.firstLaunchStreaming > header small {
+  margin-top: 4px;
+  color: var(--muted, #9fb1c7);
+  line-height: 1.4;
+}
+
+.firstLaunchStreaming > header > b {
+  flex: 0 0 auto;
+  color: var(--cyan, #32e7ff);
+  font-size: .75rem;
+}
+
+.firstLaunchStreamingGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.firstLaunchStreamingGrid button {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  padding: 11px 12px;
+  border: 1px solid rgba(255, 255, 255, .1);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, .035);
+  color: var(--text, #edf7ff);
+  text-align: left;
+  cursor: pointer;
+}
+
+.firstLaunchStreamingGrid button:hover,
+.firstLaunchStreamingGrid button.active {
+  border-color: color-mix(in srgb, var(--cyan, #32e7ff) 58%, transparent);
+  background: color-mix(in srgb, var(--cyan, #32e7ff) 9%, rgba(255, 255, 255, .035));
+}
+
+.firstLaunchStreamingGrid button small {
+  overflow: hidden;
+  color: var(--muted, #9fb1c7);
+  font-size: .7rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.firstLaunchStreamingGrid button.active small {
+  color: var(--cyan, #32e7ff);
+}
+
 .firstLaunchSearch {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -536,7 +606,7 @@
 
 .firstLaunchReadyGrid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 11px;
 }
 
@@ -691,6 +761,8 @@
   .firstLaunchThemes,
   .firstLaunchReadyGrid,
   .firstLaunchAnimeResults { grid-template-columns: 1fr; }
+  .firstLaunchStreamingGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .firstLaunchStreaming > header { align-items: flex-start; flex-direction: column; }
   .firstLaunchBuildSteps { grid-template-columns: 1fr; }
   .firstLaunchThemes button { min-height: 92px; }
   .firstLaunchReadyGrid button { min-height: 104px; }

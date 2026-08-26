@@ -1057,7 +1057,7 @@ body.tvLayoutMode .homeV3DesktopOnly {
 }
 
 /* Strip the TV dashboard down to the two useful rows. */
-body.tvLayoutMode .homeV3Grid > :not(.homeV3Continue):not(.homeV3TvPickPanel) {
+body.tvLayoutMode .homeV3Grid > :not(.homeV3Continue):not(.homeV3TvPickPanel):not(.homeDecisionReturning):not(.homeDecisionMissed):not(.homeDecisionServices):not(.homeDecisionQuickPick) {
   display: none !important;
 }
 
@@ -1133,19 +1133,25 @@ body.tvLayoutMode .homeV3Continue {
 }
 
 body.tvLayoutMode .homeV3Continue,
-body.tvLayoutMode .homeV3TvPickPanel {
+body.tvLayoutMode .homeV3TvPickPanel,
+body.tvLayoutMode .homeDecisionReturning,
+body.tvLayoutMode .homeDecisionMissed,
+body.tvLayoutMode .homeDecisionServices,
+body.tvLayoutMode .homeDecisionQuickPick {
   padding: 8px 10px 10px !important;
   border-radius: 14px !important;
 }
 
 body.tvLayoutMode .homeV3Continue .homeV3PanelHeader,
-body.tvLayoutMode .homeV3TvPickPanel .homeV3PanelHeader {
+body.tvLayoutMode .homeV3TvPickPanel .homeV3PanelHeader,
+body.tvLayoutMode .homeDecisionPanelHeader {
   min-height: 24px !important;
   margin-bottom: 6px !important;
 }
 
 body.tvLayoutMode .homeV3Continue .homeV3PanelHeader h2,
-body.tvLayoutMode .homeV3TvPickPanel .homeV3PanelHeader h2 {
+body.tvLayoutMode .homeV3TvPickPanel .homeV3PanelHeader h2,
+body.tvLayoutMode .homeDecisionPanelHeader h2 {
   font-size: 11px !important;
 }
 
@@ -3779,15 +3785,8 @@ body.tvLayoutMode .homeV3Hero {
   padding: 0 !important;
   overflow: hidden !important;
 
-  /* Full-bleed artwork with a left readability veil. */
+  /* Full-bleed artwork; the hero no longer tints the theme art. */
   background:
-    linear-gradient(
-      90deg,
-      rgba(2, 7, 13, .88) 0%,
-      rgba(2, 7, 13, .64) 31%,
-      rgba(2, 7, 13, .25) 58%,
-      rgba(2, 7, 13, .05) 100%
-    ),
     var(--home-hero-image) center 43% / cover no-repeat,
     var(--home-card) !important;
 }
@@ -4089,4 +4088,387 @@ body.tvLayoutMode .detailModal .whereToWatchProviders button {
 body.tvLayoutMode .detailModal .quickWatchPrimary:focus,
 body.tvLayoutMode .detailModal .quickWatchPrimary:focus-visible {
   transform: scale(1.035) !important;
+}
+
+/* Home decision engine: deterministic shelf order and compact TV cards. */
+body.tvLayoutMode .homeDecisionGrid {
+  display: grid !important;
+}
+
+body.tvLayoutMode .homeDecisionContinue { order: 1 !important; }
+body.tvLayoutMode .homeDecisionReturning { order: 2 !important; }
+body.tvLayoutMode .homeDecisionMissed { order: 3 !important; }
+body.tvLayoutMode .homeDecisionServices { order: 4 !important; }
+body.tvLayoutMode .homeDecisionQuickPick { order: 5 !important; }
+
+body.tvLayoutMode .homeDecisionPanel {
+  grid-area: auto !important;
+  grid-column: 1 / -1 !important;
+  width: 100% !important;
+  max-width: none !important;
+  padding: 8px 10px 10px !important;
+  border-color: transparent !important;
+  border-radius: 14px !important;
+  box-shadow: none !important;
+}
+
+body.tvLayoutMode .homeDecisionPanelHeader {
+  min-height: 24px !important;
+  margin-bottom: 6px !important;
+}
+
+body.tvLayoutMode .homeDecisionPanelHeader small {
+  font-size: 6px !important;
+}
+
+body.tvLayoutMode .homeDecisionPanelHeader h2 {
+  font-size: 11px !important;
+}
+
+body.tvLayoutMode .homeDecisionPanelHeader p {
+  margin-top: 2px !important;
+  font-size: 7px !important;
+}
+
+body.tvLayoutMode .homeDecisionPanelHeader button,
+body.tvLayoutMode .homeDecisionPending {
+  display: none !important;
+}
+
+body.tvLayoutMode .homeDecisionScrollButton {
+  display: none !important;
+}
+
+body.tvLayoutMode .homeDecisionRail {
+  display: grid !important;
+  grid-auto-flow: row !important;
+  grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+  overflow: visible !important;
+  padding: 0 !important;
+}
+
+/* Continue Watching stays a single six-visible-card rail on TV. Extra titles
+   remain reachable horizontally instead of creating an orphan second row. */
+body.tvLayoutMode .homeDecisionContinue .homeDecisionRail {
+  grid-auto-flow: column !important;
+  grid-template-columns: none !important;
+  grid-auto-columns: calc((100% - 40px) / 6) !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  scrollbar-width: none !important;
+}
+
+body.tvLayoutMode .homeDecisionContinue .homeDecisionRail::-webkit-scrollbar {
+  display: none;
+}
+
+body.tvLayoutMode .homeDecisionCard {
+  display: grid !important;
+  grid-template-rows: 84px 26px auto !important;
+  min-width: 0 !important;
+  border-color: transparent !important;
+  border-radius: 10px !important;
+}
+
+body.tvLayoutMode .homeDecisionCard:focus,
+body.tvLayoutMode .homeDecisionCard:focus-visible {
+  border-color: var(--home-accent) !important;
+}
+
+body.tvLayoutMode .homeDecisionPoster {
+  grid-row: 1 !important;
+  min-height: 0 !important;
+}
+
+body.tvLayoutMode .homeDecisionPoster > .posterThumb,
+body.tvLayoutMode .homeDecisionPoster > .poster {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  border-radius: inherit !important;
+}
+
+body.tvLayoutMode .homeDecisionPoster > .posterThumb img,
+body.tvLayoutMode .homeDecisionPoster > .poster img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  object-position: center 22% !important;
+}
+
+body.tvLayoutMode .homeDecisionPoster > span {
+  top: 5px !important;
+  left: 5px !important;
+  padding: 2px 5px !important;
+  font-size: 6px !important;
+}
+
+body.tvLayoutMode .homeDecisionCardCopy {
+  grid-row: 2 !important;
+  min-height: 0 !important;
+  padding: 5px 6px !important;
+}
+
+body.tvLayoutMode .homeDecisionCardCopy h3 {
+  margin: 0 !important;
+  font-size: 7px !important;
+  -webkit-line-clamp: 1 !important;
+}
+
+body.tvLayoutMode .homeDecisionCardCopy small,
+body.tvLayoutMode .homeDecisionCardCopy p,
+body.tvLayoutMode .homeDecisionProvider {
+  display: none !important;
+}
+
+body.tvLayoutMode .homeDecisionCardActions {
+  display: grid !important;
+  grid-row: 3 !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 2px !important;
+  padding: 2px 3px 3px !important;
+}
+
+body.tvLayoutMode .homeDecisionCardActions button {
+  min-height: 16px !important;
+  padding: 1px 2px !important;
+  border-radius: 5px !important;
+  font-size: 5px !important;
+  line-height: 1 !important;
+}
+
+body.tvLayoutMode .homeDecisionRail.is-single {
+  grid-template-columns: minmax(0, 58%) !important;
+}
+
+body.tvLayoutMode .homeDecisionRail.is-single .homeDecisionCard {
+  grid-template-columns: 92px minmax(0, 1fr) !important;
+  grid-template-rows: 66px auto !important;
+}
+
+body.tvLayoutMode .homeDecisionRail.is-single .homeDecisionPoster {
+  grid-column: 1 !important;
+  grid-row: 1 / -1 !important;
+}
+
+body.tvLayoutMode .homeDecisionRail.is-single .homeDecisionCardCopy {
+  grid-column: 2 !important;
+  grid-row: 1 !important;
+  align-self: center !important;
+  padding: 7px 9px 3px !important;
+}
+
+body.tvLayoutMode .homeDecisionRail.is-single .homeDecisionCardCopy h3 {
+  font-size: 10px !important;
+  -webkit-line-clamp: 2 !important;
+}
+
+body.tvLayoutMode .homeDecisionRail.is-single .homeDecisionCardCopy small,
+body.tvLayoutMode .homeDecisionRail.is-single .homeDecisionCardCopy p {
+  display: -webkit-box !important;
+  margin-top: 3px !important;
+  font-size: 6px !important;
+  -webkit-line-clamp: 2 !important;
+}
+
+body.tvLayoutMode .homeDecisionRail.is-single .homeDecisionCardActions {
+  grid-column: 2 !important;
+  grid-row: 2 !important;
+}
+
+body.tvLayoutMode .homeDecisionQuickLayout {
+  display: grid !important;
+  grid-template-columns: minmax(250px, 38%) minmax(0, 62%) !important;
+  gap: 10px !important;
+}
+
+body.tvLayoutMode .homeDecisionIntentGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 5px !important;
+}
+
+body.tvLayoutMode .homeDecisionIntentGrid button {
+  grid-template-columns: 22px minmax(0, 1fr) !important;
+  align-items: center !important;
+  gap: 6px !important;
+  min-height: 48px !important;
+  padding: 5px 7px !important;
+  border-radius: 9px !important;
+  text-align: left !important;
+}
+
+body.tvLayoutMode .homeDecisionIntentGrid button[data-intent="surprise"] {
+  grid-column: 1 / -1 !important;
+  grid-template-columns: 22px auto !important;
+  justify-content: center !important;
+  min-height: 40px !important;
+  text-align: left !important;
+}
+
+body.tvLayoutMode .homeDecisionIntentIcon {
+  width: 22px !important;
+  height: 22px !important;
+  border-radius: 7px !important;
+}
+
+body.tvLayoutMode .homeDecisionIntentIcon svg {
+  width: 12px !important;
+  height: 12px !important;
+}
+
+body.tvLayoutMode .homeDecisionIntentGrid button strong {
+  font-size: 8px !important;
+}
+
+body.tvLayoutMode .homeDecisionIntentGrid button small {
+  display: block !important;
+  font-size: 5px !important;
+}
+
+body.tvLayoutMode .homeDecisionIntentGrid button:focus,
+body.tvLayoutMode .homeDecisionIntentGrid button:focus-visible {
+  outline: 2px solid var(--home-accent) !important;
+  outline-offset: 2px !important;
+}
+
+body.tvLayoutMode .homeDecisionIntentGrid button[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--home-accent) 65%, transparent) !important;
+  box-shadow: inset 3px 0 0 var(--home-accent), 0 0 12px var(--home-glow) !important;
+}
+
+body.tvLayoutMode .homeDecisionQuickLayout > .homeDecisionCard {
+  display: grid !important;
+  grid-template-columns: 118px minmax(0, 1fr) !important;
+  grid-template-rows: minmax(104px, auto) auto !important;
+  min-height: 154px !important;
+}
+
+body.tvLayoutMode .homeDecisionQuickLayout > .homeDecisionCard .homeDecisionPoster {
+  grid-column: 1 !important;
+  grid-row: 1 / -1 !important;
+}
+
+body.tvLayoutMode .homeDecisionQuickLayout > .homeDecisionCard .homeDecisionCardCopy {
+  grid-column: 2 !important;
+  grid-row: 1 !important;
+  align-self: center !important;
+  padding: 10px 12px 5px !important;
+}
+
+body.tvLayoutMode .homeDecisionQuickLayout > .homeDecisionCard .homeDecisionCardCopy h3 {
+  font-size: 15px !important;
+  line-height: 1.05 !important;
+  -webkit-line-clamp: 2 !important;
+}
+
+body.tvLayoutMode .homeDecisionQuickLayout > .homeDecisionCard .homeDecisionCardCopy small,
+body.tvLayoutMode .homeDecisionQuickLayout > .homeDecisionCard .homeDecisionCardCopy p,
+body.tvLayoutMode .homeDecisionQuickLayout > .homeDecisionCard .homeDecisionReasonLabel {
+  display: block !important;
+}
+
+body.tvLayoutMode .homeDecisionQuickLayout > .homeDecisionCard .homeDecisionReasonLabel {
+  margin-top: 7px !important;
+  font-size: 6px !important;
+}
+
+body.tvLayoutMode .homeDecisionQuickLayout > .homeDecisionCard .homeDecisionCardCopy p {
+  margin-top: 3px !important;
+  font-size: 7px !important;
+  -webkit-line-clamp: 3 !important;
+}
+
+body.tvLayoutMode .homeDecisionQuickLayout > .homeDecisionCard .homeDecisionCardActions {
+  grid-column: 2 !important;
+  grid-row: 2 !important;
+  display: flex !important;
+  gap: 4px !important;
+  padding: 2px 10px 8px !important;
+}
+
+body.tvLayoutMode .homeDecisionQuickLayout > .homeDecisionCard .homeDecisionCardActions button {
+  flex: 0 1 auto !important;
+  min-width: 54px !important;
+  min-height: 22px !important;
+  padding: 3px 6px !important;
+  font-size: 6px !important;
+}
+
+body.tvLayoutMode .homeDecisionQuickLayout > .homeDecisionCard .homeDecisionCardActions button.primary {
+  min-width: 82px !important;
+}
+
+/* Startup is compact from the first paint. The neutral loading card remains
+   visible while SQLite opens, but never masquerades as a desktop Home page. */
+body.tvLayoutMode .bootScreen {
+  min-height: 100vh !important;
+  background:
+    radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--cyan) 12%, transparent), transparent 38%),
+    var(--bg) !important;
+}
+
+body.tvLayoutMode .bootCard {
+  width: min(420px, 54vw) !important;
+  padding: 22px 30px !important;
+  border-color: transparent !important;
+  border-radius: 18px !important;
+  box-shadow: none !important;
+}
+
+body.tvLayoutMode .bootCard h1 { font-size: 28px !important; }
+body.tvLayoutMode .bootCard p { margin-block: 6px !important; font-size: 10px !important; }
+
+body.tvLayoutMode .homeDecisionHero h1 {
+  max-width: min(620px, 78vw) !important;
+  overflow: hidden !important;
+  overflow-wrap: anywhere !important;
+  font-size: clamp(26px, 3.5vw, 38px) !important;
+  line-height: .98 !important;
+  -webkit-line-clamp: 2 !important;
+}
+
+/* Android TV Home remote response pass.
+   Keep focus unmistakable without expensive blur/transform animations, and
+   let the focus manager perform one immediate nearest-edge scroll per move. */
+body.tvLayoutMode .homeDecisionHome,
+body.tvLayoutMode .homeDecisionHome .homeDecisionGrid,
+body.tvLayoutMode .homeDecisionHome .homeDecisionRail {
+  scroll-behavior: auto !important;
+}
+
+body.tvLayoutMode .homeDecisionHome :where(
+  .homeV3HeroActions button,
+  .homeDecisionCard,
+  .homeDecisionCardActions button,
+  .homeDecisionIntentGrid button
+) {
+  transition: none !important;
+}
+
+body.tvLayoutMode.tvInputMode .homeDecisionHome :where(
+  .homeV3HeroActions button,
+  .homeDecisionCard,
+  .homeDecisionCardActions button,
+  .homeDecisionIntentGrid button
+):focus {
+  transform: none !important;
+  filter: none !important;
+  box-shadow:
+    0 0 0 2px rgba(0, 0, 0, .88),
+    0 0 0 5px var(--tv-focus-ring) !important;
+}
+
+body.tvLayoutMode.tvInputMode .homeDecisionHome .homeDecisionIntentGrid button[aria-pressed="true"] {
+  box-shadow: inset 3px 0 0 var(--home-accent) !important;
+}
+
+body.tvLayoutMode.tvInputMode .homeDecisionHome .homeDecisionIntentGrid button[aria-pressed="true"]:focus {
+  box-shadow:
+    inset 3px 0 0 var(--home-accent),
+    0 0 0 2px rgba(0, 0, 0, .88),
+    0 0 0 5px var(--tv-focus-ring) !important;
 }

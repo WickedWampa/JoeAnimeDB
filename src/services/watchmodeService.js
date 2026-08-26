@@ -1,5 +1,10 @@
 const DEFAULT_PROXY_URL = 'https://joeanimedb.com/api/watchmode';
 const MATCH_CACHE_KEY = 'joeanime-watchmode-title-matches-v1';
+const PROVIDER_CACHE_KEY = 'joeanime-watchmode-provider-results-v1';
+const PROVIDER_READY_CACHE_TTL_MS = 28 * 24 * 60 * 60 * 1000;
+const PROVIDER_STALE_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const PROVIDER_TERMINAL_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const MATCH_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const REGION_KEY = 'joeanime-watchmode-region-v1';
 export const STREAMING_APPS_KEY = 'joeanime-streaming-apps-v1';
 
@@ -145,6 +150,69 @@ function identityKey(item = {}) {
   return [titleOf(item).toLowerCase(), item.year || '', String(item.type || '').toLowerCase()].join('|');
 }
 
+function providerCacheKey(item = {}, region = getSavedWatchRegion()) {
+  return `${String(region || 'US').toUpperCase()}|${identityKey(item)}`;
+}
+
+function matchCacheKey(item = {}, region = getSavedWatchRegion()) {
+  return `${String(region || 'US').toUpperCase()}|${identityKey(item)}`;
+}
+
+function readProviderCache() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(PROVIDER_CACHE_KEY) || '{}');
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+export function getWatchmodeProviderCacheSnapshot() {
+  return readProviderCache();
+}
+
+function writeProviderCache(cache) {
+  try {
+    localStorage.setItem(PROVIDER_CACHE_KEY, JSON.stringify(cache));
+  } catch {}
+  try {
+    window.dispatchEvent(new CustomEvent('joeanime:watchmode-cache-changed'));
+  } catch {}
+}
+
+function saveProviderResult(item, region, payload) {
+  const status = String(payload?.status || '');
+  if (!['ready', 'needs_review', 'not_found'].includes(status)) return;
+  if (status === 'ready' && !Array.isArray(payload.providers)) return;
+
+  const cachedPayload = status === 'ready'
+    ? payload
+    : { status };
+
+  const cache = readProviderCache();
+  cache[providerCacheKey(item, region)] = {
+    savedAt: Date.now(),
+    payload: cachedPayload
+  };
+  writeProviderCache(cache);
+}
+
+export function getCachedWhereToWatch(item, { region, allowStale = false, cacheSnapshot } = {}) {
+  const cache = cacheSnapshot && typeof cacheSnapshot === 'object'
+    ? cacheSnapshot
+    : readProviderCache();
+  const entry = cache[providerCacheKey(item, region)];
+  if (!entry?.payload) return null;
+
+  const age = Date.now() - Number(entry.savedAt || 0);
+  const readyWithProviders = entry.payload.status === 'ready' && entry.payload.providers?.length > 0;
+  const ttl = readyWithProviders ? PROVIDER_READY_CACHE_TTL_MS : PROVIDER_TERMINAL_CACHE_TTL_MS;
+  const maxTtl = readyWithProviders ? PROVIDER_STALE_CACHE_TTL_MS : PROVIDER_TERMINAL_CACHE_TTL_MS;
+  if (age > maxTtl) return null;
+  if (!allowStale && age > ttl) return null;
+  return age > ttl ? { ...entry.payload, stale: true } : entry.payload;
+}
+
 function readMatchCache() {
   try {
     const parsed = JSON.parse(localStorage.getItem(MATCH_CACHE_KEY) || '{}');
@@ -178,29 +246,67 @@ export function saveWatchRegion(region) {
   try {
     localStorage.setItem(REGION_KEY, normalized);
   } catch {}
+  try {
+    window.dispatchEvent(new CustomEvent('joeanime:watch-region-changed', {
+      detail: normalized
+    }));
+  } catch {}
 }
 
 export function forgetWatchmodeMatch(item) {
   const cache = readMatchCache();
-  delete cache[identityKey(item)];
+  const identity = identityKey(item);
+  Object.keys(cache).forEach((key) => {
+    if (key === identity || key.endsWith(`|${identity}`)) delete cache[key];
+  });
   writeMatchCache(cache);
+
+  const providerCache = readProviderCache();
+  Object.keys(providerCache).forEach((key) => {
+    if (key.endsWith(`|${identity}`)) delete providerCache[key];
+  });
+  writeProviderCache(providerCache);
 }
 
-function saveWatchmodeMatch(item, id) {
+function saveWatchmodeMatch(item, id, region = getSavedWatchRegion()) {
   const numericId = Number(id);
   if (!Number.isInteger(numericId) || numericId <= 0) return;
 
   const cache = readMatchCache();
-  cache[identityKey(item)] = numericId;
+  cache[matchCacheKey(item, region)] = {
+    id: numericId,
+    savedAt: Date.now()
+  };
   writeMatchCache(cache);
 }
 
-function readWatchmodeMatch(item) {
-  const numericId = Number(readMatchCache()[identityKey(item)]);
-  return Number.isInteger(numericId) && numericId > 0 ? numericId : null;
+function readWatchmodeMatch(item, region = getSavedWatchRegion()) {
+  const cache = readMatchCache();
+  const entry = cache[matchCacheKey(item, region)];
+  const numericId = Number(entry?.id ?? entry);
+  const savedAt = Number(entry?.savedAt || 0);
+  if (savedAt && Date.now() - savedAt > MATCH_CACHE_TTL_MS) return null;
+  if (Number.isInteger(numericId) && numericId > 0) return numericId;
+
+  // One-time migration for pre-region match entries. Provider results remain
+  // region-scoped and the migrated match receives a fresh 30-day timestamp.
+  const legacyId = Number(cache[identityKey(item)]);
+  if (!Number.isInteger(legacyId) || legacyId <= 0) return null;
+  cache[matchCacheKey(item, region)] = {
+    id: legacyId,
+    savedAt: Date.now()
+  };
+  delete cache[identityKey(item)];
+  writeMatchCache(cache);
+  return legacyId;
 }
 
-async function requestWhereToWatch(item, { region, watchmodeId, forceReview = false } = {}) {
+async function requestWhereToWatch(item, {
+  region,
+  watchmodeId,
+  forceReview = false,
+  requestMode = 'interactive'
+} = {}) {
   const title = titleOf(item);
   if (!title) throw new Error('This title does not have enough identity information.');
 
@@ -216,6 +322,7 @@ async function requestWhereToWatch(item, { region, watchmodeId, forceReview = fa
   if (aliases.length) query.set('aliases', aliases.join('|'));
   if (watchmodeId) query.set('watchmodeId', String(watchmodeId));
   if (forceReview) query.set('forceReview', '1');
+  query.set('requestMode', requestMode === 'background' ? 'background' : 'interactive');
 
   const response = await fetch(`${proxyUrl()}?${query.toString()}`, {
     headers: { Accept: 'application/json' }
@@ -223,7 +330,14 @@ async function requestWhereToWatch(item, { region, watchmodeId, forceReview = fa
 
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(payload.error || 'Where to Watch is temporarily unavailable.');
+    const error = new Error(payload.error || 'Where to Watch is temporarily unavailable.');
+    error.status = response.status;
+    error.code = String(payload.status || '');
+    const retryAfter = Number(response.headers?.get?.('retry-after') || 0);
+    if (Number.isFinite(retryAfter) && retryAfter > 0) {
+      error.retryAfterMs = retryAfter * 1000;
+    }
+    throw error;
   }
 
   if (!['ready', 'needs_review', 'not_found'].includes(payload.status)) {
@@ -233,29 +347,53 @@ async function requestWhereToWatch(item, { region, watchmodeId, forceReview = fa
   return payload;
 }
 
-export async function fetchWhereToWatch(item, { region, forceReview = false } = {}) {
-  const rememberedId = forceReview ? null : readWatchmodeMatch(item);
-  const payload = await requestWhereToWatch(item, {
-    region,
-    watchmodeId: rememberedId,
-    forceReview
-  });
+export async function fetchWhereToWatch(item, {
+  region,
+  forceReview = false,
+  requestMode = 'interactive'
+} = {}) {
+  const normalizedRegion = region || getSavedWatchRegion();
+  const rememberedId = forceReview ? null : readWatchmodeMatch(item, normalizedRegion);
+  let payload;
+  try {
+    payload = await requestWhereToWatch(item, {
+      region: normalizedRegion,
+      watchmodeId: rememberedId,
+      forceReview,
+      requestMode
+    });
+  } catch (error) {
+    const stale = getCachedWhereToWatch(item, {
+      region: normalizedRegion,
+      allowStale: true
+    });
+    const staleEligible = Number(error?.status || 0) === 429
+      || ['quota_exhausted', 'upstream_paused', 'upstream_rate_limited'].includes(String(error?.code || ''));
+    if (stale?.status === 'ready' && staleEligible) {
+      return { ...stale, stale: true, cacheFallback: String(error.code || 'rate_limited') };
+    }
+    throw error;
+  }
 
   if (payload.match?.id && payload.status === 'ready') {
-    saveWatchmodeMatch(item, payload.match.id);
+    saveWatchmodeMatch(item, payload.match.id, normalizedRegion);
   }
+  if (!payload.stale) saveProviderResult(item, normalizedRegion, payload);
 
   return payload;
 }
 
 export async function confirmWatchmodeMatch(item, candidateId, { region } = {}) {
-  saveWatchmodeMatch(item, candidateId);
+  const normalizedRegion = region || getSavedWatchRegion();
+  saveWatchmodeMatch(item, candidateId, normalizedRegion);
 
   try {
-    return await requestWhereToWatch(item, {
-      region,
+    const payload = await requestWhereToWatch(item, {
+      region: normalizedRegion,
       watchmodeId: candidateId
     });
+    saveProviderResult(item, normalizedRegion, payload);
+    return payload;
   } catch (error) {
     forgetWatchmodeMatch(item);
     throw error;

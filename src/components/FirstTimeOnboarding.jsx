@@ -6,6 +6,11 @@ import {
   searchAnimeCandidates
 } from '../services/animeImporter';
 import { CONTENT_SAFETY_MODES } from '../services/contentSafety';
+import {
+  getSavedStreamingApps,
+  saveStreamingApps,
+  STREAMING_APP_OPTIONS
+} from '../services/watchmodeService';
 import '../styles/first-launch-onboarding.css';
 
 const STEPS = [
@@ -26,6 +31,12 @@ const THEMES = [
 ];
 
 const PAGE_TIPS = {
+  dashboard: {
+    icon: '⌂',
+    eyebrow: 'Home tip',
+    title: 'Home turns your library into the next useful action.',
+    body: 'Continue Watching, returning seasons, missed direct sequels, titles on your streaming services, and JoeAI Quick Pick appear when they have something useful to show. Empty shelves stay out of the way.'
+  },
   library: {
     icon: '▤',
     eyebrow: 'Library tip',
@@ -60,7 +71,7 @@ const PAGE_TIPS = {
     icon: '⚙',
     eyebrow: 'Settings tip',
     title: 'Backup, import, and export do different jobs.',
-    body: 'Full Backup creates a recovery copy of JoeAnimeDB. Restore Full Backup replaces the current database from that copy. Import Library List merges supported MAL, AniList, or JoeAnimeDB list data into your current library. TXT, CSV, ranked-list, MAL, and AniList exports are portable list files — not full backups.'
+    body: 'Choose My Streaming Apps to unlock On Your Services and Quick Watch. Full Backup creates a recovery copy; Restore replaces current data; Import Library List merges supported watch-list data instead.'
   },
   about: {
     icon: '?',
@@ -83,7 +94,16 @@ function defaultRating(item = {}) {
   return Number.isFinite(score) && score > 0 ? Math.min(10, Math.max(0.1, score)) : 8;
 }
 
-function StepProgress({ step }) {
+function StepProgress({ step, updateOnly = false }) {
+  if (updateOnly) {
+    const updateStep = step === 4 ? 1 : 0;
+    return (
+      <div className="firstLaunchProgress" aria-label={`Update ${updateStep + 1} of 2`}>
+        {[0, 1].map((index) => <span key={index} className={index <= updateStep ? 'active' : ''} aria-hidden="true" />)}
+      </div>
+    );
+  }
+
   return (
     <div className="firstLaunchProgress" aria-label={`Step ${step + 1} of ${STEPS.length}`}>
       {STEPS.map((item, index) => (
@@ -173,6 +193,7 @@ function RatingCard({ item, value, onChange }) {
 export function FirstTimeOnboarding({
   open = false,
   initialStep = 0,
+  source = '',
   displayName = '',
   theme = 'neon',
   contentSafetyMode = 'unrestricted',
@@ -185,6 +206,7 @@ export function FirstTimeOnboarding({
   onComplete,
   onSkip
 }) {
+  const updateOnly = source === 'beta22-update';
   const [step, setStep] = useState(initialStep);
   const [nameDraft, setNameDraft] = useState(displayName);
   const [query, setQuery] = useState('');
@@ -194,12 +216,14 @@ export function FirstTimeOnboarding({
   const [ratings, setRatings] = useState({});
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const [streamingApps, setStreamingApps] = useState(() => getSavedStreamingApps());
 
   useEffect(() => {
     if (!open) return;
     setStep(Math.max(0, Math.min(4, Number(initialStep || 0))));
     setNameDraft(displayName || '');
     setMessage('');
+    setStreamingApps(getSavedStreamingApps());
   }, [open]);
 
   const selectedKeys = useMemo(
@@ -243,6 +267,13 @@ export function FirstTimeOnboarding({
       if (current.length >= 3) return current;
       return [...current, candidate];
     });
+  }
+
+  function toggleStreamingApp(appId) {
+    const selectedApps = new Set(streamingApps);
+    if (selectedApps.has(appId)) selectedApps.delete(appId);
+    else selectedApps.add(appId);
+    setStreamingApps(saveStreamingApps([...selectedApps]));
   }
 
   async function saveNameAndContinue() {
@@ -368,16 +399,16 @@ export function FirstTimeOnboarding({
   return (
     <div className="firstLaunchOverlay" role="dialog" aria-modal="true" aria-labelledby="first-launch-title">
       <section className={`firstLaunchCard firstLaunchStep${step}`}>
-        <StepProgress step={step} />
+        <StepProgress step={step} updateOnly={updateOnly} />
         <div className="firstLaunchHeading">
           <span className="firstLaunchIcon">{STEPS[step].icon}</span>
           <div>
-            <p className="firstLaunchEyebrow">Step {step + 1} of {STEPS.length} · {STEPS[step].eyebrow}</p>
+            <p className="firstLaunchEyebrow">{updateOnly ? `Beta 22 update ${step === 4 ? 2 : 1} of 2` : `Step ${step + 1} of ${STEPS.length} · ${STEPS[step].eyebrow}`}</p>
             {step === 0 && <h2 id="first-launch-title">Welcome to JoeAnimeDB.</h2>}
-            {step === 1 && <h2 id="first-launch-title">Pick your signal.</h2>}
+            {step === 1 && <h2 id="first-launch-title">{updateOnly ? 'Set up your new Home.' : 'Pick your signal.'}</h2>}
             {step === 2 && <h2 id="first-launch-title">What anime do you love?</h2>}
             {step === 3 && <h2 id="first-launch-title">Give JoeAI a head start.</h2>}
-            {step === 4 && <h2 id="first-launch-title">Your library is ready.</h2>}
+            {step === 4 && <h2 id="first-launch-title">{updateOnly ? 'Meet your Home Decision Engine.' : 'Your library is ready.'}</h2>}
           </div>
         </div>
 
@@ -405,7 +436,7 @@ export function FirstTimeOnboarding({
 
           {step === 1 && (
             <>
-              <p className="firstLaunchBody">Choose a theme now and watch the app change behind this window. You can switch again anytime in Settings.</p>
+              <p className="firstLaunchBody">Choose a theme, recommendation limits, and the streaming services you use. You can change any of these later in Settings.</p>
               <div className="firstLaunchThemes">
                 {THEMES.map((option) => (
                   <button
@@ -442,6 +473,32 @@ export function FirstTimeOnboarding({
                   ))}
                 </div>
               </div>
+              <section className="firstLaunchStreaming" aria-labelledby="first-launch-streaming-title">
+                <header>
+                  <div>
+                    <strong id="first-launch-streaming-title">My streaming services</strong>
+                    <small>Unlocks On Your Services on Home and puts your providers first in Quick Watch.</small>
+                  </div>
+                  <b>{streamingApps.length ? `${streamingApps.length} selected` : 'Optional'}</b>
+                </header>
+                <div className="firstLaunchStreamingGrid" role="group" aria-label="My streaming services">
+                  {STREAMING_APP_OPTIONS.map((option) => {
+                    const isSelected = streamingApps.includes(option.id);
+                    return (
+                      <button
+                        key={option.id}
+                        type="button"
+                        className={isSelected ? 'active' : ''}
+                        aria-pressed={isSelected}
+                        onClick={() => toggleStreamingApp(option.id)}
+                      >
+                        <strong>{option.label}</strong>
+                        <small>{isSelected ? 'Selected' : option.description}</small>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
             </>
           )}
 
@@ -514,8 +571,30 @@ export function FirstTimeOnboarding({
             <>
               <p className="firstLaunchBody">
                 {nameDraft.trim() ? `Welcome, ${nameDraft.trim()}. ` : ''}
-                Your library is ready, and JoeAI can start using it immediately. The more you rate, favorite, rewatch, and teach it, the sharper its recommendations and Anime DNA become.
+                Your library is ready, and Home can start turning it into useful choices. The more you rate, favorite, rewatch, and teach JoeAI, the sharper its recommendations and Anime DNA become.
               </p>
+              <div className="firstLaunchFeature">
+                <b>Home is your decision engine.</b>
+                <span>Continue Watching, Returning For You, You Missed a Sequel, On Your Services, and Quick Pick appear only when your library has something useful for them to show.</span>
+              </div>
+              <section className="firstLaunchBuildGuide" aria-labelledby="first-launch-home-title">
+                <div className="firstLaunchBuildHeading">
+                  <span>⌂</span>
+                  <div>
+                    <strong id="first-launch-home-title">What is new on Home</strong>
+                    <small>Useful shelves appear automatically and disappear when they have nothing actionable.</small>
+                  </div>
+                </div>
+                <div className="firstLaunchBuildSteps">
+                  <article><b>1</b><div><strong>Continue Watching</strong><p>Every title marked Watching stays one action away from its Details card.</p></div></article>
+                  <article><b>2</b><div><strong>Returning and missed sequels</strong><p>Verified direct continuations are separated into current or upcoming returns and older sequels missing from your library.</p></div></article>
+                  <article><b>3</b><div><strong>On Your Services</strong><p>Uses the services you selected to surface personal matches you can stream now.</p></div></article>
+                  <article><b>4</b><div><strong>JoeAI Quick Pick</strong><p>Choose a mood or format, then press the selected intent again whenever you want another qualified pick.</p></div></article>
+                </div>
+              </section>
+
+              {!updateOnly && (
+                <>
               <section className="firstLaunchBuildGuide" aria-labelledby="first-launch-build-title">
                 <div className="firstLaunchBuildHeading">
                   <span>＋</span>
@@ -647,8 +726,13 @@ export function FirstTimeOnboarding({
                   </article>
                 </div>
               </section>
+                </>
+              )}
 
               <div className="firstLaunchReadyGrid">
+                <button type="button" onClick={() => onComplete?.('dashboard')}>
+                  <span>⌂</span><strong>Home</strong><small>Continue, discover sequels, or get a Quick Pick</small>
+                </button>
                 <button type="button" onClick={() => onComplete?.('library')}>
                   <span>▤</span><strong>Library</strong><small>Add, rate, favorite, and rewatch</small>
                 </button>
@@ -669,13 +753,13 @@ export function FirstTimeOnboarding({
 
         <footer className="firstLaunchActions">
           <button type="button" className="quiet" onClick={() => onSkip?.()} disabled={busy}>
-            Skip setup
+            {updateOnly ? 'Skip update' : 'Skip setup'}
           </button>
           <div>
-            {step > 0 && step < 4 && (
+            {step > 0 && step < 4 && !updateOnly && (
               <button type="button" onClick={() => moveTo(step - 1)} disabled={busy}>Back</button>
             )}
-            {step < 4 && (
+            {step < 4 && !updateOnly && (
               <button type="button" onClick={skipCurrentStep} disabled={busy}>Skip this step</button>
             )}
             {step === 0 && (
@@ -684,7 +768,7 @@ export function FirstTimeOnboarding({
               </button>
             )}
             {step === 1 && (
-              <button type="button" className="primary" onClick={() => moveTo(2)}>Continue</button>
+              <button type="button" className="primary" onClick={() => moveTo(updateOnly ? 4 : 2)}>Continue</button>
             )}
             {step === 2 && (
               <button type="button" className="primary" onClick={prepareSelectedAnime} disabled={busy}>

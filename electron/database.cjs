@@ -747,6 +747,69 @@ function upsertAnime(item) {
   return rowToAnime(savedRow);
 }
 
+function updateAnimeIdentityLinkage(patch = {}) {
+  const id = String(patch.id || '').trim();
+  if (!id) return { ok: false, reason: 'missing-id' };
+
+  const existingRow = db.prepare('SELECT * FROM anime WHERE id = ?').get(id);
+  if (!existingRow) return { ok: false, reason: 'missing-record', id };
+
+  const beforeCount = db.prepare('SELECT COUNT(*) AS count FROM anime').get().count;
+  const existing = rowToAnime(existingRow);
+  const proposedKitsuId = String(
+    patch.kitsuId ?? patch.kitsu_id ?? existing.kitsuId ?? ''
+  ).trim();
+
+  if (proposedKitsuId) {
+    const collision = db
+      .prepare('SELECT * FROM anime WHERE kitsuId = ? AND id != ? LIMIT 1')
+      .get(proposedKitsuId, id);
+    if (collision) {
+      return {
+        ok: false,
+        reason: 'kitsu-collision',
+        id,
+        collision: debugAnimeRow(collision),
+        countBefore: beforeCount,
+        countAfter: beforeCount
+      };
+    }
+  }
+
+  const identityFields = [
+    'identityNeedsReview',
+    'metadataNeedsReview',
+    'metadataReviewReason',
+    'identityResolutionStatus',
+    'identityLinkageSource',
+    'identityLinkageConfidence',
+    'identityLinkageUpdatedAt'
+  ];
+  const next = { ...existing, kitsuId: proposedKitsuId };
+  identityFields.forEach((field) => {
+    if (Object.prototype.hasOwnProperty.call(patch, field)) next[field] = patch[field];
+  });
+
+  const updatedAt = new Date().toISOString();
+  db.prepare(`
+    UPDATE anime
+    SET kitsuId = ?, payload = ?, updatedAt = ?
+    WHERE id = ?
+  `).run(proposedKitsuId || null, JSON.stringify(next), updatedAt, id);
+
+  const afterCount = db.prepare('SELECT COUNT(*) AS count FROM anime').get().count;
+  if (afterCount !== beforeCount) {
+    throw new Error(`Identity linkage changed library count from ${beforeCount} to ${afterCount}.`);
+  }
+
+  return {
+    ok: true,
+    item: rowToAnime(db.prepare('SELECT * FROM anime WHERE id = ?').get(id)),
+    countBefore: beforeCount,
+    countAfter: afterCount
+  };
+}
+
 function upsertCatalogAnime(item) {
   const incoming = catalogToRow(item);
   let existingRow = null;
@@ -949,6 +1012,7 @@ module.exports = {
   setJoeAIConversationContext,
   clearJoeAIConversationContext,
   upsertAnime,
+  updateAnimeIdentityLinkage,
   upsertCatalogAnime,
   importCatalog,
   replaceAll,

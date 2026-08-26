@@ -3,13 +3,14 @@ import { APP_VERSION } from '../appVersion';
 import { createMobileDatabaseAdapter } from './mobileDatabase';
 import { createMobileUpdateManager } from './mobileUpdates';
 import { isNativeAndroid, openExternalUrl } from './runtime';
+import { recordStartupTiming } from '../services/startupPerformance';
 
 function markPlatform(platform) {
   document.documentElement.dataset.platform = platform;
   document.body?.classList.add(`platform-${platform}`);
 }
 
-export async function initializePlatformBridge() {
+export function initializePlatformBridge() {
   if (window.JoeAnimeDB?.desktop) {
     markPlatform('desktop');
     return;
@@ -28,12 +29,16 @@ export async function initializePlatformBridge() {
   }
 
   markPlatform('android');
-  const info = await CapacitorApp.getInfo();
-  const updates = createMobileUpdateManager({ currentVersion: info.version });
+  let nativeInfo = {
+    name: 'JoeAnimeDB',
+    version: APP_VERSION,
+    build: ''
+  };
+  const updates = createMobileUpdateManager({ currentVersion: APP_VERSION });
 
   window.JoeAnimeDB = {
-    version: info.version,
-    build: info.build,
+    version: nativeInfo.version,
+    build: nativeInfo.build,
     desktop: false,
     mobile: true,
     platform: 'android',
@@ -41,9 +46,9 @@ export async function initializePlatformBridge() {
     updates,
     app: {
       getInfo: async () => ({
-        name: info.name,
-        version: info.version,
-        build: info.build,
+        name: nativeInfo.name,
+        version: nativeInfo.version,
+        build: nativeInfo.build,
         platform: 'android',
         packaged: true
       }),
@@ -62,4 +67,29 @@ export async function initializePlatformBridge() {
   };
 
   updates.start();
+
+  // Native package metadata is not required to open SQLite or navigate Home.
+  // Resolve it in the background so a slow Capacitor bridge cannot freeze the
+  // first D-pad press.
+  const infoStartedAt = globalThis.performance?.now?.() ?? Date.now();
+  void CapacitorApp.getInfo()
+    .then((info) => {
+      nativeInfo = { ...nativeInfo, ...info };
+      Object.assign(window.JoeAnimeDB, {
+        version: nativeInfo.version,
+        build: nativeInfo.build
+      });
+      recordStartupTiming(
+        'platformAppInfo',
+        (globalThis.performance?.now?.() ?? Date.now()) - infoStartedAt
+      );
+    })
+    .catch((error) => {
+      console.warn('Android app metadata will use the packaged fallback.', error);
+      recordStartupTiming(
+        'platformAppInfo',
+        (globalThis.performance?.now?.() ?? Date.now()) - infoStartedAt,
+        { fallback: true }
+      );
+    });
 }

@@ -50,6 +50,7 @@ contextBridge.exposeInMainWorld('JoeAnimeDB', {
     replaceAll: (anime) => ipcRenderer.invoke('db:replaceAll', anime),
     restoreBackup: (snapshot) => ipcRenderer.invoke('db:restoreBackup', snapshot),
     updateAnime: (anime) => ipcRenderer.invoke('db:updateAnime', anime),
+    updateAnimeIdentityLinkage: (patch) => ipcRenderer.invoke('db:updateAnimeIdentityLinkage', patch),
     importCatalog: (catalog) => ipcRenderer.invoke('db:importCatalog', catalog),
     updateCatalogAnime: (anime) => ipcRenderer.invoke('db:updateCatalogAnime', anime),
     getJoeAIState: () => ipcRenderer.invoke('db:getJoeAIState'),

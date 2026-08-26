@@ -312,6 +312,117 @@ function createLocalFallbackAnime(title, status = 'Watching', reason = '') {
   });
 }
 
+export function evaluateSafeKitsuIdentity(titleResolution = {}) {
+  const candidate = titleResolution.candidate || null;
+  const kitsuId = String(candidate?.kitsuId || '').trim();
+  const safe = Boolean(titleResolution.autoAct && kitsuId);
+  const hasCandidates = Boolean(
+    candidate || (Array.isArray(titleResolution.candidates) && titleResolution.candidates.length)
+  );
+
+  return {
+    safe,
+    candidate: safe ? candidate : null,
+    kitsuId: safe ? kitsuId : '',
+    needsReview: Boolean(hasCandidates && !safe),
+    unresolved: !hasCandidates,
+    reason: safe
+      ? titleResolution.reason || 'One high-confidence exact identity match.'
+      : hasCandidates
+        ? titleResolution.reason || 'Kitsu identity requires review.'
+        : 'Kitsu returned no identity candidate.'
+  };
+}
+
+export function prepareSafeImportedCandidate({
+  title,
+  status = 'Watching',
+  titleResolution = {},
+  lookupError = ''
+} = {}) {
+  const identityDecision = evaluateSafeKitsuIdentity(titleResolution);
+  if (identityDecision.safe) {
+    return { candidate: titleResolution.candidate, identityDecision };
+  }
+
+  return {
+    candidate: {
+      ...createLocalFallbackAnime(title, status, lookupError || identityDecision.reason),
+      identityNeedsReview: identityDecision.needsReview,
+      metadataNeedsReview: identityDecision.needsReview,
+      metadataReviewReason: identityDecision.needsReview ? identityDecision.reason : '',
+      identityResolutionStatus: identityDecision.needsReview ? 'review' : 'unresolved'
+    },
+    identityDecision
+  };
+}
+
+export function applySafeKitsuIdentity(item = {}, resolutionResult = {}, source = 'safe-kitsu-resolution') {
+  if (item.kitsuId || item.kitsu_id) return item;
+  const identityDecision = resolutionResult.identityDecision
+    || evaluateSafeKitsuIdentity(resolutionResult.titleResolution || resolutionResult);
+
+  if (identityDecision.safe) {
+    return {
+      ...item,
+      kitsuId: identityDecision.kitsuId,
+      identityNeedsReview: false,
+      identityResolutionStatus: 'verified',
+      identityLinkageSource: source,
+      identityLinkageUpdatedAt: new Date().toISOString()
+    };
+  }
+
+  if (!identityDecision.needsReview) return item;
+  return {
+    ...item,
+    identityNeedsReview: true,
+    metadataNeedsReview: true,
+    metadataReviewReason: identityDecision.reason,
+    identityResolutionStatus: 'review'
+  };
+}
+
+export async function resolveSafeKitsuIdentity(item = {}) {
+  const title = item.officialTitle || item.title || '';
+  if (!title) {
+    return {
+      results: [],
+      titleResolution: resolveAnimeTitleCandidates({ query: '', candidates: [] }),
+      identityDecision: evaluateSafeKitsuIdentity({ candidate: null, candidates: [] })
+    };
+  }
+
+  let results = [];
+  let lookupError = '';
+
+  try {
+    results = await retryImportStage(
+      `Safe Kitsu identity search for ${title}`,
+      () => searchAnimeCandidates(title, { limit: 5 }),
+      { attempts: IMPORT_KITSU_ATTEMPTS }
+    );
+  } catch (error) {
+    lookupError = error?.message || String(error);
+  }
+
+  const titleResolution = resolveAnimeTitleCandidates({
+    query: title,
+    candidates: results,
+    hints: {
+      year: item.year || item.startYear || item.releaseYear || '',
+      type: item.type || item.subtype || item.format || item.showType || ''
+    }
+  });
+
+  return {
+    results,
+    titleResolution,
+    identityDecision: evaluateSafeKitsuIdentity(titleResolution),
+    lookupError
+  };
+}
+
 function findLocalTitleMatch(library = [], title = '') {
   const candidate = {
     title,
@@ -514,7 +625,8 @@ export async function searchAnimeCandidates(title, { limit = 8 } = {}) {
 export async function importAnimeByTitle({
   title,
   status = 'Watching',
-  library = []
+  library = [],
+  requireSafeIdentity = false
 }) {
   const localDuplicate = findLocalTitleMatch(library, title);
 
@@ -622,11 +734,21 @@ export async function importAnimeByTitle({
     candidates: results
   });
 
-  let candidate =
-    titleResolution.candidate || createLocalFallbackAnime(title, status, lookupError);
+  const safeImport = prepareSafeImportedCandidate({
+    title,
+    status,
+    titleResolution,
+    lookupError
+  });
+  const identityDecision = safeImport.identityDecision;
+
+  let candidate = requireSafeIdentity
+    ? safeImport.candidate
+    : titleResolution.candidate || createLocalFallbackAnime(title, status, lookupError);
 
   const needsKitsuEnrichment = Boolean(
     results.length &&
+      (!requireSafeIdentity || identityDecision.safe) &&
       (
         !candidate.genres?.length ||
         !candidate.studio ||
@@ -723,19 +845,21 @@ export async function importAnimeByTitle({
 
   // Automatic completion is best-effort. A Wikidata miss must never throw the
   // whole title into the list-import Needs Review queue.
-  try {
-    const completion = await completeImportedMetadata(candidate, library);
-    candidate = completion.candidate;
-    metadataEnrichment = completion.metadataEnrichment;
-  } catch (error) {
-    console.warn('Automatic metadata completion failed:', title, error);
-    metadataEnrichment = {
-      attempted: true,
-      improved: false,
-      fields: [],
-      unresolved: true,
-      reason: error?.message || String(error)
-    };
+  if (!(requireSafeIdentity && identityDecision.needsReview)) {
+    try {
+      const completion = await completeImportedMetadata(candidate, library);
+      candidate = completion.candidate;
+      metadataEnrichment = completion.metadataEnrichment;
+    } catch (error) {
+      console.warn('Automatic metadata completion failed:', title, error);
+      metadataEnrichment = {
+        attempted: true,
+        improved: false,
+        fields: [],
+        unresolved: true,
+        reason: error?.message || String(error)
+      };
+    }
   }
 
   const duplicate = findDuplicateAnime(library, candidate) || localDuplicate;
@@ -778,6 +902,7 @@ export async function importAnimeByTitle({
     metadataLookupFailed: Boolean(lookupError),
     lookupError,
     metadataEnrichment,
-    titleResolution
+    titleResolution,
+    identityDecision
   };
 }

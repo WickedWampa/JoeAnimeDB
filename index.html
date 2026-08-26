@@ -8,8 +8,75 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <style>
+      html, body { margin: 0; min-height: 100%; background: #050910; }
+      .preReactSplash {
+        position: fixed;
+        inset: 0;
+        z-index: 2147483647;
+        display: grid;
+        place-items: center;
+        overflow: hidden;
+        background:
+          radial-gradient(circle at 30% 20%, rgba(55, 234, 255, .12), transparent 34%),
+          radial-gradient(circle at 72% 18%, rgba(255, 92, 200, .09), transparent 32%),
+          linear-gradient(180deg, #050910, #07111b 62%, #03060b);
+        color: #edf7ff;
+        font-family: Inter, "Segoe UI", system-ui, sans-serif;
+        opacity: 1;
+        transition: opacity 180ms ease;
+      }
+      .preReactSplash.isLeaving { opacity: 0; }
+      .preReactSplashCard {
+        width: min(330px, calc(100vw - 48px));
+        padding: 24px 30px;
+        border: 1px solid rgba(55, 234, 255, .22);
+        border-radius: 20px;
+        background: rgba(9, 14, 26, .9);
+        box-shadow: 0 22px 70px rgba(0, 0, 0, .4);
+        text-align: center;
+      }
+      .preReactSplashCard strong { display: block; font-size: 28px; line-height: 1; }
+      .preReactSplashCard strong span { color: #37eaff; }
+      .preReactSplashCard p { margin: 9px 0 0; color: #9fb2c8; font-size: 14px; }
+      html.tvLayoutMode .preReactSplashCard {
+        width: min(300px, 42vw);
+        padding: 18px 25px;
+        border-radius: 16px;
+      }
+      html.tvLayoutMode .preReactSplashCard strong { font-size: 23px; }
+      html.tvLayoutMode .preReactSplashCard p { margin-top: 7px; font-size: 11px; }
+    </style>
   </head>
   <body>
+    <script>
+      (() => {
+        window.__JOEANIME_SPLASH_STARTED_AT__ = globalThis.performance?.now?.() ?? Date.now();
+        const storageKey = 'joeanime-tv-layout-v1';
+        const userAgent = navigator.userAgent || '';
+        const android = /Android/i.test(userAgent);
+        const width = Math.max(window.innerWidth || 0, window.screen?.width || 0);
+        const height = Math.max(window.innerHeight || 0, window.screen?.height || 0);
+        const ratio = height > 0 ? width / height : 0;
+        const landscape = android && width >= 720 && ratio > 1.25;
+        const explicitTv = /Android TV|GoogleTV|Google TV|BRAVIA|SHIELD|AFT[A-Z0-9]*|ADT-|sdk_google_atv|sdk_google_tv|SmartTV|MiTV/i.test(userAgent);
+        const noTouch = Number(navigator.maxTouchPoints || 0) === 0;
+        const livingRoomViewport = width >= 960 && height >= 520 && ratio >= 1.68 && ratio <= 1.92;
+        let rememberedTv = false;
+        try { rememberedTv = localStorage.getItem(storageKey) === 'true'; } catch {}
+
+        if (landscape && (explicitTv || noTouch || rememberedTv || livingRoomViewport)) {
+          document.body.classList.add('tvLayoutMode', 'tvBootMode');
+          document.documentElement.classList.add('tvLayoutMode');
+        }
+      })();
+    </script>
+    <main id="startup-splash" class="preReactSplash" aria-label="JoeAnimeDB is starting">
+      <section class="preReactSplashCard">
+        <strong>JOE<span>ANIME</span>DB</strong>
+        <p>Remember every anime.</p>
+      </section>
+    </main>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

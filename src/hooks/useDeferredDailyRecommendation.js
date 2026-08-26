@@ -3,6 +3,7 @@ import {
   getDailyRecommendation,
   peekDailyRecommendation
 } from '../services/recommendationRuntime';
+import { deferUntilAfterFirstPaint } from '../services/startupPerformance';
 
 const EMPTY_JOEAI_STATE = Object.freeze({});
 
@@ -21,6 +22,11 @@ export function useDeferredDailyRecommendation(
   const [result, setResult] = useState(() => cachedResult(context, daySeed, joeAIState));
 
   useEffect(() => {
+    if (!context) {
+      setResult(null);
+      return undefined;
+    }
+
     const cached = cachedResult(context, daySeed, joeAIState);
     if (cached) {
       setResult(cached);
@@ -28,9 +34,6 @@ export function useDeferredDailyRecommendation(
     }
 
     let cancelled = false;
-    let idleId = null;
-    let timeoutId = null;
-
     setResult(null);
 
     const calculate = () => {
@@ -45,18 +48,11 @@ export function useDeferredDailyRecommendation(
       }
     };
 
-    if (typeof globalThis.requestIdleCallback === 'function') {
-      idleId = globalThis.requestIdleCallback(calculate, { timeout: 600 });
-    } else {
-      timeoutId = globalThis.setTimeout(calculate, 0);
-    }
+    const cancelSchedule = deferUntilAfterFirstPaint(calculate, { timeout: 600 });
 
     return () => {
       cancelled = true;
-      if (idleId != null && typeof globalThis.cancelIdleCallback === 'function') {
-        globalThis.cancelIdleCallback(idleId);
-      }
-      if (timeoutId != null) globalThis.clearTimeout(timeoutId);
+      cancelSchedule();
     };
   }, [context, daySeed, joeAIState]);
 
@@ -67,6 +63,6 @@ export function useDeferredDailyRecommendation(
 
   return {
     recommendation: matchesCurrentInputs ? result.value : null,
-    isPending: !matchesCurrentInputs
+    isPending: !context || !matchesCurrentInputs
   };
 }

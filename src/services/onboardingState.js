@@ -1,7 +1,8 @@
-export const ONBOARDING_VERSION = 1;
+export const ONBOARDING_VERSION = 2;
 export const ONBOARDING_STATE_KEY = 'joeanime-onboarding-state-v1';
 export const LEGACY_ONBOARDING_VERSION_KEY = 'joeanime-onboarding-version';
 export const ONBOARDING_TIP_IDS = [
+  'dashboard',
   'library',
   'analytics',
   'assistant',
@@ -43,9 +44,32 @@ export function readOnboardingState() {
 
   try {
     const raw = localStorage.getItem(ONBOARDING_STATE_KEY);
-    if (raw) return normalizeState(JSON.parse(raw));
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      const storedVersion = Number(parsed?.version || 1);
+      if (storedVersion < ONBOARDING_VERSION && ['completed', 'skipped'].includes(parsed?.status)) {
+        return saveOnboardingState({
+          ...parsed,
+          status: 'in-progress',
+          step: 1,
+          startedAt: new Date().toISOString(),
+          completedAt: '',
+          source: 'beta22-update'
+        });
+      }
+      return normalizeState(parsed);
+    }
 
-    if (localStorage.getItem(LEGACY_ONBOARDING_VERSION_KEY)) {
+    const legacyVersion = Number(localStorage.getItem(LEGACY_ONBOARDING_VERSION_KEY) || 0);
+    if (legacyVersion) {
+      if (legacyVersion < ONBOARDING_VERSION) {
+        return saveOnboardingState({
+          status: 'in-progress',
+          step: 1,
+          startedAt: new Date().toISOString(),
+          source: 'beta22-update'
+        });
+      }
       return normalizeState({
         status: 'completed',
         step: 4,
@@ -90,6 +114,16 @@ export function beginOnboarding({ replay = false } = {}) {
   });
 }
 
+export function beginUpdateOnboarding() {
+  return saveOnboardingState({
+    ...EMPTY_STATE,
+    status: 'in-progress',
+    step: 1,
+    startedAt: new Date().toISOString(),
+    source: 'beta22-update'
+  });
+}
+
 export function updateOnboardingStep(currentState, step) {
   return saveOnboardingState({
     ...(currentState || EMPTY_STATE),
@@ -106,7 +140,9 @@ export function finishOnboarding(currentState, status = 'completed') {
     step: 4,
     dismissedTips: finalStatus === 'skipped'
       ? ONBOARDING_TIP_IDS
-      : (currentState?.dismissedTips || []),
+      : currentState?.source === 'beta22-update'
+        ? [...new Set([...(currentState?.dismissedTips || []), 'dashboard'])]
+        : (currentState?.dismissedTips || []),
     completedAt: new Date().toISOString()
   });
 }

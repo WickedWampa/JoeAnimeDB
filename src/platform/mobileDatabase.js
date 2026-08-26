@@ -229,6 +229,57 @@ export function createMobileDatabaseAdapter() {
       }).then((database) => findExisting(database.anime, incoming));
     },
 
+    async updateAnimeIdentityLinkage(patch = {}) {
+      const id = String(patch.id || '').trim();
+      if (!id) return { ok: false, reason: 'missing-id' };
+
+      let outcome = { ok: false, reason: 'missing-record', id };
+      const database = await mutate((current) => {
+        const index = current.anime.findIndex((item) => String(item.id) === id);
+        if (index < 0) return current;
+
+        const existing = current.anime[index];
+        const proposedKitsuId = String(
+          patch.kitsuId ?? patch.kitsu_id ?? existing.kitsuId ?? ''
+        ).trim();
+        const collision = proposedKitsuId
+          ? current.anime.find((item, itemIndex) =>
+              itemIndex !== index &&
+              String(item.kitsuId || item.kitsu_id || '').trim() === proposedKitsuId
+            )
+          : null;
+        if (collision) {
+          outcome = {
+            ok: false,
+            reason: 'kitsu-collision',
+            id,
+            collision: { id: collision.id, title: collision.title, kitsuId: proposedKitsuId }
+          };
+          return current;
+        }
+
+        const identityFields = [
+          'identityNeedsReview', 'metadataNeedsReview', 'metadataReviewReason',
+          'identityResolutionStatus', 'identityLinkageSource',
+          'identityLinkageConfidence', 'identityLinkageUpdatedAt'
+        ];
+        const nextItem = { ...existing, kitsuId: proposedKitsuId };
+        identityFields.forEach((field) => {
+          if (Object.prototype.hasOwnProperty.call(patch, field)) nextItem[field] = patch[field];
+        });
+        const anime = [...current.anime];
+        anime[index] = nextItem;
+        outcome = { ok: true, item: nextItem };
+        return { ...current, anime };
+      });
+
+      return {
+        ...outcome,
+        countBefore: database.anime.length,
+        countAfter: database.anime.length
+      };
+    },
+
     async importCatalog(catalog = []) {
       return mutate((current) => {
         const nextCatalog = [...current.catalog];

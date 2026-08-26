@@ -26,7 +26,7 @@ import { checkMetadataProviders } from '../services/providerHealth';
 import { recommendAnime } from '../engine/recommendationEngine'; import { fetchMetadata } from '../services/metadata'; import { maybeKnowledgeFirstRecommendation } from '../ai/knowledgeFirstRecommender'; import { parseJoeAIIntent } from '../ai/intentParser'; import { executeJoeAICommand } from '../ai/commandExecutor'; import { routeJoeAIRecommendation, routeJoeAITitleQuestion } from '../ai/joeAIRecommendationRouter';
 import { getRecommendationContext } from '../services/recommendationRuntime';
 import { useDeferredDailyRecommendation } from '../hooks/useDeferredDailyRecommendation';
-import { buildTonightsWatch } from '../ai/tonightsWatch'; import { importAnimeByTitle, mergeAnimeMetadata, searchAnimeCandidates } from '../services/animeImporter';
+import { buildTonightsWatch } from '../ai/tonightsWatch'; import { applySafeKitsuIdentity, importAnimeByTitle, mergeAnimeMetadata, resolveSafeKitsuIdentity, searchAnimeCandidates } from '../services/animeImporter';
 import {
   fetchWikidataRepair,
   needsWikidataRepair,
@@ -5080,7 +5080,7 @@ export function SettingsPage({
     setLibraryImportSummary(summary);
 
     try {
-      if (summary?.failed?.length || summary?.added?.length || summary?.updated?.length || summary?.skipped?.length) {
+      if (summary?.failed?.length || summary?.needsReview?.length || summary?.added?.length || summary?.updated?.length || summary?.skipped?.length) {
         localStorage.setItem(
           'joeanime-library-import-review-v1',
           JSON.stringify(summary)
@@ -5148,6 +5148,7 @@ export function SettingsPage({
     const addedIds = new Set();
     const skipped = [];
     const failed = [];
+    const needsReview = [];
 
     for (let index = 0; index < rows.length; index += 1) {
       const row = rows[index];
@@ -5165,18 +5166,35 @@ export function SettingsPage({
         const existingBeforeLookup = findImportedLibraryItem(row, liveLibrary);
 
         if (existingBeforeLookup) {
-          const merged = {
+          let merged = {
             ...existingBeforeLookup,
             ...importedPersonalData(row),
             id: existingBeforeLookup.id,
             title: existingBeforeLookup.title,
             officialTitle: existingBeforeLookup.officialTitle || existingBeforeLookup.title
           };
+
+          let identityReview = null;
+          if (!String(existingBeforeLookup.kitsuId || existingBeforeLookup.kitsu_id || '').trim()) {
+            const linkage = await resolveSafeKitsuIdentity(merged);
+            merged = applySafeKitsuIdentity(merged, linkage, 'mal-import-safe-resolution');
+            if (linkage.identityDecision.needsReview) {
+              identityReview = {
+                ...row,
+                title: row.requestedTitle || row.title,
+                importedRecordId: existingBeforeLookup.id,
+                reason: linkage.identityDecision.reason,
+                candidates: linkage.results || []
+              };
+            }
+          }
+
           const saved = await updateAnime(merged);
           liveLibrary = saved?.anime || liveLibrary.map((item) =>
             String(item.id) === String(merged.id) ? merged : item
           );
           updated.push(merged.officialTitle || merged.title);
+          if (identityReview) needsReview.push(identityReview);
           continue;
         }
 
@@ -5184,7 +5202,8 @@ export function SettingsPage({
           title: row.requestedTitle || row.title,
           normalizedTitle: row.title,
           status: row.status || 'Completed',
-          library: liveLibrary
+          library: liveLibrary,
+          requireSafeIdentity: true
         });
 
         if (result.duplicate) {
@@ -5214,7 +5233,7 @@ export function SettingsPage({
             result.candidate
           ].filter(Boolean);
 
-          failed.push({
+          needsReview.push({
             ...row,
             title: row.requestedTitle || row.title,
             normalizedTitle: row.title,
@@ -5261,6 +5280,16 @@ export function SettingsPage({
         liveLibrary = saved?.anime || [...liveLibrary, next];
         added.push(next.title);
         addedIds.add(String(next.id));
+
+        if (result.identityDecision?.needsReview) {
+          failed.push({
+            ...row,
+            title: row.requestedTitle || row.title,
+            importedRecordId: next.id,
+            reason: result.identityDecision.reason,
+            candidates: result.results || []
+          });
+        }
       } catch (error) {
         console.warn('Library list import failed:', row.title, error);
 
@@ -5289,7 +5318,9 @@ export function SettingsPage({
     // has been saved. Waiting until the full library exists is important because
     // local franchise inheritance can now use seasons imported later in the file.
     const postImportTargets = liveLibrary.filter((item) =>
-      addedIds.has(String(item.id)) && needsWikidataRepair(item)
+      addedIds.has(String(item.id)) &&
+      !item.identityNeedsReview &&
+      needsWikidataRepair(item)
     );
 
     const autoRepaired = [];
@@ -5384,11 +5415,12 @@ export function SettingsPage({
       updated,
       skipped,
       failed,
+      needsReview,
       autoRepaired,
       autoUnresolved
     });
     setLibraryImportStatus(
-      `Import finished — ${added.length} added, ${updated.length} updated, ${autoRepaired.length} metadata repairs, ${skipped.length} skipped, ${failed.length} failed.`
+      `Import finished — ${added.length} added, ${updated.length} updated, ${autoRepaired.length} metadata repairs, ${needsReview.length} need review, ${skipped.length} skipped, ${failed.length} failed.`
     );
   }
 
@@ -5399,6 +5431,46 @@ export function SettingsPage({
 
     try {
       const currentLibrary = data?.anime || [];
+
+      if (failedItem.importedRecordId) {
+        const importedRecord = currentLibrary.find(
+          (item) => String(item.id) === String(failedItem.importedRecordId)
+        );
+
+        if (!importedRecord) {
+          throw new Error('The imported library record could not be found.');
+        }
+        if (!candidate.kitsuId) {
+          throw new Error('The reviewed candidate does not have a Kitsu identity.');
+        }
+
+        const linked = {
+          ...importedRecord,
+          kitsuId: candidate.kitsuId,
+          identityNeedsReview: false,
+          metadataNeedsReview: Boolean(importedRecord.metadataNeedsRefresh),
+          metadataReviewReason: '',
+          identityResolutionStatus: 'user-reviewed',
+          identityLinkageSource: 'mal-import-user-review',
+          identityLinkageUpdatedAt: new Date().toISOString()
+        };
+
+        await updateAnime(linked);
+
+        const nextSummary = {
+          ...libraryImportSummary,
+          needsReview: (libraryImportSummary?.needsReview || []).filter((item) =>
+            String(item.importedRecordId || '') !== String(failedItem.importedRecordId)
+          ),
+          failed: (libraryImportSummary?.failed || []).filter((item) =>
+            String(item.importedRecordId || '') !== String(failedItem.importedRecordId)
+          )
+        };
+        saveLibraryImportSummary(nextSummary);
+        setLibraryImportStatus(`Linked ${importedRecord.title} to the reviewed Kitsu title.`);
+        return;
+      }
+
       const existing = currentLibrary.find((item) => {
         const left = String(item.officialTitle || item.title || '').toLowerCase();
         const right = String(candidate.officialTitle || candidate.title || '').toLowerCase();
@@ -5440,6 +5512,7 @@ export function SettingsPage({
       const nextSummary = {
         ...libraryImportSummary,
         added: [...(libraryImportSummary?.added || []), next.title],
+        needsReview: (libraryImportSummary?.needsReview || []).filter((item) => item.title !== failedItem.title),
         failed: (libraryImportSummary?.failed || []).filter((item) => item.title !== failedItem.title)
       };
       saveLibraryImportSummary(nextSummary);
@@ -5453,14 +5526,17 @@ export function SettingsPage({
   }
 
   async function copyFailedLibraryTitles() {
-    const failed = libraryImportSummary?.failed || [];
-    if (!failed.length) return;
+    const reviewItems = [
+      ...(libraryImportSummary?.needsReview || []),
+      ...(libraryImportSummary?.failed || [])
+    ];
+    if (!reviewItems.length) return;
 
-    const text = failed.map((item) => item.title).join('\\n');
+    const text = reviewItems.map((item) => item.title).join('\\n');
 
     try {
       await navigator.clipboard.writeText(text);
-      setLibraryImportStatus(`Copied ${failed.length} failed title${failed.length === 1 ? '' : 's'} to the clipboard.`);
+      setLibraryImportStatus(`Copied ${reviewItems.length} review title${reviewItems.length === 1 ? '' : 's'} to the clipboard.`);
     } catch {
       setLibraryImportStatus('Could not copy failed titles to the clipboard.');
     }
@@ -5682,7 +5758,9 @@ export function SettingsPage({
   async function completeMissingMetadata() {
     if (!updateAnime || metadataRepairProgress) return;
 
-    const targets = (data?.anime || []).filter(needsWikidataRepair);
+    const targets = (data?.anime || []).filter(
+      (item) => !item.identityNeedsReview && needsWikidataRepair(item)
+    );
 
     if (!targets.length) {
       setMetadataRepairStatus('Metadata health is complete for all supported fields.');
@@ -5859,8 +5937,11 @@ export function SettingsPage({
         const genomeText = genome.supported
           ? `${genome.covered} covered, ${genome.generated} generated`
           : 'desktop Genome runner unavailable';
+        const linkage = summary.kitsuLinkage || {};
         setGenomeUpdateStatus(
-          `Update complete — ${summary.skipped} skipped, ${summary.refreshed} refreshed; Genomes: ${genomeText}.`
+          `Update complete — ${summary.skipped} skipped, ${summary.refreshed} refreshed; ` +
+          `Kitsu links: ${linkage.repaired || 0} repaired, ${linkage.needsReview || 0} need review, ` +
+          `${linkage.unresolved || 0} unresolved; Genomes: ${genomeText}.`
         );
       } else {
         setGenomeUpdateStatus('Database update finished.');
@@ -5996,6 +6077,10 @@ export function SettingsPage({
   const metadataHealthPercent = animeCount
     ? Math.round((metadataHealthyCount / animeCount) * 100)
     : 100;
+  const importReviewItems = [
+    ...(libraryImportSummary?.needsReview || []),
+    ...(libraryImportSummary?.failed || [])
+  ];
   const themeOptions = [
     { id: 'neon', label: 'Neon', description: 'Cyber blue and pink' },
     { id: 'sakura', label: 'Sakura', description: 'Warm cherry blossom' },
@@ -6078,6 +6163,7 @@ export function SettingsPage({
           {lastUpdateSummary && (
             <em>
               {lastUpdateSummary.skipped} skipped · {lastUpdateSummary.refreshed} refreshed ·{' '}
+              {lastUpdateSummary.kitsuLinkage?.repaired || 0} Kitsu links repaired ·{' '}
               {lastUpdateSummary.genome?.covered || 0} Genomes already covered
             </em>
           )}
@@ -6530,6 +6616,9 @@ export function SettingsPage({
                 <span><strong>{lastUpdateSummary.scanned}</strong> scanned</span>
                 <span><strong>{lastUpdateSummary.skipped}</strong> skipped</span>
                 <span><strong>{lastUpdateSummary.refreshed}</strong> refreshed</span>
+                <span><strong>{lastUpdateSummary.kitsuLinkage?.repaired || 0}</strong> Kitsu links repaired</span>
+                <span><strong>{lastUpdateSummary.kitsuLinkage?.needsReview || 0}</strong> need review</span>
+                <span><strong>{lastUpdateSummary.kitsuLinkage?.unresolved || 0}</strong> unresolved</span>
                 <span><strong>{lastUpdateSummary.genome?.generated || 0}</strong> Genomes generated</span>
               </div>
             ) : (
@@ -6715,6 +6804,10 @@ export function SettingsPage({
             <span>Already Present</span>
           </div>
           <div>
+            <strong>{libraryImportSummary.needsReview?.length || 0}</strong>
+            <span>Needs Review</span>
+          </div>
+          <div>
             <strong>{libraryImportSummary.failed?.length || 0}</strong>
             <span>Failed</span>
           </div>
@@ -6752,7 +6845,7 @@ export function SettingsPage({
             </details>
           ) : null}
 
-          {libraryImportSummary.failed?.length ? (
+          {importReviewItems.length ? (
             <section id="library-import-needs-review" className="settingsImportReview">
               <header>
                 <div>
@@ -6761,7 +6854,7 @@ export function SettingsPage({
                 </div>
                 <div className="settingsImportReviewHeaderActions">
                   <button type="button" onClick={copyFailedLibraryTitles}>
-                    Copy Failed Titles
+                    Copy Review Titles
                   </button>
                   <button type="button" onClick={clearLibraryImportReview}>
                     Clear Review
@@ -6774,8 +6867,8 @@ export function SettingsPage({
               </p>
 
               <div className="settingsImportReviewList">
-                {libraryImportSummary.failed.map((item) => (
-                  <article key={item.title}>
+                {importReviewItems.map((item) => (
+                  <article key={`${item.importedRecordId || 'unresolved'}-${item.title}`}>
                     <div className="settingsImportReviewTitle">
                       <strong>{item.title}</strong>
                       <small>{item.reason}</small>

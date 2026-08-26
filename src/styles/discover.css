@@ -2245,12 +2245,29 @@
 }
 
 .discoverCardActions .discoverQuickAdd,
-.discoverCardActions .discoverFollowButton {
+.discoverCardActions .discoverFollowButton,
+.discoverCardActions .discoverWatchNow {
   width: 100%;
   min-width: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+
+.discoverServiceLine {
+  color: color-mix(in srgb, var(--discover-accent) 82%, var(--text));
+  font-weight: 850;
+}
+
+.discoverCardActions .discoverWatchNow {
+  border-color: color-mix(in srgb, var(--discover-accent) 58%, var(--line));
+  background: color-mix(in srgb, var(--discover-accent) 14%, var(--panel));
+  color: color-mix(in srgb, var(--discover-accent) 76%, var(--text));
+}
+
+.discoverCardActions .discoverWatchNow:hover {
+  border-color: var(--discover-accent);
+  background: color-mix(in srgb, var(--discover-accent) 21%, var(--panel));
 }
 
 .discoverLiveListActions {

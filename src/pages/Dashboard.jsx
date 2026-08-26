@@ -1,171 +1,181 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Clapperboard, Dices, Heart, Layers3, Moon, Shuffle, Zap } from 'lucide-react';
 import '../styles/joeai-home-v3.css';
 import '../styles/joeai-home-v3-guide.css';
 import { Poster } from '../components/Poster';
-import { countBy } from '../utils/animeUtils';
-import joeAIHologramBrain from '../assets/joeai-hologram-brain.png';
-import '../styles/joeai-brain-hologram.css';
-import { getTasteReadiness } from '../ai/tasteReadiness';
 import { getRecommendationContext } from '../services/recommendationRuntime';
 import { useDeferredDailyRecommendation } from '../hooks/useDeferredDailyRecommendation';
+import { useHomeDecisionData } from '../hooks/useHomeDecisionData';
+import { sameAnimeIdentity } from '../services/titleIdentity';
+import { openExternalUrl } from '../platform/runtime';
+import { buildQuickAddEntry } from '../services/quickAdd';
+import {
+  buildQuickPickPool,
+  persistQuickPickPools,
+  primeQuickPickPoolCache,
+  QUICK_PICK_INTENTS,
+  quickPickItemKey,
+  readPersistedQuickPickPools,
+  selectQuickPickFromPool
+} from '../services/homeQuickPick';
+import {
+  deferUntilAfterFirstPaint,
+  measureStartupTask,
+  recordStartupTiming
+} from '../services/startupPerformance';
 
 const EMPTY_ANIME_LIST = Object.freeze([]);
 const EMPTY_JOEAI_STATE = Object.freeze({});
+const QUICK_PICK_ICONS = Object.freeze({
+  quick: Zap,
+  movie: Clapperboard,
+  binge: Layers3,
+  dark: Moon,
+  comfort: Heart,
+  different: Shuffle,
+  surprise: Dices
+});
+
+function recordQuickPickPerformance(entry = {}) {
+  const rows = Array.isArray(globalThis.__JOEANIME_QUICK_PICK_TIMINGS__)
+    ? globalThis.__JOEANIME_QUICK_PICK_TIMINGS__
+    : [];
+  globalThis.__JOEANIME_QUICK_PICK_TIMINGS__ = [{
+    measuredAt: new Date().toISOString(),
+    ...entry
+  }, ...rows].slice(0, 100);
+}
 
 function localDaySeed(date = new Date()) {
-  return Number(
-    `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}`
-  );
+  return Number(`${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}`);
 }
 
 function normalizeStatus(status = '') {
-  return String(status || '').toLowerCase().replace(/\s+/g, '');
+  return String(status || '').toLowerCase().replace(/[\s_-]+/g, '');
 }
 
 function titleOf(item = {}) {
   return item.officialTitle || item.title || 'Unknown title';
 }
 
-function myScore(item = {}) {
-  const value = Number(item.joeScore ?? item.score ?? item.finalScore ?? item.rating ?? 0);
-  return Number.isFinite(value) && value > 0 ? value.toFixed(1) : '—';
+function progressOf(item = {}) {
+  const value = Number(item.watchedEpisodes ?? item.episodesWatched ?? item.episodeProgress ?? item.progress ?? item.watchedEpisodeCount ?? item.currentEpisode ?? 0);
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
 }
 
-function initials(title = '') {
-  return String(title || 'AN')
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join('')
-    .toUpperCase();
+function totalEpisodesOf(item = {}) {
+  const value = Number(item.episodeCount ?? item.episodes ?? item.totalEpisodes ?? 0);
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
 }
 
-function pct(value = 0, max = 1) {
-  if (!max) return 0;
-  return Math.max(4, Math.min(100, Math.round((Number(value || 0) / Number(max || 1)) * 100)));
-}
-
-function MiniPoster({ anime, className = '' }) {
-  if (!anime) return <div className={`homeV3Poster ${className}`}>?</div>;
+function Panel({ className = '', title, eyebrow, subtitle, action, onAction, headerActions = [], pending = false, children }) {
   return (
-    <div className={`homeV3Poster ${className}`}>
-      <Poster anime={anime} mode="thumb" />
-    </div>
-  );
-}
-
-function StatPill({ icon, value, label }) {
-  return (
-    <div className="homeV3StatPill">
-      <span className="homeV3StatIcon">{icon}</span>
-      <strong>{value}</strong>
-      <small>{label}</small>
-    </div>
-  );
-}
-
-function Panel({ className = '', icon, title, action, onAction, children }) {
-  return (
-    <section className={`homeV3Panel ${className}`}>
-      <div className="homeV3PanelHeader">
-        <h2>{icon && <span>{icon}</span>}{title}</h2>
-        {action && <button type="button" onClick={onAction}>{action}</button>}
-      </div>
+    <section className={`homeDecisionPanel ${className}`}>
+      <header className="homeDecisionPanelHeader">
+        <div>
+          {eyebrow && <small>{eyebrow}</small>}
+          <h2>{title}</h2>
+          {subtitle && <p>{subtitle}</p>}
+        </div>
+        {pending && <span className="homeDecisionPending">Updating</span>}
+        {(headerActions.length > 0 || action) && (
+          <div className="homeDecisionPanelActions">
+            {headerActions.map((headerAction) => (
+              <button
+                type="button"
+                className={headerAction.className || ''}
+                key={headerAction.ariaLabel || headerAction.label}
+                data-tv-skip-focus="true"
+                aria-label={headerAction.ariaLabel}
+                title={headerAction.ariaLabel}
+                onClick={headerAction.onClick}
+              >
+                {headerAction.label}
+              </button>
+            ))}
+            {action && <button type="button" data-tv-skip-focus="true" onClick={onAction}>{action}</button>}
+          </div>
+        )}
+      </header>
       {children}
     </section>
   );
 }
 
-function HomeEmptyState({ title, body, action, onAction }) {
+function ActionStat({ value, label }) {
+  if (!value) return null;
+  return <div className="homeV3StatPill"><strong>{value}</strong><small>{label}</small></div>;
+}
+
+function DecisionCard({ anime, badge, detail, reason, reasonLabel, actions = [], onOpen, onPosterLoad, provider, busy = false, className = '', showOpenAction = true }) {
+  if (!anime) return null;
+
+  function activate(event) {
+    if (event.type === 'keydown' && !['Enter', ' '].includes(event.key)) return;
+    const nestedControl = event.target?.closest?.('button, a, input, select, textarea, [role="button"]');
+    if (nestedControl && nestedControl !== event.currentTarget) return;
+    event.preventDefault();
+    onOpen?.();
+  }
+
   return (
-    <div className="homeV3EmptyState">
-      <strong>{title}</strong>
-      <p>{body}</p>
-      {action && (
-        <button type="button" onClick={onAction}>
-          {action}
-        </button>
+    <article
+      className={`homeDecisionCard ${className}`.trim()}
+      data-tv-card="true"
+      role="button"
+      tabIndex="0"
+      onClick={activate}
+      onKeyDown={activate}
+      aria-label={`Open ${titleOf(anime)}`}
+    >
+      <div className="homeDecisionPoster" aria-hidden="true">
+        <Poster anime={anime} mode="thumb" onLoad={onPosterLoad} />
+        {badge && <span>{badge}</span>}
+      </div>
+      <div className="homeDecisionCardCopy">
+        <h3>{titleOf(anime)}</h3>
+        {detail && <small>{detail}</small>}
+        {reason && reasonLabel && <b className="homeDecisionReasonLabel">{reasonLabel}</b>}
+        {reason && <p>{reason}</p>}
+        {provider && <b className="homeDecisionProvider">On {provider}</b>}
+      </div>
+      {(showOpenAction || actions.length > 0) && (
+        <div className="homeDecisionCardActions">
+          {showOpenAction && <button type="button" className="primary" data-tv-home-action="true" onClick={onOpen}>Open details</button>}
+          {actions.map((action) => (
+            <button
+              type="button"
+              key={action.label}
+              data-tv-home-action="true"
+              disabled={busy || action.disabled}
+              onClick={action.onClick}
+            >
+              {busy && action.busyLabel ? action.busyLabel : action.label}
+            </button>
+          ))}
+        </div>
       )}
+    </article>
+  );
+}
+
+function EmptyAction({ title, body, action, onAction }) {
+  return (
+    <div className="homeDecisionEmpty">
+      <strong>{title}</strong><p>{body}</p>
+      {action && <button type="button" onClick={onAction}>{action}</button>}
     </div>
   );
 }
 
-function SignalRow({ label, value, max, onClick }) {
-  return (
-    <button
-      type="button"
-      className="homeV3SignalRow"
-      onClick={onClick}
-      title={`Open ${value} ${label} title${Number(value) === 1 ? '' : 's'}`}
-      aria-label={`Open ${value} ${label} titles`}
-    >
-      <span>{label}</span>
-      <div className="homeV3SignalBar">
-        <i style={{ '--signal-width': `${pct(value, max)}%` }} />
-      </div>
-      <strong>{value}</strong>
-    </button>
-  );
-}
-
-function MiniAnimeRow({ anime, setSelected }) {
-  return (
-    <button className="homeV3MiniAnime" type="button" onClick={() => setSelected?.(anime)}>
-      <MiniPoster anime={anime} />
-      <span>
-        <strong>{titleOf(anime)}</strong>
-        <small>{anime.status || 'Ready'} · ★ {myScore(anime)}</small>
-      </span>
-    </button>
-  );
-}
-
-function AnchorCard({ anime, setSelected }) {
-  const rewatches = Number(anime.rewatches || 0);
-  const rating = myScore(anime);
-
-  return (
-    <button
-      className="homeV3Anchor"
-      type="button"
-      onClick={() => setSelected?.(anime)}
-      title={`Open ${titleOf(anime)}`}
-    >
-      <MiniPoster anime={anime} />
-      <span className="homeV3AnchorCopy">
-        <strong>{titleOf(anime)}</strong>
-        <small>{rewatches > 0 ? `${rewatches}x rewatch` : 'favorite'}</small>
-        <span className="homeV3AnchorReveal">
-          <b>★ {rating}</b>
-          {rewatches > 0 && <b>↻ {rewatches}</b>}
-        </span>
-      </span>
-    </button>
-  );
-}
-
-function PromptButton({ text, onAsk }) {
-  return (
-    <button className="homeV3Prompt" type="button" onClick={() => onAsk?.(text)}>
-      <span>{text}</span>
-      <b>›</b>
-    </button>
-  );
-}
-
 export function StatStrip({ stats, anime }) {
-  const completed = anime.filter((item) => normalizeStatus(item.status) === 'completed').length;
   const watching = anime.filter((item) => normalizeStatus(item.status) === 'watching').length;
-  const rewatches = anime.reduce((sum, item) => sum + Number(item.rewatches || 0), 0);
-
+  const completed = anime.filter((item) => normalizeStatus(item.status) === 'completed').length;
   return (
     <section className="homeV3StatsInline">
-      <StatPill icon="▤" value={stats?.total ?? anime.length} label="Anime" />
-      <StatPill icon="✓" value={completed} label="Completed" />
-      <StatPill icon="↻" value={rewatches} label="Rewatches" />
-      <StatPill icon="★" value={stats?.avg ?? '—'} label="Average" />
-      <StatPill icon="▶" value={watching} label="Watching" />
+      <ActionStat value={stats?.total ?? anime.length} label="Anime" />
+      <ActionStat value={watching} label="Watching" />
+      <ActionStat value={completed} label="Completed" />
     </section>
   );
 }
@@ -175,414 +185,546 @@ export function Dashboard({
   catalog: rawCatalog = EMPTY_ANIME_LIST,
   stats = {},
   setSelected,
-  updateAnime,
   setView,
   onQuickAsk,
-  onOpenFilter,
+  updateAnime,
+  updateCatalogAnime,
   joeAIState = EMPTY_JOEAI_STATE,
   contentSafetyMode = 'unrestricted',
   displayName = 'Anime Fan'
 }) {
-  const [showJoeAIGuide, setShowJoeAIGuide] = useState(false);
+  const [recommendationContext, setRecommendationContext] = useState(null);
+  useEffect(() => deferUntilAfterFirstPaint(() => {
+    setRecommendationContext(measureStartupTask(
+      'quickPickContextGeneration',
+      () => getRecommendationContext(anime, rawCatalog, contentSafetyMode, joeAIState),
+      { libraryTitleCount: anime.length, catalogTitleCount: rawCatalog.length }
+    ));
+  }), [anime, rawCatalog, contentSafetyMode, joeAIState]);
 
-  const recommendationContext = useMemo(
-    () => getRecommendationContext(anime, rawCatalog, contentSafetyMode, joeAIState),
-    [anime, rawCatalog, contentSafetyMode, joeAIState]
-  );
-  const {
-    recommendation: tvJoeAIPick,
-    isPending: tvJoeAIPickPending
-  } = useDeferredDailyRecommendation(
+  useEffect(() => {
+    const startedAt = Number(globalThis.__JOEANIME_STARTUP_STARTED_AT__ || 0);
+    const now = globalThis.performance?.now?.() ?? Date.now();
+    if (startedAt) {
+      recordStartupTiming('homeMount', now - startedAt);
+      recordStartupTiming('homeInteractivePaint', now - startedAt);
+    }
+  }, []);
+  const { recommendation: dailyRecommendation, isPending: dailyPending } = useDeferredDailyRecommendation(
     recommendationContext,
     localDaySeed(),
     joeAIState
   );
+  const dailyPick = dailyRecommendation?.item || null;
+  const [quickPickPreparationComplete, setQuickPickPreparationComplete] = useState(false);
+  const {
+    watchingTitles,
+    returning,
+    missedSequels,
+    returningPending,
+    onServices,
+    servicesPending,
+    hasStreamingApps
+  } = useHomeDecisionData({
+    library: anime,
+    catalog: rawCatalog,
+    dailyPick,
+    updateAnime,
+    enableSecondaryRefresh: quickPickPreparationComplete
+  });
+  const [activeIntent, setActiveIntent] = useState('');
+  const [quickPickNonces, setQuickPickNonces] = useState({});
+  const [quickPickPoolsVersion, setQuickPickPoolsVersion] = useState(0);
+  const [intentRecommendation, setIntentRecommendation] = useState(null);
+  const [preparingIntent, setPreparingIntent] = useState('');
+  const quickPickPoolsRef = useRef({});
+  const quickPickSelectionsRef = useRef({});
+  const quickPickHistoryRef = useRef({});
+  const quickPickInteractionRef = useRef(null);
+  const quickPickWorkerRef = useRef(null);
+  const quickPickWorkerRequestRef = useRef('');
+  const [libraryActionKey, setLibraryActionKey] = useState('');
+  const continueWatchingRailRef = useRef(null);
+  const watching = watchingTitles;
+
+  function scrollContinueWatching(direction) {
+    const rail = continueWatchingRailRef.current;
+    if (!rail) return;
+    const distance = Math.max(320, Math.round(rail.clientWidth * 0.88));
+    rail.scrollBy({ left: direction * distance, behavior: 'smooth' });
+  }
+
+  useEffect(() => {
+    if (!recommendationContext?.brain) return undefined;
+
+    let cancelled = false;
+    let worker = null;
+    let fallbackTimer = null;
+    const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const precomputeStartedAt = globalThis.performance?.now?.() ?? Date.now();
+    const cacheReadStartedAt = globalThis.performance?.now?.() ?? Date.now();
+    const persisted = readPersistedQuickPickPools(recommendationContext, joeAIState);
+    const cachedIntentIds = QUICK_PICK_INTENTS
+      .map((intent) => intent.id)
+      .filter((intentId) => Array.isArray(persisted.pools[intentId]));
+    let firstPoolReadyRecorded = cachedIntentIds.length > 0;
+    const cacheReadMs = (globalThis.performance?.now?.() ?? Date.now()) - cacheReadStartedAt;
+
+    quickPickSelectionsRef.current = {};
+    quickPickHistoryRef.current = {};
+    quickPickPoolsRef.current = persisted.pools;
+    setActiveIntent('');
+    setPreparingIntent('');
+    setIntentRecommendation(null);
+    setQuickPickNonces({});
+    setQuickPickPoolsVersion((value) => value + 1);
+    primeQuickPickPoolCache(recommendationContext, persisted.pools, joeAIState);
+    recordQuickPickPerformance({
+      phase: 'persisted-cache-read',
+      cacheHit: cachedIntentIds.length > 0,
+      cachedIntentCount: cachedIntentIds.length,
+      stale: persisted.stale,
+      cacheReadMs,
+      cacheAgeMs: persisted.createdAt ? Date.now() - persisted.createdAt : null
+    });
+    recordStartupTiming('quickPickPersistedCacheRead', cacheReadMs, {
+      cachedIntentCount: cachedIntentIds.length,
+      stale: persisted.stale
+    });
+    if (firstPoolReadyRecorded) {
+      const startupStartedAt = Number(globalThis.__JOEANIME_STARTUP_STARTED_AT__ || 0);
+      recordStartupTiming('quickPickActionDataReady', startupStartedAt
+        ? (globalThis.performance?.now?.() ?? Date.now()) - startupStartedAt
+        : cacheReadMs, { source: 'persisted-cache' });
+    }
+
+    const intentIds = QUICK_PICK_INTENTS
+      .map((intent) => intent.id)
+      .filter((intentId) => persisted.stale || !cachedIntentIds.includes(intentId));
+
+    if (!intentIds.length) {
+      setQuickPickPreparationComplete(true);
+      return undefined;
+    }
+    setQuickPickPreparationComplete(false);
+
+    const acceptPool = (intentId, pool, timing) => {
+      if (cancelled) return;
+      quickPickPoolsRef.current = { ...quickPickPoolsRef.current, [intentId]: pool || [] };
+      primeQuickPickPoolCache(recommendationContext, quickPickPoolsRef.current, joeAIState);
+      setQuickPickPoolsVersion((value) => value + 1);
+      recordQuickPickPerformance({ phase: 'pool-ready', ...timing });
+      if (!firstPoolReadyRecorded) {
+        firstPoolReadyRecorded = true;
+        const startupStartedAt = Number(globalThis.__JOEANIME_STARTUP_STARTED_AT__ || 0);
+        recordStartupTiming('quickPickActionDataReady', startupStartedAt
+          ? (globalThis.performance?.now?.() ?? Date.now()) - startupStartedAt
+          : (globalThis.performance?.now?.() ?? Date.now()) - precomputeStartedAt,
+          { source: 'worker', intent: intentId });
+      }
+      globalThis.setTimeout(() => {
+        if (!cancelled) persistQuickPickPools(recommendationContext, quickPickPoolsRef.current, joeAIState);
+      }, 0);
+    };
+
+    const finishPreparation = (phase, timings = []) => {
+      if (cancelled) return;
+      persistQuickPickPools(recommendationContext, quickPickPoolsRef.current, joeAIState);
+      setQuickPickPreparationComplete(true);
+      recordQuickPickPerformance({
+        phase,
+        totalMs: (globalThis.performance?.now?.() ?? Date.now()) - precomputeStartedAt,
+        workerTimings: timings
+      });
+    };
+
+    const prepareFallback = () => {
+      const queue = [...intentIds];
+      const timings = [];
+      const next = () => {
+        if (cancelled) return;
+        const intentId = queue.shift();
+        if (!intentId) {
+          finishPreparation('staged-main-thread-fallback', timings);
+          return;
+        }
+        let timing = null;
+        const pool = buildQuickPickPool(recommendationContext, intentId, {
+          joeAIState,
+          onTiming: (value) => { timing = value; timings.push(value); }
+        });
+        acceptPool(intentId, pool, timing);
+        fallbackTimer = globalThis.setTimeout(next, 0);
+      };
+      fallbackTimer = globalThis.setTimeout(next, 0);
+    };
+
+    const preparePools = () => {
+      if (cancelled) return;
+      try {
+        worker = new Worker(new URL('../workers/quickPickPoolWorker.js', import.meta.url), { type: 'module' });
+        worker.onmessage = (event) => {
+          if (cancelled || event.data?.requestId !== requestId) return;
+          if (event.data?.error) {
+            console.warn('Quick Pick background preparation failed:', event.data.error);
+            worker?.terminate();
+            worker = null;
+            quickPickWorkerRef.current = null;
+            prepareFallback();
+            return;
+          }
+          if (event.data?.type === 'pool-ready') {
+            acceptPool(event.data.intentId, event.data.pool, event.data.timing);
+            return;
+          }
+          if (event.data?.type !== 'complete') return;
+          finishPreparation('background-precompute', event.data.timings || []);
+          worker?.terminate();
+          worker = null;
+          quickPickWorkerRef.current = null;
+        };
+        worker.onerror = (error) => {
+          console.warn('Quick Pick worker could not start; using staged local preparation.', error);
+          if (cancelled) return;
+          worker?.terminate();
+          worker = null;
+          quickPickWorkerRef.current = null;
+          prepareFallback();
+        };
+        quickPickWorkerRef.current = worker;
+        quickPickWorkerRequestRef.current = requestId;
+        worker.postMessage({
+          requestId,
+          library: recommendationContext.library || [],
+          catalog: recommendationContext.catalog || [],
+          joeAIState,
+          intentIds
+        });
+      } catch (error) {
+        console.warn('Quick Pick worker is unavailable; using staged local preparation.', error);
+        prepareFallback();
+      }
+    };
+
+    const cancelSchedule = deferUntilAfterFirstPaint(preparePools, { timeout: 1400 });
+    return () => {
+      cancelled = true;
+      cancelSchedule();
+      worker?.terminate();
+      if (fallbackTimer != null) globalThis.clearTimeout(fallbackTimer);
+      if (quickPickWorkerRequestRef.current === requestId) {
+        quickPickWorkerRef.current = null;
+        quickPickWorkerRequestRef.current = '';
+      }
+    };
+  }, [recommendationContext, joeAIState]);
+
+  useEffect(() => {
+    if (!activeIntent) return;
+    const pool = quickPickPoolsRef.current[activeIntent];
+    if (!Array.isArray(pool)) return;
+    const selectionStartedAt = globalThis.performance?.now?.() ?? Date.now();
+    const otherIntentKeys = Object.entries(quickPickSelectionsRef.current)
+      .filter(([intentId]) => intentId !== activeIntent)
+      .map(([, itemKey]) => itemKey);
+    const selected = selectQuickPickFromPool(pool, activeIntent, {
+      daySeed: localDaySeed(),
+      selectionNonce: quickPickNonces[activeIntent] || 0,
+      joeAIState,
+      excludeKeys: [...(quickPickHistoryRef.current[activeIntent] || []), ...otherIntentKeys],
+      currentKey: quickPickSelectionsRef.current[activeIntent]
+    });
+    setIntentRecommendation(selected);
+    setPreparingIntent((current) => current === activeIntent ? '' : current);
+    if (quickPickInteractionRef.current?.intent === activeIntent) {
+      quickPickInteractionRef.current.dataReadyAt = globalThis.performance?.now?.() ?? Date.now();
+      quickPickInteractionRef.current.selectionMs =
+        (globalThis.performance?.now?.() ?? Date.now()) - selectionStartedAt;
+    }
+  }, [activeIntent, joeAIState, quickPickNonces, quickPickPoolsVersion]);
+
+  const quickPickRecommendation = activeIntent
+    ? (intentRecommendation || dailyRecommendation)
+    : dailyRecommendation;
+  const quickPick = quickPickRecommendation?.item || null;
+
+  useEffect(() => {
+    if (!activeIntent || !intentRecommendation?.item || intentRecommendation.intent?.id !== activeIntent) return;
+    const itemKey = quickPickItemKey(intentRecommendation.item);
+    if (!itemKey) return;
+    quickPickSelectionsRef.current[activeIntent] = itemKey;
+    const intentHistory = intentRecommendation?.resetCycle
+      ? []
+      : (quickPickHistoryRef.current[activeIntent] || []);
+    if (!intentHistory.includes(itemKey)) {
+      quickPickHistoryRef.current[activeIntent] = [...intentHistory, itemKey];
+    }
+  }, [activeIntent, intentRecommendation]);
+
+  useEffect(() => {
+    const interaction = quickPickInteractionRef.current;
+    if (!interaction || intentRecommendation?.intent?.id !== interaction.intent) return;
+    const itemKey = quickPickItemKey(intentRecommendation.item);
+    const dataReadyAt = interaction.dataReadyAt || (globalThis.performance?.now?.() ?? Date.now());
+    const frameId = requestAnimationFrame(() => {
+      const committedAt = globalThis.performance?.now?.() ?? Date.now();
+      recordQuickPickPerformance({
+        phase: 'intent-interaction',
+        intent: interaction.intent,
+        cacheHit: interaction.cacheHit,
+        handlerMs: interaction.handlerMs,
+        selectionMs: interaction.selectionMs || intentRecommendation.selectionMs || 0,
+        reactCommitMs: committedAt - dataReadyAt,
+        totalToPaintMs: committedAt - interaction.startedAt,
+        itemKey
+      });
+      quickPickInteractionRef.current = { ...interaction, itemKey, committedAt };
+    });
+    return () => cancelAnimationFrame(frameId);
+  }, [intentRecommendation]);
 
   function sendQuickAsk(prompt) {
     const cleanPrompt = String(prompt || '').trim();
     if (!cleanPrompt) return;
-
-    // Persist the prompt before navigating so JoeAI can consume it even when
-    // the parent view router does not currently pass onQuickAsk through.
-    try {
-      localStorage.setItem('joeanime-pending-joeai-prompt', cleanPrompt);
-    } catch (error) {
+    try { localStorage.setItem('joeanime-pending-joeai-prompt', cleanPrompt); } catch (error) {
       console.warn('Could not store JoeAI Quick Ask prompt:', error);
     }
-
     onQuickAsk?.(cleanPrompt);
     setView?.('assistant');
   }
-  const completed = anime.filter((item) => normalizeStatus(item.status) === 'completed').length;
-  const watching = anime.filter((item) => normalizeStatus(item.status) === 'watching');
-  const rewatches = anime.reduce((sum, item) => sum + Number(item.rewatches || 0), 0);
-  const favorites = anime.filter((item) => Boolean(item.favorite));
-  const anchors = [...anime]
-    .filter((item) => Number(item.rewatches || 0) > 0 || item.favorite)
-    .sort((a, b) => Number(b.rewatches || 0) - Number(a.rewatches || 0) || Number(b.joeScore || 0) - Number(a.joeScore || 0))
-    .slice(0, 4);
 
-  const ranked = [...anime]
-    .sort((a, b) => Number(a.finalRank || 99999) - Number(b.finalRank || 99999));
-
-  const tonight = watching[0] || ranked.find((item) => normalizeStatus(item.status) !== 'completed') || ranked[0];
-  const topSignalRows = countBy(anime.flatMap((item) => item.genres || [])).slice(0, 5);
-  const studioRows = countBy(anime.map((item) => item.studio)).slice(0, 4);
-  const topMax = topSignalRows[0]?.[1] || 1;
-  const studioMax = studioRows[0]?.[1] || 1;
-  const topSignal = topSignalRows[0]?.[0] || '';
-
-  const statAvg = stats?.avg ?? (() => {
-    const rated = anime.filter((item) => Number(item.joeScore || item.score || item.finalScore || item.rating || 0) > 0);
-    if (!rated.length) return '—';
-    return (rated.reduce((sum, item) => sum + Number(item.joeScore || item.score || item.finalScore || item.rating || 0), 0) / rated.length).toFixed(2);
-  })();
-
-  const topStudio = studioRows[0]?.[0] || 'your favorite studios';
-  const topStudioCount = studioRows[0]?.[1] || 0;
-  const anchorCount = anchors.length || favorites.length;
-
-  const heroState =
-    completed === 0
-      ? {
-          eyebrow: 'Welcome,',
-          headline: "Let's build your Anime DNA.",
-          body: 'JoeAI learns from every anime you complete, rate, favorite, and rewatch. Add your first titles to unlock personalized recommendations.',
-          primaryLabel: '✨ Add Anime',
-          primaryAction: () => setView?.('library'),
-          secondaryLabel: '🤖 Meet JoeAI',
-          secondaryAction: () => setView?.('assistant')
-        }
-      : completed < 25
-        ? {
-            eyebrow: 'Welcome back,',
-            headline: 'Your Anime DNA is taking shape.',
-            body: 'JoeAI is beginning to recognize the genres, studios, and storytelling patterns that define your taste.',
-            primaryLabel: '🧠 Ask JoeAI',
-            primaryAction: () => setView?.('assistant'),
-            secondaryLabel: '📖 Open Library',
-            secondaryAction: () => setView?.('library')
-          }
-        : {
-            eyebrow: 'Welcome back,',
-            headline: 'JoeAI analyzed your library and found new recommendation patterns.',
-            body: '',
-            primaryLabel: '🧠 Ask JoeAI',
-            primaryAction: () => setView?.('assistant'),
-            secondaryLabel: '📖 Open Library',
-            secondaryAction: () => setView?.('library')
-          };
-
-  const joeAIInsight = (() => {
-    const readiness = getTasteReadiness(anime);
-    if (!readiness.hasTasteData) {
-      return {
-        eyebrow: 'JoeAI is ready to learn',
-        headline: 'Your Anime DNA starts with your first few titles.',
-        body: 'Import a list or add, rate, favorite, and rewatch anime. JoeAI will show real taste patterns once your library provides evidence.'
-      };
+  function chooseQuickPickIntent(intent) {
+    const startedAt = globalThis.performance?.now?.() ?? Date.now();
+    const cacheHit = Array.isArray(quickPickPoolsRef.current[intent.id]);
+    setQuickPickNonces((current) => ({
+      ...current,
+      [intent.id]: (current[intent.id] || 0) + 1
+    }));
+    setActiveIntent(intent.id);
+    setPreparingIntent(cacheHit ? '' : intent.id);
+    if (!cacheHit && quickPickWorkerRef.current) {
+      quickPickWorkerRef.current.postMessage({
+        type: 'prioritize',
+        requestId: quickPickWorkerRequestRef.current,
+        intentId: intent.id
+      });
     }
-
-    if (rewatches >= 10 && anchorCount >= 3) {
-      return {
-        eyebrow: 'JoeAI noticed a comfort pattern',
-        headline: `${topSignal} keeps pulling you back.`,
-        body: `${rewatches} rewatches and ${anchorCount} comfort anchors suggest you value familiar worlds and long-term attachment—not just novelty.`
-      };
-    }
-
-    if (topStudioCount >= 5) {
-      return {
-        eyebrow: 'JoeAI found a studio pattern',
-        headline: `${topStudio} is shaping your taste.`,
-        body: `${topStudioCount} titles from the same studio is enough to form a visible creative pattern across your library.`
-      };
-    }
-
-    return {
-      eyebrow: 'JoeAI found a taste signal',
-      headline: `${topSignal} is leading your Anime DNA.`,
-      body: `${completed} completed titles are reinforcing this pattern, and it will get sharper as you rate, rewatch, and reject recommendations.`
+    quickPickInteractionRef.current = {
+      intent: intent.id,
+      startedAt,
+      cacheHit,
+      handlerMs: (globalThis.performance?.now?.() ?? Date.now()) - startedAt
     };
-  })();
+  }
+
+  function recordQuickPickPosterLoad() {
+    const interaction = quickPickInteractionRef.current;
+    if (!interaction?.committedAt || interaction.posterRecorded) return;
+    recordQuickPickPerformance({
+      phase: 'poster-load',
+      intent: interaction.intent,
+      itemKey: interaction.itemKey,
+      imageLoadAfterPaintMs: (globalThis.performance?.now?.() ?? Date.now()) - interaction.committedAt
+    });
+    quickPickInteractionRef.current = { ...interaction, posterRecorded: true };
+  }
+
+  async function toggleFollow(item) {
+    if (!updateCatalogAnime) return;
+    const existing = rawCatalog.find((candidate) => sameAnimeIdentity(candidate, item));
+    const persisted = existing || item;
+    const followed = !Boolean(persisted.followed);
+    await updateCatalogAnime({
+      ...item,
+      ...persisted,
+      id: persisted.id || item.id,
+      kitsuId: persisted.kitsuId || item.kitsuId,
+      followed,
+      ignored: false,
+      followedAt: followed ? (persisted.followedAt || new Date().toISOString()) : '',
+      listUpdatedAt: new Date().toISOString()
+    });
+  }
+
+  async function addToLibrary(item, status = 'Plan to Watch') {
+    if (!updateAnime || !item) return;
+
+    const actionKey = `${item.kitsuId || item.id || titleOf(item)}:${status}`;
+    setLibraryActionKey(actionKey);
+
+    try {
+      const existing = anime.find((libraryItem) => sameAnimeIdentity(libraryItem, item));
+      if (existing) {
+        if (status === 'Completed' && normalizeStatus(existing.status) !== 'completed') {
+          await updateAnime({ ...existing, status: 'Completed', listUpdatedAt: new Date().toISOString() });
+        }
+        return;
+      }
+
+      await updateAnime(buildQuickAddEntry(item, {
+        source: 'Home Decision',
+        librarySize: anime.length,
+        status
+      }));
+    } catch (error) {
+      console.warn(`Could not add ${titleOf(item)} from Home:`, error);
+    } finally {
+      setLibraryActionKey('');
+    }
+  }
+
+  function libraryActions(item, extraActions = []) {
+    const key = String(item.kitsuId || item.id || titleOf(item));
+    return [
+      { label: 'Add', busyLabel: 'Adding', onClick: () => addToLibrary(item) },
+      { label: 'Watched', busyLabel: 'Saving', onClick: () => addToLibrary(item, 'Completed') },
+      ...extraActions
+    ].map((action) => ({ ...action, itemKey: key }));
+  }
+
+  function serviceActions(item, preferredProvider) {
+    const key = String(item.kitsuId || item.id || titleOf(item));
+    const existing = anime.find((libraryItem) => sameAnimeIdentity(libraryItem, item));
+    const actions = [];
+
+    if (!existing) {
+      actions.push({ label: 'Add', busyLabel: 'Adding', onClick: () => addToLibrary(item) });
+    }
+    if (!existing || normalizeStatus(existing.status) !== 'completed') {
+      actions.push({ label: 'Watched', busyLabel: 'Saving', onClick: () => addToLibrary(item, 'Completed') });
+    }
+    actions.push({ label: 'Watch', onClick: () => openExternalUrl(preferredProvider?.url) });
+
+    return actions.map((action) => ({ ...action, itemKey: key }));
+  }
+
+  const firstService = onServices[0] || null;
+  const hero = measureStartupTask('homeHeroDecision', () => returning[0]
+    ? {
+        eyebrow: 'Returning for you', title: titleOf(returning[0]), body: returning[0].returningReason, item: returning[0],
+        primary: returning[0].followed ? 'Following' : 'Follow', onPrimary: () => toggleFollow(returning[0]),
+        secondary: 'Open details', onSecondary: () => setSelected?.(returning[0])
+      }
+    : watching[0]
+      ? {
+          eyebrow: 'Continue watching', title: titleOf(watching[0]),
+          body: progressOf(watching[0]) ? `You are ${progressOf(watching[0])}${totalEpisodesOf(watching[0]) ? ` of ${totalEpisodesOf(watching[0])}` : ''} episodes in.` : 'Pick up the title already at the front of your queue.',
+          item: watching[0], primary: 'Continue', onPrimary: () => setSelected?.(watching[0]),
+          secondary: 'Something else', onSecondary: () => sendQuickAsk('recommend something different from what I am currently watching')
+        }
+      : dailyPick
+        ? {
+            eyebrow: 'JoeAI quick pick', title: titleOf(dailyPick),
+            body: dailyRecommendation?.reasons?.[0] || 'A strong unseen match based on the taste signals in your library.',
+            item: dailyPick, primary: 'Open pick', onPrimary: () => setSelected?.(dailyPick),
+            secondary: 'Why this?', onSecondary: () => sendQuickAsk(`why did you recommend ${titleOf(dailyPick)}?`)
+          }
+        : firstService
+          ? {
+              eyebrow: `On ${firstService.preferredProvider?.name || 'your services'}`, title: titleOf(firstService.item),
+              body: 'A strong library match you can stream on a service you already use.', item: firstService.item,
+              primary: 'Quick watch', onPrimary: () => openExternalUrl(firstService.preferredProvider?.url),
+              secondary: 'Open details', onSecondary: () => setSelected?.(firstService.item)
+            }
+          : {
+              eyebrow: anime.length ? 'Ready when you are' : `Welcome, ${displayName}`,
+              title: anime.length ? 'Find your next anime.' : 'Build your Anime DNA.',
+              body: anime.length ? 'JoeAI will turn your library into a clear next action as new signals become available.' : 'Import a list or add your first titles to unlock personal recommendations.',
+              primary: anime.length ? 'Open Discover' : 'Add anime', onPrimary: () => setView?.(anime.length ? 'discover' : 'library'),
+              secondary: 'Ask JoeAI', onSecondary: () => setView?.('assistant')
+            }, { watchingCount: watching.length, returningCount: returning.length });
 
   return (
-    <section className="homeV3">
-      <section className="homeV3Hero">
+    <section className="homeV3 homeDecisionHome">
+      <section className="homeV3Hero homeDecisionHero">
         <div className="homeV3HeroShade" />
-        <div className="homeV3HeroFx" aria-hidden="true">
-          <span className="fx fx1" />
-          <span className="fx fx2" />
-          <span className="fx fx3" />
-          <span className="fx fx4" />
-          <span className="fx fx5" />
-          <span className="fx fx6" />
-        </div>
         <div className="homeV3HeroCopy">
-          <p className="homeV3Eyebrow">{heroState.eyebrow}</p>
-          <h1>{displayName}.</h1>
-          <p className="homeV3Lead">{heroState.headline}</p>
-          {heroState.body && <p className="homeV3HeroBody">{heroState.body}</p>}
+          <p className="homeV3Eyebrow">{hero.eyebrow}</p>
+          <h1>{hero.title}</h1>
+          <p className="homeV3HeroBody">{hero.body}</p>
           <div className="homeV3HeroActions">
-            <button type="button" className="primary" onClick={heroState.primaryAction}>
-              {heroState.primaryLabel}
-            </button>
-            <button type="button" onClick={heroState.secondaryAction}>
-              {heroState.secondaryLabel}
-            </button>
+            <button type="button" className="primary" onClick={hero.onPrimary}>{hero.primary}</button>
+            <button type="button" onClick={hero.onSecondary}>{hero.secondary}</button>
           </div>
         </div>
-
         <div className="homeV3HeroStats">
-          <StatPill icon="▤" value={stats?.total ?? anime.length} label="Anime" />
-          <StatPill icon="✓" value={completed} label="Completed" />
-          <StatPill icon="↻" value={rewatches} label="Rewatches" />
-          <StatPill icon="★" value={statAvg} label="Average" />
+          <ActionStat value={watching.length} label="Watching" />
+          <ActionStat value={returning.length} label="Returning" />
+          <ActionStat value={missedSequels.length} label="Missed Sequels" />
+          <ActionStat value={onServices.length} label="On Services" />
         </div>
       </section>
 
-      <section className="homeV3Grid">
-        <Panel
-          className={`homeV3Thought ${showJoeAIGuide ? 'isGuideOpen' : ''}`}
-          icon="🧠"
-          title="JoeAI Thought"
-          action={showJoeAIGuide ? "Close" : "How It Works"}
-          onAction={() => setShowJoeAIGuide((current) => !current)}
-        >
-          <button
-            type="button"
-            className="homeV3ThoughtInner"
-            onClick={() => setShowJoeAIGuide((current) => !current)}
-            aria-expanded={showJoeAIGuide}
-            aria-label={showJoeAIGuide ? "Close the JoeAI guide" : "Open the JoeAI guide"}
+      <section className="homeV3Grid homeDecisionGrid">
+        {watching.length > 0 && (
+          <Panel
+            className="homeV3Continue homeDecisionContinue"
+            eyebrow="Pick up where you left off"
+            title="Continue Watching"
+            action="Library"
+            onAction={() => setView?.('library')}
+            headerActions={watching.length > 1 ? [
+              { label: '‹', ariaLabel: 'Scroll Continue Watching left', className: 'homeDecisionScrollButton', onClick: () => scrollContinueWatching(-1) },
+              { label: '›', ariaLabel: 'Scroll Continue Watching right', className: 'homeDecisionScrollButton', onClick: () => scrollContinueWatching(1) }
+            ] : []}
           >
-            <div className="homeV3ThoughtCopy">
-              <span>{showJoeAIGuide ? 'How JoeAI works' : joeAIInsight.eyebrow}</span>
-              <h3>{showJoeAIGuide ? 'Your library teaches JoeAI what matters to you.' : joeAIInsight.headline}</h3>
-              <p>
-                {showJoeAIGuide
-                  ? 'JoeAI combines your ratings, rewatches, favorites, watch status, genres, studios, and Genome traits to explain your taste and rank recommendations.'
-                  : joeAIInsight.body}
-              </p>
-              <small>{showJoeAIGuide ? 'Click again to close ↑' : 'Click to see how JoeAI analyzes your library →'}</small>
+            <div className="homeDecisionRail homeV3TvContinue" ref={continueWatchingRailRef}>
+              {watching.slice(0, 8).map((item) => {
+                const progress = progressOf(item);
+                const total = totalEpisodesOf(item);
+                return <DecisionCard key={item.id || titleOf(item)} anime={item} badge={progress ? `EP ${progress}` : 'WATCHING'} detail={progress ? `${progress}${total ? ` / ${total}` : ''} episodes` : 'Currently watching'} showOpenAction={false} onOpen={() => setSelected?.(item)} />;
+              })}
             </div>
-            <div className="homeV3BrainPulse homeV3BrainHologram" aria-hidden="true">
-              <img src={joeAIHologramBrain} alt="" />
+          </Panel>
+        )}
+
+        {returning.length > 0 && (
+          <Panel className="homeDecisionReturning" title="Returning For You" pending={returningPending}>
+            <div className={`homeDecisionRail${returning.length === 1 ? ' is-single' : ''}`}>
+              {returning.map((item) => <DecisionCard key={item.id || titleOf(item)} anime={item} badge={item.continuationTiming === 'current' ? 'AIRING' : item.continuationTiming === 'upcoming' ? 'UPCOMING' : 'RECENT'} detail={`After ${item.returningFromTitle}`} reason={item.returningReason} actions={libraryActions(item, [{ label: item.followed ? 'Following' : 'Follow', onClick: () => toggleFollow(item) }])} busy={libraryActionKey.startsWith(`${item.kitsuId || item.id || titleOf(item)}:`)} onOpen={() => setSelected?.(item)} />)}
             </div>
-          </button>
+          </Panel>
+        )}
 
-          {showJoeAIGuide && (
-            <div className="homeV3JoeAIGuide">
-              <div>
-                <span>1</span>
-                <strong>Reads your signals</strong>
-                <small>Ratings, rewatches, favorites, status, studios, genres, and notes.</small>
-              </div>
-              <div>
-                <span>2</span>
-                <strong>Builds your Anime DNA</strong>
-                <small>Finds recurring themes, character dynamics, worlds, tone, and comfort patterns.</small>
-              </div>
-              <div>
-                <span>3</span>
-                <strong>Explains recommendations</strong>
-                <small>Matches unseen titles to the parts of anime you repeatedly respond to.</small>
-              </div>
-              <div>
-                <span>4</span>
-                <strong>Learns from your choices</strong>
-                <small>Every rating, rewatch, favorite, and rejected pick makes future results sharper.</small>
-              </div>
-              <button type="button" onClick={() => setView?.('assistant')}>
-                Open JoeAI
-              </button>
+        {missedSequels.length > 0 && (
+          <Panel className="homeDecisionMissed" title="You Missed a Sequel" pending={returningPending}>
+            <div className={`homeDecisionRail${missedSequels.length === 1 ? ' is-single' : ''}`}>
+              {missedSequels.map((item) => <DecisionCard key={item.id || titleOf(item)} anime={item} badge="MISSED" detail={`After ${item.returningFromTitle}`} reason={item.returningReason} actions={libraryActions(item)} busy={libraryActionKey.startsWith(`${item.kitsuId || item.id || titleOf(item)}:`)} onOpen={() => setSelected?.(item)} />)}
             </div>
-          )}
-        </Panel>
+          </Panel>
+        )}
 
-        <Panel className="homeV3QuickAsk" icon="⚡" title="Quick Ask" action="Open" onAction={() => setView?.('assistant')}>
-          <div className="homeV3PromptList">
-            <PromptButton text="recommend something like Slime" onAsk={sendQuickAsk} />
-            <PromptButton text="what should I watch next?" onAsk={sendQuickAsk} />
-            <PromptButton text="why do I like Bleach?" onAsk={sendQuickAsk} />
-            <PromptButton text="what changed recently?" onAsk={sendQuickAsk} />
-          </div>
-        </Panel>
-
-        <Panel className="homeV3DNA" icon="🧬" title="Anime DNA" action="Stats" onAction={() => setView?.('analytics')}>
-          <div className="homeV3SignalRows">
-            {topSignalRows.length ? topSignalRows.map(([name, count]) => (
-              <SignalRow key={name} label={name} value={count} max={topMax} onClick={() => onOpenFilter?.("genre", name)} />
-            )) : (
-              <HomeEmptyState
-                title="Your DNA is waiting"
-                body="Add or import a few titles so JoeAI can begin finding your strongest taste signals."
-                action="Add Anime"
-                onAction={() => setView?.('library')}
-              />
-            )}
-          </div>
-        </Panel>
-
-        <Panel className="homeV3Comfort" icon="❤️" title="Comfort Anchors" action="Favorites" onAction={() => setView?.('favorites')}>
-          <div className="homeV3AnchorGrid">
-            {(anchors.length ? anchors : favorites.slice(0, 4)).map((item) => (
-              <AnchorCard key={item.id || item.title} anime={item} setSelected={setSelected} />
-            ))}
-            {!anchors.length && !favorites.length && (
-              <HomeEmptyState
-                title="No comfort anchors yet"
-                body="Favorite or rewatch a title to teach JoeAI which worlds you keep returning to."
-                action="Open Library"
-                onAction={() => setView?.('library')}
-              />
-            )}
-          </div>
-        </Panel>
-
-        <Panel className="homeV3Studio" icon="🎬" title="Studio DNA" action="Explore" onAction={() => setView?.('analytics')}>
-          <div className="homeV3StudioRows">
-            {studioRows.length ? studioRows.map(([name, count]) => (
-              <button
-                key={name}
-                type="button"
-                className="homeV3StudioRow"
-                onClick={() => onOpenFilter?.("studio", name)}
-                title={`Open ${count} title${Number(count) === 1 ? '' : 's'} from ${name}`}
-                aria-label={`Open ${count} titles from ${name}`}
-              >
-                <span>{name}</span>
-                <strong>{count}</strong>
-                <i style={{ '--studio-width': `${pct(count, studioMax)}%` }} />
-              </button>
-            )) : (
-              <HomeEmptyState
-                title="No studio pattern yet"
-                body="Studio trends will appear as your library grows and its metadata is completed."
-                action="Open Library"
-                onAction={() => setView?.('library')}
-              />
-            )}
-          </div>
-        </Panel>
-
-        <Panel className="homeV3Seed" icon="⭐" title="Tonight's Recommendation" action="Get Rec" onAction={() => sendQuickAsk('what should I watch next?')}>
-          {tonight ? (
-            <div className="homeV3SeedCard homeV3FeaturedRecommendation">
-              <MiniPoster anime={tonight} className="large" />
-              <div>
-                <h3>{titleOf(tonight)}</h3>
-                <p><strong>78% Match</strong></p>
-                <div className="homeV3SeedTags">
-                  {(tonight.genres || ['Action', 'Adventure']).slice(0, 4).map((tag) => <span key={tag}>{tag}</span>)}
-                </div>
-                <small>You loved the journey, the momentum, and the emotional payoff. This one should hit nearby notes.</small>
-              </div>
-              <div className="homeV3SeedActions">
-                <button type="button" onClick={() => sendQuickAsk(`why did you recommend ${titleOf(tonight)}?`)}>Why this?</button>
-                <button type="button" className="primary" onClick={() => setSelected?.(tonight)}>Open</button>
-              </div>
+        {(hasStreamingApps && onServices.length > 0) && (
+          <Panel className="homeDecisionServices" eyebrow="Personal matches available now" title="On Your Services" subtitle="Cached streaming availability by Watchmode." pending={servicesPending} action="View All" onAction={() => setView?.('discover')}>
+            <div className={`homeDecisionRail${onServices.length === 1 ? ' is-single' : ''}`}>
+              {onServices.map(({ item, preferredProvider }) => <DecisionCard key={item.id || titleOf(item)} anime={item} badge="STREAM" detail={(item.genres || []).slice(0, 2).join(' + ') || 'Personal match'} provider={preferredProvider?.name} actions={serviceActions(item, preferredProvider)} busy={libraryActionKey.startsWith(`${item.kitsuId || item.id || titleOf(item)}:`)} onOpen={() => setSelected?.(item)} />)}
             </div>
-          ) : (
-            <HomeEmptyState
-              title="JoeAI needs a few signals"
-              body="Add some anime and ratings, then JoeAI can choose a meaningful recommendation for tonight."
-              action="Add Anime"
-              onAction={() => setView?.('library')}
-            />
-          )}
-        </Panel>
+          </Panel>
+        )}
 
-        <Panel className="homeV3Continue" icon="▶" title="Continue Watching" action="Library" onAction={() => setView?.('library')}>
-          <div className="homeV3MiniList homeV3DesktopOnly">
-            {watching.slice(0, 3).map((item) => <MiniAnimeRow key={item.id || item.title} anime={item} setSelected={setSelected} />)}
-            {!watching.length && <p className="homeV3Empty">Nothing marked Watching yet.</p>}
-          </div>
-
-          <div className="homeV3TvContinue homeV3TvOnly">
-            {watching.slice(0, 6).map((item) => (
-              <button
-                key={item.id || item.title}
-                type="button"
-                className="homeV3TvPosterCard"
-                data-tv-card="true"
-                onClick={() => setSelected?.(item)}
-                aria-label={`Open ${titleOf(item)}`}
-              >
-                <Poster anime={item} mode="thumb" />
-                <span>{titleOf(item)}</span>
-              </button>
-            ))}
-            {!watching.length && (
-              <button
-                type="button"
-                className="homeV3TvEmptyAction"
-                onClick={() => setView?.('library')}
-              >
-                Nothing marked Watching yet. Open Library
-              </button>
-            )}
-          </div>
-        </Panel>
-
-        <Panel className="homeV3TvPickPanel homeV3TvOnly" icon="✦" title="JoeAI Pick of the Day">
-          {tvJoeAIPick ? (
-            <button
-              type="button"
-              className="homeV3TvPick"
-              data-tv-card="true"
-              onClick={() => setSelected?.(tvJoeAIPick.item)}
-              aria-label={`Open JoeAI Pick of the Day: ${titleOf(tvJoeAIPick.item)}`}
-            >
-              <Poster anime={tvJoeAIPick.item} mode="thumb" />
-              <span className="homeV3TvPickCopy">
-                <strong>{titleOf(tvJoeAIPick.item)}</strong>
-                <small>
-                  {Number.isFinite(Number(tvJoeAIPick.confidence))
-                    ? `${Math.round(Number(tvJoeAIPick.confidence))}% match`
-                    : 'JoeAI daily pick'}
-                </small>
-                <span className="homeV3TvPickTags">
-                  {(tvJoeAIPick.item.genres || []).slice(0, 3).map((genre) => (
-                    <b key={genre}>{genre}</b>
-                  ))}
-                </span>
-                <em>
-                  {tvJoeAIPick.reasons[0]
-                    || 'A strong unseen match based on the taste signals JoeAI has learned from your library.'}
-                </em>
-              </span>
-              <span className="homeV3TvPickOpen">Open ›</span>
-            </button>
-          ) : tvJoeAIPickPending ? (
-            <button
-              type="button"
-              className="homeV3TvEmptyAction"
-              disabled
-            >
-              Preparing your daily pick...
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="homeV3TvEmptyAction"
-              onClick={() => setView?.('assistant')}
-            >
-              Ask JoeAI for a recommendation
-            </button>
-          )}
-        </Panel>
-
-        <Panel className="homeV3Learning" icon="📈" title="Recently Learned" action="View All" onAction={() => setView?.('assistant')}>
-          <div className="homeV3LearningGrid">
-            <div><span>↗</span><strong>{topSignal || 'Learning'}</strong><small>{topSignal ? 'strongest current signal' : 'add ratings to reveal a signal'}</small></div>
-            <div><span>↻</span><strong>{rewatches}</strong><small>rewatches reinforcing comfort</small></div>
-            <div><span>▣</span><strong>{studioRows[0]?.[0] || 'Studio DNA'}</strong><small>top studio pattern</small></div>
-            <div><span>✓</span><strong>{completed}</strong><small>completed anime analyzed</small></div>
+        <Panel className="homeDecisionQuickPick" eyebrow="JoeAI Quick Pick" title="WHAT ARE WE WATCHING?" subtitle="Pick a mood or let Joe decide." pending={!activeIntent && dailyPending} action="Open JoeAI" onAction={() => setView?.('assistant')}>
+          <div className="homeDecisionQuickLayout">
+            <div className="homeDecisionIntentGrid">
+              {QUICK_PICK_INTENTS.map((intent) => {
+                const IntentIcon = QUICK_PICK_ICONS[intent.id] || Zap;
+                const isPreparing = preparingIntent === intent.id;
+                return (
+                  <button type="button" key={intent.id} data-intent={intent.id} data-tv-card="true" aria-pressed={activeIntent === intent.id} aria-busy={isPreparing} onClick={() => chooseQuickPickIntent(intent)}>
+                    <span className="homeDecisionIntentIcon" aria-hidden="true"><IntentIcon strokeWidth={2.15} /></span>
+                    <span className="homeDecisionIntentCopy">
+                      <strong>{intent.label}</strong>
+                      <small>{isPreparing ? <><i className="homeDecisionPreparingDot" />Preparing picks...</> : ({ quick: 'Short commitment', movie: 'One sitting', binge: 'Easy to sink into', dark: 'Something heavier', comfort: 'Familiar vibes', different: 'Break my pattern', surprise: 'Joe decides' })[intent.id]}</small>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            {quickPick ? (
+              <DecisionCard className="homeDecisionFeaturedPick" anime={quickPick} badge={Number.isFinite(Number(quickPickRecommendation?.confidence)) ? `${Math.round(Number(quickPickRecommendation.confidence))}% MATCH` : 'JOEAI PICK'} detail={quickPickRecommendation?.intent ? `${quickPickRecommendation.intent.label} pick` : 'JoeAI pick of the day'} reasonLabel="Why Joe picked it" reason={quickPickRecommendation?.reasons?.[0]} actions={libraryActions(quickPick, [{ label: 'Why this?', onClick: () => sendQuickAsk(`why did you recommend ${titleOf(quickPick)}?`) }])} busy={libraryActionKey.startsWith(`${quickPick.kitsuId || quickPick.id || titleOf(quickPick)}:`)} onOpen={() => setSelected?.(quickPick)} onPosterLoad={recordQuickPickPosterLoad} />
+            ) : activeIntent ? <EmptyAction title="No strong match yet" body="JoeAI could not find an unseen title that honestly fits this intent. Try another pick." /> : !dailyPending ? <EmptyAction title="JoeAI needs a few signals" body="Add or import anime, then rate a few titles to unlock a personal quick pick." action="Add Anime" onAction={() => setView?.('library')} /> : null}
           </div>
         </Panel>
       </section>
-
     </section>
   );
 }

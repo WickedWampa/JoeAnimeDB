@@ -421,6 +421,60 @@ export const animeRepository = {
     return normalizeDatabase(next);
   },
 
+  async updateAnimeIdentityLinkage(patch = {}) {
+    const id = String(patch.id || '').trim();
+    if (!id) return { ok: false, reason: 'missing-id' };
+
+    if (hasElectronDatabase() && window.JoeAnimeDB.database.updateAnimeIdentityLinkage) {
+      return window.JoeAnimeDB.database.updateAnimeIdentityLinkage(patch);
+    }
+
+    const current = await this.getDatabase();
+    const index = (current.anime || []).findIndex((item) => String(item.id) === id);
+    if (index < 0) return { ok: false, reason: 'missing-record', id };
+
+    const existing = current.anime[index];
+    const proposedKitsuId = String(
+      patch.kitsuId ?? patch.kitsu_id ?? existing.kitsuId ?? ''
+    ).trim();
+    const collision = proposedKitsuId
+      ? current.anime.find((item, itemIndex) =>
+          itemIndex !== index &&
+          String(item.kitsuId || item.kitsu_id || '').trim() === proposedKitsuId
+        )
+      : null;
+    if (collision) {
+      return {
+        ok: false,
+        reason: 'kitsu-collision',
+        id,
+        collision: debugIdentity(collision),
+        countBefore: current.anime.length,
+        countAfter: current.anime.length
+      };
+    }
+
+    const identityFields = [
+      'identityNeedsReview', 'metadataNeedsReview', 'metadataReviewReason',
+      'identityResolutionStatus', 'identityLinkageSource',
+      'identityLinkageConfidence', 'identityLinkageUpdatedAt'
+    ];
+    const nextItem = { ...existing, kitsuId: proposedKitsuId };
+    identityFields.forEach((field) => {
+      if (Object.prototype.hasOwnProperty.call(patch, field)) nextItem[field] = patch[field];
+    });
+    const anime = [...current.anime];
+    anime[index] = nextItem;
+    const next = { ...current, anime };
+    await writeBrowserDatabase(next);
+    return {
+      ok: true,
+      item: nextItem,
+      countBefore: current.anime.length,
+      countAfter: anime.length
+    };
+  },
+
 
   async updateCatalogAnime(updatedAnime) {
     if (hasElectronDatabase() && window.JoeAnimeDB.database.updateCatalogAnime) {
