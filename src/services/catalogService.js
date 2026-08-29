@@ -45,6 +45,17 @@ function needsContentRatingBackfill(item = {}) {
   return !item.contentRatingCheckedAt;
 }
 
+function attemptTime(item = {}, field) {
+  const parsed = Date.parse(item?.[field] || '');
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function oldestAttemptFirst(field) {
+  return (left, right) =>
+    attemptTime(left.item, field) - attemptTime(right.item, field) ||
+    left.index - right.index;
+}
+
 function richness(item) {
   return [
     item?.cover,
@@ -129,6 +140,7 @@ export function buildCatalogQueue({ library = [], catalog = [], seed = catalogSe
   return mergeCatalogEntries({ library, catalog, seed })
     .map((item, index) => ({ item, index }))
     .filter(({ item }) => needsArtworkRepair(item) || !hasUsefulMetadata(item))
+    .sort(oldestAttemptFirst('catalogMetadataAttemptedAt'))
     .slice(0, limit);
 }
 
@@ -141,6 +153,7 @@ export function buildCatalogContentRatingQueue({
   return mergeCatalogEntries({ library, catalog, seed })
     .map((item, index) => ({ item, index }))
     .filter(({ item }) => needsContentRatingBackfill(item))
+    .sort(oldestAttemptFirst('contentRatingAttemptedAt'))
     .slice(0, limit);
 }
 
@@ -185,6 +198,7 @@ export async function updateCatalogContentRatings({
 
     results.forEach((result, resultIndex) => {
       const { item } = batch[resultIndex];
+      const attemptedAt = new Date().toISOString();
       processed += 1;
 
       if (result.status === 'fulfilled') {
@@ -194,6 +208,8 @@ export async function updateCatalogContentRatings({
             ? {
                 ...candidate,
                 ...rating,
+                contentRatingAttemptedAt: attemptedAt,
+                contentRatingError: '',
                 id: candidate.id || item.id,
                 title: candidate.title || item.title
               }
@@ -202,6 +218,15 @@ export async function updateCatalogContentRatings({
         updated += 1;
       } else {
         failed += 1;
+        nextCatalog = nextCatalog.map((candidate) =>
+          sameCatalogIdentity(candidate, item)
+            ? {
+                ...candidate,
+                contentRatingAttemptedAt: attemptedAt,
+                contentRatingError: result.reason?.message || String(result.reason || 'Lookup failed')
+              }
+            : candidate
+        );
         console.warn('Catalog content-rating lookup failed:', item.title, result.reason);
       }
 
@@ -255,6 +280,9 @@ export async function updateCatalogMetadata({
     };
   }
 
+  let updated = 0;
+  let failed = 0;
+
   for (let passIndex = 0; passIndex < queue.length; passIndex++) {
     const { item } = queue[passIndex];
 
@@ -266,6 +294,7 @@ export async function updateCatalogMetadata({
 
     try {
       const enriched = await fetchMetadata(item);
+      const attemptedAt = new Date().toISOString();
       metadataFailureCooldowns.delete(metadataCooldownKey(item));
       const contentRatingCheckedAt =
         enriched.contentRatingCheckedAt || new Date().toISOString();
@@ -275,6 +304,8 @@ export async function updateCatalogMetadata({
           ? {
               ...candidate,
               ...enriched,
+              catalogMetadataAttemptedAt: attemptedAt,
+              catalogMetadataError: '',
               contentRatingCheckedAt,
               title: candidate.title || enriched.officialTitle || enriched.title,
               officialTitle:
@@ -292,11 +323,23 @@ export async function updateCatalogMetadata({
             }
           : candidate
       );
+      updated += 1;
     } catch (error) {
+      const attemptedAt = new Date().toISOString();
       metadataFailureCooldowns.set(
         metadataCooldownKey(item),
         Date.now() + METADATA_FAILURE_COOLDOWN_MS
       );
+      nextCatalog = nextCatalog.map((candidate) =>
+        sameCatalogIdentity(candidate, item)
+          ? {
+              ...candidate,
+              catalogMetadataAttemptedAt: attemptedAt,
+              catalogMetadataError: error?.message || String(error || 'Lookup failed')
+            }
+          : candidate
+      );
+      failed += 1;
       console.warn('Catalog metadata failed:', item.title, error);
     }
 
@@ -308,7 +351,9 @@ export async function updateCatalogMetadata({
 
   return {
     saved,
-    updated: queue.length,
+    updated,
+    failed,
+    processed: queue.length,
     total: nextCatalog.length
   };
 }

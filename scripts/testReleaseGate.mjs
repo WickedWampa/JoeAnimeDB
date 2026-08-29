@@ -73,6 +73,7 @@ const libraryHook = await viteTestServer.ssrLoadModule('/src/hooks/useAnimeLibra
 const titleIdentity = await viteTestServer.ssrLoadModule('/src/services/titleIdentity.js');
 const libraryLinkageRepair = await viteTestServer.ssrLoadModule('/src/services/libraryKitsuLinkageRepair.js');
 const libraryMalLinkageRepair = await viteTestServer.ssrLoadModule('/src/services/libraryMalLinkageRepair.js');
+const catalogService = await viteTestServer.ssrLoadModule('/src/services/catalogService.js');
 const discoverServicePool = await viteTestServer.ssrLoadModule('/src/services/discoverServicePool.js');
 const watchmodeService = await viteTestServer.ssrLoadModule('/src/services/watchmodeService.js');
 const kitsuStreamingService = await viteTestServer.ssrLoadModule('/src/services/kitsuStreamingService.js');
@@ -738,6 +739,26 @@ check('Update Database invokes full-library repair after its existing maintenanc
   );
   assert.match(repairPersistence, /animeRepository\.updateAnimeIdentityLinkage/);
   assert.doesNotMatch(repairPersistence, /updateData\s*\(/);
+});
+
+check('recommendation catalog refresh rotates past recently attempted titles', async () => {
+  const catalog = [
+    { id: 'recent', title: 'Recently Tried', kitsuId: '1', catalogMetadataAttemptedAt: '2026-08-29T12:00:00.000Z' },
+    { id: 'never', title: 'Never Tried', kitsuId: '2' },
+    { id: 'old', title: 'Old Attempt', kitsuId: '3', catalogMetadataAttemptedAt: '2026-08-20T12:00:00.000Z' }
+  ];
+  const metadataQueue = catalogService.buildCatalogQueue({ library: [], catalog, seed: [], limit: 2 });
+  assert.deepEqual(metadataQueue.map(({ item }) => item.id), ['never', 'old']);
+
+  const ratingCatalog = [
+    { id: 'rating-recent', title: 'Recent Rating', kitsuId: '11', contentRatingAttemptedAt: '2026-08-29T12:00:00.000Z' },
+    { id: 'rating-never', title: 'Never Rated', kitsuId: '12' },
+    { id: 'rating-old', title: 'Old Rating', kitsuId: '13', contentRatingAttemptedAt: '2026-08-20T12:00:00.000Z' }
+  ];
+  const ratingQueue = catalogService.buildCatalogContentRatingQueue({
+    library: [], catalog: ratingCatalog, seed: [], limit: 2
+  });
+  assert.deepEqual(ratingQueue.map(({ item }) => item.id), ['rating-never', 'rating-old']);
 });
 
 check('Dev mode does not reload midway through Update Database genome generation', async () => {
