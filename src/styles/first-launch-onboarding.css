@@ -144,6 +144,136 @@
   line-height: 1.45;
 }
 
+.firstLaunchImportInput {
+  display: none !important;
+}
+
+.firstLaunchImport {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.firstLaunchImport > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.firstLaunchImport > header strong,
+.firstLaunchImport > header small {
+  display: block;
+}
+
+.firstLaunchImport > header small {
+  margin-top: 4px;
+  color: var(--muted, #9fb1c7);
+  line-height: 1.4;
+}
+
+.firstLaunchImport > header > b {
+  flex: 0 0 auto;
+  color: var(--cyan, #32e7ff);
+  font-size: .75rem;
+}
+
+.firstLaunchImportGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.firstLaunchImportGrid button {
+  min-width: 0;
+  min-height: 98px;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 5px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, .11);
+  border-radius: 15px;
+  background: rgba(255, 255, 255, .04);
+  color: var(--text, #edf7ff);
+  cursor: pointer;
+}
+
+.firstLaunchImportGrid button:hover,
+.firstLaunchImportGrid button:focus-visible {
+  border-color: color-mix(in srgb, var(--cyan, #32e7ff) 62%, transparent);
+  background: color-mix(in srgb, var(--cyan, #32e7ff) 9%, transparent);
+  outline: none;
+}
+
+.firstLaunchImportGrid button span {
+  font-size: 1.35rem;
+}
+
+.firstLaunchImportGrid button small {
+  color: var(--muted, #9fb1c7);
+  font-size: .72rem;
+  text-align: center;
+}
+
+.firstLaunchImportProgress {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 12px;
+  margin-top: 12px;
+}
+
+.firstLaunchImportProgress > span {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, .1);
+}
+
+.firstLaunchImportProgress i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--cyan, #32e7ff), var(--pink, #ff5cc8));
+}
+
+.firstLaunchImportProgress b {
+  color: var(--cyan, #32e7ff);
+  font-size: .78rem;
+}
+
+.firstLaunchImportProgress small {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  color: var(--muted, #9fb1c7);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.firstLaunchImportSummary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.firstLaunchImportSummary span {
+  padding: 9px;
+  border: 1px solid rgba(255, 255, 255, .09);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, .035);
+  color: var(--muted, #9fb1c7);
+  font-size: .72rem;
+  text-align: center;
+}
+
+.firstLaunchImportSummary b {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--text, #edf7ff);
+  font-size: 1rem;
+}
+
 .firstLaunchThemes {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -758,6 +888,15 @@
     padding: 22px 18px;
     border-radius: 22px;
   }
+  .firstLaunchImportGrid { grid-template-columns: 1fr; }
+  .firstLaunchImportGrid button {
+    min-height: 70px;
+    grid-template-columns: 34px minmax(0, 1fr);
+    justify-items: start;
+    text-align: left;
+  }
+  .firstLaunchImportGrid button span { grid-row: 1 / 3; align-self: center; }
+  .firstLaunchImportSummary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .firstLaunchThemes,
   .firstLaunchReadyGrid,
   .firstLaunchAnimeResults { grid-template-columns: 1fr; }

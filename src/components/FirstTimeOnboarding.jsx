@@ -1,10 +1,19 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Poster } from './Poster';
 import {
+  applySafeKitsuIdentity,
   enrichAnimeCandidate,
   findDuplicateAnime,
+  importAnimeByTitle,
+  resolveSafeKitsuIdentity,
   searchAnimeCandidates
 } from '../services/animeImporter';
+import {
+  importTitleKey,
+  importedPersonalData,
+  parseLibraryImport,
+  readLibraryImportFile
+} from '../services/libraryListImporter';
 import { CONTENT_SAFETY_MODES } from '../services/contentSafety';
 import {
   getSavedStreamingApps,
@@ -92,6 +101,34 @@ function titleOf(item = {}) {
 function defaultRating(item = {}) {
   const score = Number(item.joeScore ?? item.score ?? item.finalScore ?? item.rating ?? 8);
   return Number.isFinite(score) && score > 0 ? Math.min(10, Math.max(0.1, score)) : 8;
+}
+
+function importedTitleMatchesLibraryItem(requestedTitle = '', item = {}) {
+  const wanted = importTitleKey(requestedTitle);
+  if (!wanted) return false;
+
+  return [
+    item.title,
+    item.officialTitle,
+    item.englishTitle,
+    item.canonicalTitle,
+    ...(Array.isArray(item.titleSynonyms) ? item.titleSynonyms : [])
+  ]
+    .map(importTitleKey)
+    .filter(Boolean)
+    .includes(wanted);
+}
+
+function findImportedLibraryItem(row = {}, library = []) {
+  return library.find((item) =>
+    (row.malId && String(item.malId || item.mal_id || '') === String(row.malId)) ||
+    (row.anilistId && String(item.anilistId || '') === String(row.anilistId)) ||
+    importedTitleMatchesLibraryItem(row.requestedTitle || row.title, item)
+  );
+}
+
+function importTotal(summary = {}) {
+  return (summary.added?.length || 0) + (summary.updated?.length || 0);
 }
 
 function StepProgress({ step, updateOnly = false }) {
@@ -217,12 +254,17 @@ export function FirstTimeOnboarding({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [streamingApps, setStreamingApps] = useState(() => getSavedStreamingApps());
+  const [libraryImportProgress, setLibraryImportProgress] = useState(null);
+  const [libraryImportSummary, setLibraryImportSummary] = useState(null);
+  const libraryImportInputRef = useRef(null);
 
   useEffect(() => {
     if (!open) return;
     setStep(Math.max(0, Math.min(4, Number(initialStep || 0))));
     setNameDraft(displayName || '');
     setMessage('');
+    setLibraryImportProgress(null);
+    setLibraryImportSummary(null);
     setStreamingApps(getSavedStreamingApps());
   }, [open]);
 
@@ -290,11 +332,202 @@ export function FirstTimeOnboarding({
     }
   }
 
+  function saveLibraryImportSummary(summary) {
+    setLibraryImportSummary(summary);
+
+    try {
+      localStorage.setItem('joeanime-library-import-review-v1', JSON.stringify(summary));
+    } catch (error) {
+      console.warn('Could not persist onboarding import review:', error);
+    }
+  }
+
+  async function importLibraryRows(rows = []) {
+    if (!rows.length || !onUpdateAnime || busy) return;
+
+    const sourceName = rows[0]?.sourceName || 'the selected file';
+    const confirmed = window.confirm(
+      `Import ${rows.length} title${rows.length === 1 ? '' : 's'} from ${sourceName}? Existing titles keep their metadata while ratings, status, progress, and other supported list data are merged.`
+    );
+    if (!confirmed) return;
+
+    setBusy(true);
+    setLibraryImportSummary(null);
+    let liveLibrary = [...anime];
+    const summary = {
+      added: [],
+      updated: [],
+      skipped: [],
+      needsReview: [],
+      failed: [],
+      sourceName
+    };
+
+    try {
+      for (let index = 0; index < rows.length; index += 1) {
+        const row = rows[index];
+        const progress = { processed: index + 1, total: rows.length, title: row.title };
+        setLibraryImportProgress(progress);
+        setMessage(`Importing ${progress.processed}/${progress.total}: ${progress.title}`);
+
+        try {
+          const existingBeforeLookup = findImportedLibraryItem(row, liveLibrary);
+          if (existingBeforeLookup) {
+            let merged = {
+              ...existingBeforeLookup,
+              ...importedPersonalData(row),
+              id: existingBeforeLookup.id,
+              title: existingBeforeLookup.title,
+              officialTitle: existingBeforeLookup.officialTitle || existingBeforeLookup.title
+            };
+
+            if (!String(existingBeforeLookup.kitsuId || existingBeforeLookup.kitsu_id || '').trim()) {
+              const linkage = await resolveSafeKitsuIdentity(merged);
+              merged = applySafeKitsuIdentity(merged, linkage, 'onboarding-import-safe-resolution');
+              if (linkage.identityDecision.needsReview) {
+                summary.needsReview.push({
+                  ...row,
+                  title: row.requestedTitle || row.title,
+                  importedRecordId: existingBeforeLookup.id,
+                  reason: linkage.identityDecision.reason,
+                  candidates: linkage.results || []
+                });
+              }
+            }
+
+            const saved = await onUpdateAnime(merged);
+            liveLibrary = saved?.anime || liveLibrary.map((item) =>
+              String(item.id) === String(merged.id) ? merged : item
+            );
+            summary.updated.push(merged.officialTitle || merged.title);
+            continue;
+          }
+
+          const result = await importAnimeByTitle({
+            title: row.requestedTitle || row.title,
+            normalizedTitle: row.title,
+            status: row.status || 'Completed',
+            library: liveLibrary,
+            requireSafeIdentity: true
+          });
+
+          if (result.duplicate) {
+            if (importedTitleMatchesLibraryItem(row.requestedTitle || row.title, result.duplicate)) {
+              const merged = {
+                ...result.duplicate,
+                ...importedPersonalData(row),
+                id: result.duplicate.id,
+                title: result.duplicate.title,
+                officialTitle: result.duplicate.officialTitle || result.duplicate.title
+              };
+              const saved = await onUpdateAnime(merged);
+              liveLibrary = saved?.anime || liveLibrary.map((item) =>
+                String(item.id) === String(merged.id) ? merged : item
+              );
+              summary.updated.push(merged.officialTitle || merged.title);
+            } else {
+              summary.needsReview.push({
+                ...row,
+                title: row.requestedTitle || row.title,
+                reason: `Possible duplicate collision with “${result.duplicate.officialTitle || result.duplicate.title}”.`,
+                candidates: [...(result.results || []), result.candidate].filter(Boolean)
+              });
+            }
+            continue;
+          }
+
+          if (!result.candidate) {
+            summary.failed.push({
+              ...row,
+              title: row.requestedTitle || row.title,
+              reason: 'No safe import candidate was returned.',
+              candidates: result.results || []
+            });
+            continue;
+          }
+
+          const next = {
+            ...result.candidate,
+            ...importedPersonalData(row),
+            id: result.candidate.id,
+            title: result.candidate.title || row.title,
+            officialTitle: result.candidate.officialTitle || result.candidate.title || row.title,
+            addedFrom: row.sourceName || 'First-time onboarding import',
+            favorite: Boolean(result.candidate.favorite),
+            rewatches: row.rewatches !== undefined ? row.rewatches : Number(result.candidate.rewatches || 0),
+            finalRank: liveLibrary.length + 1,
+            notes: row.notes !== undefined ? row.notes : (result.candidate.notes || '')
+          };
+
+          const saved = await onUpdateAnime(next);
+          liveLibrary = saved?.anime || [...liveLibrary, next];
+          summary.added.push(next.officialTitle || next.title);
+
+          if (result.identityDecision?.needsReview) {
+            summary.needsReview.push({
+              ...row,
+              title: row.requestedTitle || row.title,
+              importedRecordId: next.id,
+              reason: result.identityDecision.reason,
+              candidates: result.results || []
+            });
+          }
+        } catch (error) {
+          console.warn('Onboarding library import failed:', row.title, error);
+          summary.failed.push({
+            ...row,
+            title: row.requestedTitle || row.title,
+            reason: error?.message || String(error),
+            candidates: []
+          });
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 40));
+      }
+
+      saveLibraryImportSummary(summary);
+      const loaded = importTotal(summary);
+      setMessage(
+        `Import finished — ${summary.added.length} added, ${summary.updated.length} updated, ` +
+        `${summary.needsReview.length} need review, ${summary.failed.length} failed.`
+      );
+      if (!loaded && !summary.needsReview.length && !summary.failed.length) {
+        setMessage('Nothing new was found in that file. You can choose another file or start clean.');
+      }
+    } finally {
+      setLibraryImportProgress(null);
+      setBusy(false);
+    }
+  }
+
+  async function handleLibraryImportFile(event) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file || busy) return;
+
+    setBusy(true);
+    setMessage(`Reading ${file.name}…`);
+    try {
+      const text = await readLibraryImportFile(file);
+      const rows = parseLibraryImport(text, file.name.replace(/\.gz$/i, ''));
+      if (!rows.length) {
+        setMessage('No anime titles were found. Choose a MAL XML/XML.GZ, AniList JSON/CSV, or TXT/CSV list.');
+        return;
+      }
+      setBusy(false);
+      await importLibraryRows(rows);
+    } catch (error) {
+      setMessage(`Could not import that file: ${error?.message || String(error)}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function prepareSelectedAnime() {
     if (!selected.length) {
       setPrepared([]);
       setRatings({});
-      moveTo(3);
+      moveTo(importTotal(libraryImportSummary) ? 4 : 3);
       return;
     }
 
@@ -416,7 +649,7 @@ export function FirstTimeOnboarding({
           {step === 0 && (
             <>
               <p className="firstLaunchBody">
-                JoeAnimeDB remembers what you watch and learns why it matters to you. Start with a name, or leave it blank and change it later in Settings.
+                Bring your anime with you so Home, sequel discovery, Anime DNA, and JoeAI have something useful to work with immediately.
               </p>
               <label htmlFor="first-launch-name">What should JoeAI call you?</label>
               <input
@@ -427,9 +660,52 @@ export function FirstTimeOnboarding({
                 maxLength={32}
                 autoFocus
               />
+              <input
+                ref={libraryImportInputRef}
+                className="firstLaunchImportInput"
+                type="file"
+                accept=".txt,.csv,.json,.xml,.gz,text/plain,text/csv,application/json,application/xml,text/xml,application/gzip"
+                onChange={handleLibraryImportFile}
+              />
+              <section className="firstLaunchImport" aria-labelledby="first-launch-import-title">
+                <header>
+                  <div>
+                    <strong id="first-launch-import-title">Bring your library</strong>
+                    <small>Import now or start clean. Nothing here replaces a JoeAnimeDB backup.</small>
+                  </div>
+                  <b>{libraryImportSummary ? `${importTotal(libraryImportSummary)} loaded` : 'Optional'}</b>
+                </header>
+                <div className="firstLaunchImportGrid">
+                  <button type="button" onClick={() => libraryImportInputRef.current?.click()} disabled={busy}>
+                    <span>🔷</span><strong>MyAnimeList</strong><small>XML or XML.GZ export</small>
+                  </button>
+                  <button type="button" onClick={() => libraryImportInputRef.current?.click()} disabled={busy}>
+                    <span>🔹</span><strong>AniList</strong><small>JSON or CSV export</small>
+                  </button>
+                  <button type="button" onClick={() => libraryImportInputRef.current?.click()} disabled={busy}>
+                    <span>📄</span><strong>TXT or CSV</strong><small>One title per line also works</small>
+                  </button>
+                </div>
+              </section>
+              {libraryImportProgress && (
+                <div className="firstLaunchImportProgress" role="status" aria-live="polite">
+                  <span><i style={{ width: `${Math.round((libraryImportProgress.processed / libraryImportProgress.total) * 100)}%` }} /></span>
+                  <b>{libraryImportProgress.processed}/{libraryImportProgress.total}</b>
+                  <small>{libraryImportProgress.title}</small>
+                </div>
+              )}
+              {!libraryImportProgress && message && <p className="firstLaunchMessage" role="status">{message}</p>}
+              {libraryImportSummary && (
+                <div className="firstLaunchImportSummary" aria-label="Library import summary">
+                  <span><b>{libraryImportSummary.added.length}</b> added</span>
+                  <span><b>{libraryImportSummary.updated.length}</b> updated</span>
+                  <span><b>{libraryImportSummary.needsReview.length}</b> need review</span>
+                  <span><b>{libraryImportSummary.failed.length}</b> failed</span>
+                </div>
+              )}
               <div className="firstLaunchFeature">
                 <b>No demo data.</b>
-                <span>You begin with a clean library. Only the titles you choose become part of your Anime DNA.</span>
+                <span>Import a real list or continue without importing to start clean. Uncertain matches are saved for review instead of being linked to the wrong anime.</span>
               </div>
             </>
           )}
@@ -504,7 +780,11 @@ export function FirstTimeOnboarding({
 
           {step === 2 && (
             <>
-              <p className="firstLaunchBody">Search for up to three favorites. JoeAI will use their ratings, genres, and Genomes as your first taste anchors.</p>
+              <p className="firstLaunchBody">
+                {importTotal(libraryImportSummary)
+                  ? `Your ${importTotal(libraryImportSummary)} imported titles already give JoeAI a head start. You can continue now or add up to three favorites as stronger taste anchors.`
+                  : 'Search for up to three favorites. JoeAI will use their ratings, genres, and Genomes as your first taste anchors.'}
+              </p>
               <form className="firstLaunchSearch" onSubmit={search}>
                 <input
                   value={query}
@@ -764,7 +1044,7 @@ export function FirstTimeOnboarding({
             )}
             {step === 0 && (
               <button type="button" className="primary" onClick={saveNameAndContinue} disabled={busy}>
-                {busy ? 'Saving…' : 'Continue'}
+                {busy ? 'Importing…' : libraryImportSummary ? `Continue with ${importTotal(libraryImportSummary)} titles` : 'Continue — start clean'}
               </button>
             )}
             {step === 1 && (
@@ -772,7 +1052,7 @@ export function FirstTimeOnboarding({
             )}
             {step === 2 && (
               <button type="button" className="primary" onClick={prepareSelectedAnime} disabled={busy}>
-                {busy ? 'Preparing…' : selected.length ? `Rate ${selected.length} title${selected.length === 1 ? '' : 's'}` : 'Continue'}
+                {busy ? 'Preparing…' : selected.length ? `Rate ${selected.length} title${selected.length === 1 ? '' : 's'}` : importTotal(libraryImportSummary) ? 'Use imported library' : 'Continue'}
               </button>
             )}
             {step === 3 && (

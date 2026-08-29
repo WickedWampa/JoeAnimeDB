@@ -115,6 +115,13 @@ check('Beta 22 onboarding update reaches existing users exactly once', async () 
   const onboardingSource = await source('src/components/FirstTimeOnboarding.jsx');
   assert.match(onboardingSource, /My streaming services/);
   assert.match(onboardingSource, /What is new on Home/);
+  assert.match(onboardingSource, /Bring your library/);
+  assert.match(onboardingSource, /MyAnimeList/);
+  assert.match(onboardingSource, /AniList/);
+  assert.match(onboardingSource, /TXT or CSV/);
+  assert.match(onboardingSource, /parseLibraryImport/);
+  assert.match(onboardingSource, /requireSafeIdentity: true/);
+  assert.match(onboardingSource, /joeanime-library-import-review-v1/);
   assert.match(onboardingSource, /updateOnly \? 4 : 2/);
   assert.match(onboardingSource, /saveStreamingApps/);
   localStorage.clear();
