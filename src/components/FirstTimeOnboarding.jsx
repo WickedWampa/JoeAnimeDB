@@ -486,11 +486,39 @@ export function FirstTimeOnboarding({
               );
               summary.updated.push(merged.officialTitle || merged.title);
             } else {
+              const collisionCandidates = [...(result.results || []), result.candidate].filter(Boolean);
+              const candidateMetadata = result.candidate || collisionCandidates[0] || {};
+              const reviewReason = `Possible duplicate collision with “${result.duplicate.officialTitle || result.duplicate.title}”.`;
+              const reviewRecordId = `mal-review-${row.malId || `${index}-${String(row.title || 'title').toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}`;
+              const reviewRecord = {
+                ...candidateMetadata,
+                ...importedPersonalData(row),
+                id: reviewRecordId,
+                malId: row.malId || candidateMetadata.malId || '',
+                mal_id: row.malId || candidateMetadata.mal_id || '',
+                kitsuId: '',
+                kitsu_id: '',
+                title: row.requestedTitle || row.title,
+                officialTitle: row.requestedTitle || row.title,
+                addedFrom: row.sourceName || 'First-time onboarding import',
+                finalRank: liveLibrary.length + 1,
+                libraryNeedsReview: true,
+                identityNeedsReview: true,
+                metadataNeedsReview: true,
+                libraryReviewReason: reviewReason,
+                metadataReviewReason: reviewReason,
+                identityReviewCandidates: collisionCandidates.slice(0, 5),
+                identityResolutionStatus: 'review'
+              };
+              const saved = await onUpdateAnime(reviewRecord);
+              liveLibrary = saved?.anime || [...liveLibrary, reviewRecord];
+              summary.added.push(reviewRecord.officialTitle || reviewRecord.title);
               summary.needsReview.push({
                 ...row,
                 title: row.requestedTitle || row.title,
-                reason: `Possible duplicate collision with “${result.duplicate.officialTitle || result.duplicate.title}”.`,
-                candidates: [...(result.results || []), result.candidate].filter(Boolean)
+                importedRecordId: reviewRecord.id,
+                reason: reviewReason,
+                candidates: collisionCandidates
               });
             }
             continue;

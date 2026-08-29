@@ -771,6 +771,9 @@ check('onboarding identity failures remain reachable from every Needs Review ent
   assert.match(onboardingSource, /identityDecision\?\.needsReview\s*\|\|\s*result\.identityDecision\?\.unresolved/);
   assert.match(onboardingSource, /libraryNeedsReview:\s*Boolean/);
   assert.match(onboardingSource, /identityReviewCandidates:/);
+  assert.match(onboardingSource, /const reviewRecordId = `mal-review-/);
+  assert.match(onboardingSource, /identityResolutionStatus: 'review'/);
+  assert.match(onboardingSource, /importedRecordId: reviewRecord\.id/);
   assert.match(onboardingSource, /joeanime:library-import-review-changed/);
   assert.match(librarySource, /item\.libraryNeedsReview\s*\|\|\s*item\.identityNeedsReview/);
   assert.match(settingsSource, /addEventListener\('joeanime:library-import-review-changed'/);
