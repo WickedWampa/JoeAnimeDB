@@ -167,6 +167,7 @@ function parseCsv(text = '') {
   const startIndex = columnIndex(headers, ['started at', 'start date', 'started date']);
   const completedIndex = columnIndex(headers, ['completed at', 'finish date', 'completed date']);
   const malIdIndex = columnIndex(headers, ['mal id', 'malid', 'id mal', 'myanimelist id']);
+  const kitsuIdIndex = columnIndex(headers, ['kitsu id', 'kitsuid', 'id kitsu']);
   const anilistIdIndex = columnIndex(headers, ['anilist id', 'media id', 'mediaid']);
   const sourceName = headers.some((header) => header.includes('anilist') || header === 'media id')
     ? 'AniList CSV'
@@ -196,6 +197,7 @@ function parseCsv(text = '') {
       startedAt: startIndex >= 0 ? cleanDate(columns[startIndex]) : undefined,
       completedAt: completedIndex >= 0 ? cleanDate(columns[completedIndex]) : undefined,
       malId: malIdIndex >= 0 ? positiveInteger(columns[malIdIndex]) : undefined,
+      kitsuId: kitsuIdIndex >= 0 ? positiveInteger(columns[kitsuIdIndex]) : undefined,
       anilistId: anilistIdIndex >= 0 ? positiveInteger(columns[anilistIdIndex]) : undefined,
       sourceName
     };
@@ -326,7 +328,9 @@ function parsePlainText(text = '') {
 
     const statusMatch = trimmed.match(/\|\s*Status:\s*([^|]+)\s*$/i);
     const scoreMatch = trimmed.match(/\|\s*Score:\s*([^|]+)(?:\||$)/i);
-    const requestedTitle = cleanImportedTitle(trimmed);
+    const malIdMatch = trimmed.match(/\|\s*MAL ID:\s*(\d+)/i);
+    const kitsuIdMatch = trimmed.match(/\|\s*Kitsu ID:\s*(\d+)/i);
+    const requestedTitle = cleanImportedTitle(trimmed.split(/\s*\|\s*/)[0]);
 
     if (!requestedTitle) return;
     rows.push({
@@ -334,6 +338,8 @@ function parsePlainText(text = '') {
       requestedTitle,
       status: normalizeImportedStatus(statusMatch?.[1] || 'Completed'),
       score: normalizeScore(scoreMatch?.[1]),
+      malId: positiveInteger(malIdMatch?.[1]),
+      kitsuId: positiveInteger(kitsuIdMatch?.[1]),
       sourceName: 'JoeAnimeDB text list'
     });
   });
@@ -359,7 +365,11 @@ export function parseLibraryImport(text = '', filename = '') {
 
   const seen = new Set();
   return rows.filter((row) => {
-    const key = row.malId ? `mal:${row.malId}` : `title:${importTitleKey(row.title)}`;
+    const key = row.malId
+      ? `mal:${row.malId}`
+      : row.kitsuId
+        ? `kitsu:${row.kitsuId}`
+        : `title:${importTitleKey(row.title)}`;
     if (!row.title || seen.has(key)) return false;
     seen.add(key);
     return true;

@@ -344,7 +344,7 @@ check('MAL import and metadata repair paths enforce identity review safety', asy
   assert.match(importerSource, /!deferMetadataCompletion && !\(requireSafeIdentity && identityDecision\.needsReview\)/);
 });
 
-check('AniList JSON, CSV, and text import normalization', () => {
+check('AniList JSON, CSV, and text import normalization', async () => {
   const aniListRows = importer.parseLibraryImport(JSON.stringify({
     scoreFormat: 'POINT_100',
     lists: [{
@@ -368,11 +368,12 @@ check('AniList JSON, CSV, and text import normalization', () => {
   assert.equal(aniListRows[0].malId, 52991);
 
   const csvRows = importer.parseLibraryImport(
-    'Title,Score,Status,MAL ID,Progress\n"Bleach",9.9,Completed,269,366',
+    'Title,Score,Status,MAL ID,Kitsu ID,Progress\n"Bleach",9.9,Completed,269,244,366',
     'library.csv'
   );
   assert.equal(csvRows.length, 1);
   assert.equal(csvRows[0].malId, 269);
+  assert.equal(csvRows[0].kitsuId, 244);
   assert.equal(csvRows[0].watchProgress, 366);
 
   const textRows = importer.parseLibraryImport(
@@ -382,6 +383,18 @@ check('AniList JSON, CSV, and text import normalization', () => {
   assert.equal(textRows.length, 1);
   assert.equal(textRows[0].title, 'One Piece');
   assert.equal(textRows[0].status, 'Watching');
+
+  const identityTextRows = importer.parseLibraryImport(
+    'JoeAnimeDB Library List\n\n1. Bleach | MAL ID: 269 | Kitsu ID: 244',
+    'library.txt'
+  );
+  assert.equal(identityTextRows[0].title, 'Bleach');
+  assert.equal(identityTextRows[0].malId, 269);
+  assert.equal(identityTextRows[0].kitsuId, 244);
+
+  const storageSource = await source('src/services/storage.js');
+  assert.match(storageSource, /Genres,MAL ID,Kitsu ID/);
+  assert.match(storageSource, /`Kitsu ID: \$\{item\.kitsuId \|\| item\.kitsu_id\}`/);
 });
 
 check('content filtering enforces each safety mode', () => {
@@ -780,6 +793,7 @@ check('onboarding identity failures remain reachable from every Needs Review ent
   assert.match(settingsSource, /libraryNeedsReview:\s*false/);
   assert.match(settingsSource, /persistedLibraryReviewItems/);
   assert.match(settingsSource, /item\.identityReviewCandidates \|\| \[\]/);
+  assert.match(settingsSource, /Already saved in your Library\. Kitsu has no matching identity yet/);
 });
 
 check('onboarding uses exact MAL mappings before title matching', async () => {

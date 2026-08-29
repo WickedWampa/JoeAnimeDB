@@ -9,7 +9,7 @@ import {
   resolveSafeKitsuIdentity,
   searchAnimeCandidates
 } from '../services/animeImporter';
-import { fetchKitsuAnimeByMalIds } from '../services/malKitsuMappingService';
+import { fetchKitsuAnimeByIds, fetchKitsuAnimeByMalIds } from '../services/malKitsuMappingService';
 import {
   importTitleKey,
   importedPersonalData,
@@ -390,12 +390,18 @@ export function FirstTimeOnboarding({
       sourceName
     };
     let exactMalCandidates = new Map();
+    let exactKitsuCandidates = new Map();
 
     try {
       const malIds = rows.map((row) => row.malId).filter(Boolean);
       if (malIds.length) {
         setMessage(`Resolving ${malIds.length} exact MyAnimeList identities through Kitsu…`);
         exactMalCandidates = await fetchKitsuAnimeByMalIds(malIds);
+      }
+      const kitsuIds = rows.map((row) => row.kitsuId).filter(Boolean);
+      if (kitsuIds.length) {
+        setMessage(`Loading ${kitsuIds.length} saved Kitsu identities…`);
+        exactKitsuCandidates = await fetchKitsuAnimeByIds(kitsuIds);
       }
 
       for (let index = 0; index < rows.length; index += 1) {
@@ -405,7 +411,10 @@ export function FirstTimeOnboarding({
         setMessage(`Importing ${progress.processed}/${progress.total}: ${progress.title}`);
 
         try {
-          const exactMalCandidate = exactMalCandidates.get(String(row.malId || '')) || null;
+          const exactMalCandidate =
+            exactMalCandidates.get(String(row.malId || '')) ||
+            exactKitsuCandidates.get(String(row.kitsuId || '')) ||
+            null;
           const existingBeforeLookup = findImportedLibraryItem(row, liveLibrary);
           if (existingBeforeLookup) {
             let merged = exactMalCandidate

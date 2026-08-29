@@ -263,9 +263,7 @@ function downloadJson(filename, value) {
 
 export function exportLibraryList(data = {}) {
   const exportedAt = new Date();
-  const titles = sortedAnime(data)
-    .map((item) => String(item.officialTitle || item.title || '').trim())
-    .filter(Boolean);
+  const titles = sortedAnime(data).filter((item) => String(item.officialTitle || item.title || '').trim());
 
   downloadText(
     `JoeAnimeDB-library-list-${exportedAt.toISOString().slice(0, 10)}.txt`,
@@ -274,7 +272,14 @@ export function exportLibraryList(data = {}) {
       `Exported: ${exportedAt.toLocaleString()}`,
       `Total titles: ${titles.length}`,
       '',
-      ...titles.map((title, index) => `${index + 1}. ${title}`)
+      ...titles.map((item, index) => {
+        const title = String(item.officialTitle || item.title || '').trim();
+        const ids = [
+          item.malId || item.mal_id ? `MAL ID: ${item.malId || item.mal_id}` : '',
+          item.kitsuId || item.kitsu_id ? `Kitsu ID: ${item.kitsuId || item.kitsu_id}` : ''
+        ].filter(Boolean);
+        return `${index + 1}. ${title}${ids.length ? ` | ${ids.join(' | ')}` : ''}`;
+      })
     ].join('\n')
   );
 
@@ -298,13 +303,15 @@ export function exportRankedLibraryList(data = {}) {
 
 export function exportLibraryCsv(data = {}) {
   const rows = [
-    "Title,Score,Status,Year,Genres",
+    "Title,Score,Status,Year,Genres,MAL ID,Kitsu ID",
     ...sortedAnime(data).map(a=>[
       `"${(a.officialTitle||a.title||"").replace(/"/g,'""')}"`,
       a.joeScore ?? a.score ?? a.rating ?? "",
       a.status ?? "",
       a.year ?? "",
-      `"${(a.genres||[]).join("; ")}"`
+      `"${(a.genres||[]).join("; ")}"`,
+      a.malId ?? a.mal_id ?? "",
+      a.kitsuId ?? a.kitsu_id ?? ""
     ].join(","))
   ];
   downloadText("JoeAnimeDB-library.csv", rows.join("\n"));

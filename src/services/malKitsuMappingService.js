@@ -100,3 +100,39 @@ export async function fetchKitsuAnimeByMalIds(malIds = [], fetchImpl = fetch) {
 
   return results;
 }
+
+export async function fetchKitsuAnimeByIds(kitsuIds = [], fetchImpl = fetch) {
+  const uniqueIds = [...new Set(kitsuIds.map(numericId).filter(Boolean))];
+  const results = new Map();
+
+  for (const batch of chunk(uniqueIds)) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    try {
+      const url = `${KITSU_API_BASE}/anime?filter[id]=${encodeURIComponent(batch.join(','))}&page[limit]=${BATCH_SIZE}`;
+      const response = await fetchImpl(url, {
+        headers: { Accept: 'application/vnd.api+json' },
+        signal: controller.signal
+      });
+      if (!response.ok) throw new Error(`Kitsu anime batch returned HTTP ${response.status}`);
+      const payload = await response.json();
+      for (const resource of Array.isArray(payload.data) ? payload.data : []) {
+        if (resource?.type !== 'anime') continue;
+        results.set(String(resource.id), {
+          ...normalizeKitsuAnime(resource),
+          kitsuId: String(resource.id),
+          identityNeedsReview: false,
+          metadataNeedsReview: false,
+          identityResolutionStatus: 'verified',
+          identityLinkageSource: 'joeanime-export-kitsu-id'
+        });
+      }
+    } catch (error) {
+      console.warn('Kitsu anime ID batch failed:', batch, error);
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  return results;
+}
