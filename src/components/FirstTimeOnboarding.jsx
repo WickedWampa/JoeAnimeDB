@@ -122,11 +122,33 @@ function importedTitleMatchesLibraryItem(requestedTitle = '', item = {}) {
 }
 
 function findImportedLibraryItem(row = {}, library = []) {
+  if (row.malId) {
+    return library.find((item) =>
+      String(item.malId || item.mal_id || '') === String(row.malId)
+    );
+  }
+
+  if (row.anilistId) {
+    return library.find((item) => String(item.anilistId || '') === String(row.anilistId));
+  }
+
   return library.find((item) =>
-    (row.malId && String(item.malId || item.mal_id || '') === String(row.malId)) ||
-    (row.anilistId && String(item.anilistId || '') === String(row.anilistId)) ||
     importedTitleMatchesLibraryItem(row.requestedTitle || row.title, item)
   );
+}
+
+function findExactMappedDuplicate(candidate = {}, library = []) {
+  const malId = String(candidate.malId || candidate.mal_id || '').trim();
+  const kitsuId = String(candidate.kitsuId || candidate.kitsu_id || '').trim();
+
+  return library.find((item) => {
+    const itemMalId = String(item.malId || item.mal_id || '').trim();
+    const itemKitsuId = String(item.kitsuId || item.kitsu_id || '').trim();
+    return Boolean(
+      (malId && itemMalId && malId === itemMalId) ||
+      (kitsuId && itemKitsuId && kitsuId === itemKitsuId)
+    );
+  });
 }
 
 function importTotal(summary = {}) {
@@ -440,7 +462,7 @@ export function FirstTimeOnboarding({
           const result = exactMalCandidate
             ? {
                 candidate: exactMalCandidate,
-                duplicate: findDuplicateAnime(liveLibrary, exactMalCandidate),
+                duplicate: findExactMappedDuplicate(exactMalCandidate, liveLibrary),
                 results: [exactMalCandidate],
                 identityDecision: {
                   safe: true,
