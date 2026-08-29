@@ -242,6 +242,9 @@ export function createMobileDatabaseAdapter() {
         const proposedKitsuId = String(
           patch.kitsuId ?? patch.kitsu_id ?? existing.kitsuId ?? ''
         ).trim();
+        const proposedMalId = String(
+          patch.malId ?? patch.mal_id ?? existing.malId ?? existing.mal_id ?? ''
+        ).trim();
         const collision = proposedKitsuId
           ? current.anime.find((item, itemIndex) =>
               itemIndex !== index &&
@@ -258,12 +261,33 @@ export function createMobileDatabaseAdapter() {
           return current;
         }
 
+        const malCollision = proposedMalId
+          ? current.anime.find((item, itemIndex) =>
+              itemIndex !== index &&
+              String(item.malId ?? item.mal_id ?? '').trim() === proposedMalId
+            )
+          : null;
+        if (malCollision) {
+          outcome = {
+            ok: false,
+            reason: 'mal-collision',
+            id,
+            collision: { id: malCollision.id, title: malCollision.title, malId: proposedMalId }
+          };
+          return current;
+        }
+
         const identityFields = [
           'identityNeedsReview', 'metadataNeedsReview', 'metadataReviewReason',
           'identityResolutionStatus', 'identityLinkageSource',
-          'identityLinkageConfidence', 'identityLinkageUpdatedAt'
+          'identityLinkageConfidence', 'identityLinkageUpdatedAt',
+          'malIdentityLinkageSource', 'malIdentityLinkageUpdatedAt'
         ];
-        const nextItem = { ...existing, kitsuId: proposedKitsuId };
+        const nextItem = {
+          ...existing,
+          kitsuId: proposedKitsuId,
+          malId: proposedMalId ? Number(proposedMalId) : existing.malId
+        };
         identityFields.forEach((field) => {
           if (Object.prototype.hasOwnProperty.call(patch, field)) nextItem[field] = patch[field];
         });

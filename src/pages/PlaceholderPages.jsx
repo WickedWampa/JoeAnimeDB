@@ -5938,10 +5938,12 @@ export function SettingsPage({
           ? `${genome.covered} covered, ${genome.generated} generated`
           : 'desktop Genome runner unavailable';
         const linkage = summary.kitsuLinkage || {};
+        const malLinkage = summary.malLinkage || {};
         setGenomeUpdateStatus(
           `Update complete — ${summary.skipped} skipped, ${summary.refreshed} refreshed; ` +
           `Kitsu links: ${linkage.repaired || 0} repaired, ${linkage.needsReview || 0} need review, ` +
-          `${linkage.unresolved || 0} unresolved; Genomes: ${genomeText}.`
+          `${linkage.unresolved || 0} unresolved; MAL IDs: ${malLinkage.repaired || 0} added, ` +
+          `${malLinkage.unresolved || 0} unresolved; Genomes: ${genomeText}.`
         );
       } else {
         setGenomeUpdateStatus('Database update finished.');
@@ -6164,6 +6166,7 @@ export function SettingsPage({
             <em>
               {lastUpdateSummary.skipped} skipped · {lastUpdateSummary.refreshed} refreshed ·{' '}
               {lastUpdateSummary.kitsuLinkage?.repaired || 0} Kitsu links repaired ·{' '}
+              {lastUpdateSummary.malLinkage?.repaired || 0} MAL IDs added ·{' '}
               {lastUpdateSummary.genome?.covered || 0} Genomes already covered
             </em>
           )}
@@ -6619,6 +6622,8 @@ export function SettingsPage({
                 <span><strong>{lastUpdateSummary.kitsuLinkage?.repaired || 0}</strong> Kitsu links repaired</span>
                 <span><strong>{lastUpdateSummary.kitsuLinkage?.needsReview || 0}</strong> need review</span>
                 <span><strong>{lastUpdateSummary.kitsuLinkage?.unresolved || 0}</strong> unresolved</span>
+                <span><strong>{lastUpdateSummary.malLinkage?.repaired || 0}</strong> MAL IDs added</span>
+                <span><strong>{lastUpdateSummary.malLinkage?.unresolved || 0}</strong> MAL mappings unresolved</span>
                 <span><strong>{lastUpdateSummary.genome?.generated || 0}</strong> Genomes generated</span>
               </div>
             ) : (

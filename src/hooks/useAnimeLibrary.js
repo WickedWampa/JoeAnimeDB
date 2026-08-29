@@ -24,6 +24,7 @@ import {
   measureStartupTask
 } from '../services/startupPerformance';
 import { repairLibraryKitsuLinkages } from '../services/libraryKitsuLinkageRepair';
+import { malIdOf, repairLibraryMalLinkages } from '../services/libraryMalLinkageRepair';
 import { kitsuIdOf } from '../services/kitsuRelationshipService';
 
 const HOME_BOOTSTRAP_KEY = 'joeanime-home-bootstrap-v1';
@@ -1210,6 +1211,55 @@ export function useAnimeLibrary() {
     linkageSummary.rejected = rejected;
     linkageSummary.linkedAfter = (savedData.anime || []).filter((item) => Boolean(kitsuIdOf(item))).length;
 
+    // Kitsu publishes an official MyAnimeList mapping for most linked anime.
+    // Use only that provider-owned relationship: never infer a MAL ID from a
+    // title, never overwrite one, and persist each patch by exact record ID.
+    const malLinkageSummary = await repairLibraryMalLinkages({
+      library: savedData.anime || [],
+      onProgress: ({ index, total, title }) => {
+        setSyncProgress({
+          step: 2,
+          stepTotal: 2,
+          label: 'Safe MAL Linkage Repair',
+          processed: index,
+          total,
+          percent: 99,
+          current: title
+        });
+        setSyncText(`Checking official MAL mappings ${index}/${total}: ${title}`);
+      }
+    });
+
+    const malLinkageCountBefore = (savedData.anime || []).length;
+    let malRepairedPersisted = 0;
+    let malRejected = 0;
+    for (let index = 0; index < malLinkageSummary.updates.length; index += 1) {
+      const update = malLinkageSummary.updates[index];
+      setSyncText(`Saving safe MAL linkage ${index + 1}/${malLinkageSummary.updates.length}`);
+      const outcome = await animeRepository.updateAnimeIdentityLinkage(update.item);
+      if (outcome?.ok) malRepairedPersisted += 1;
+      else {
+        malRejected += 1;
+        console.warn('Safe MAL linkage update rejected:', {
+          id: update.item?.id,
+          title: update.item?.title,
+          reason: outcome?.reason || 'unknown'
+        });
+      }
+    }
+
+    savedData = await animeRepository.getDatabase();
+    const malLinkageCountAfter = (savedData.anime || []).length;
+    if (malLinkageCountAfter !== malLinkageCountBefore) {
+      throw new Error(
+        `Safe MAL linkage repair changed library count from ${malLinkageCountBefore} to ${malLinkageCountAfter}.`
+      );
+    }
+    malLinkageSummary.repaired = malRepairedPersisted;
+    malLinkageSummary.unresolved += malRejected;
+    malLinkageSummary.rejected = malRejected;
+    malLinkageSummary.linkedAfter = (savedData.anime || []).filter((item) => Boolean(malIdOf(item))).length;
+
     setSyncProgress({
       step: 2,
       stepTotal: 2,
@@ -1248,13 +1298,28 @@ export function useAnimeLibrary() {
         linkedBefore: linkageSummary.linkedBefore,
         linkedAfter: linkageSummary.linkedAfter,
         rejected: linkageSummary.rejected
+      },
+      malLinkage: {
+        scanned: malLinkageSummary.scanned,
+        eligible: malLinkageSummary.eligible,
+        skippedLinked: malLinkageSummary.skippedLinked,
+        skippedNoKitsu: malLinkageSummary.skippedNoKitsu,
+        repaired: malLinkageSummary.repaired,
+        unresolved: malLinkageSummary.unresolved,
+        collisions: malLinkageSummary.collisions,
+        linkedBefore: malLinkageSummary.linkedBefore,
+        linkedAfter: malLinkageSummary.linkedAfter,
+        rejected: malLinkageSummary.rejected,
+        requestFailed: malLinkageSummary.requestFailed
       }
     };
 
     const linkageText = `${linkageSummary.repaired} Kitsu link${linkageSummary.repaired === 1 ? '' : 's'} repaired, ` +
       `${linkageSummary.needsReview} need review, ${linkageSummary.unresolved} unresolved` +
       (linkageSummary.rejected ? ` (${linkageSummary.rejected} unsafe update${linkageSummary.rejected === 1 ? '' : 's'} rejected)` : '');
-    setSyncText(`Database updated — ${linkageText}${missing ? `; ${missing} poster(s) still need manual art` : ''}.`);
+    const malLinkageText = `${malLinkageSummary.repaired} MAL ID${malLinkageSummary.repaired === 1 ? '' : 's'} added` +
+      (malLinkageSummary.unresolved ? `, ${malLinkageSummary.unresolved} unresolved` : '');
+    setSyncText(`Database updated — ${linkageText}; ${malLinkageText}${missing ? `; ${missing} poster(s) still need manual art` : ''}.`);
 
     await sleep(2200);
     document.body.style.cursor = 'default';

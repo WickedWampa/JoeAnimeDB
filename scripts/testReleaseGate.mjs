@@ -72,6 +72,7 @@ const startupPerformance = await viteTestServer.ssrLoadModule('/src/services/sta
 const libraryHook = await viteTestServer.ssrLoadModule('/src/hooks/useAnimeLibrary.js');
 const titleIdentity = await viteTestServer.ssrLoadModule('/src/services/titleIdentity.js');
 const libraryLinkageRepair = await viteTestServer.ssrLoadModule('/src/services/libraryKitsuLinkageRepair.js');
+const libraryMalLinkageRepair = await viteTestServer.ssrLoadModule('/src/services/libraryMalLinkageRepair.js');
 const discoverServicePool = await viteTestServer.ssrLoadModule('/src/services/discoverServicePool.js');
 const watchmodeService = await viteTestServer.ssrLoadModule('/src/services/watchmodeService.js');
 const kitsuStreamingService = await viteTestServer.ssrLoadModule('/src/services/kitsuStreamingService.js');
@@ -643,6 +644,84 @@ check('Update Database reuses identical safe-resolution requests', async () => {
   assert.match(result.library[1].metadataReviewReason, /already linked/i);
 });
 
+check('official Kitsu mappings safely repair missing MAL IDs without touching user data', async () => {
+  const personal = {
+    status: 'Watching',
+    joeScore: 9.2,
+    watchProgress: 8,
+    notes: 'Keep this private data unchanged',
+    favorite: true,
+    userTags: ['owned']
+  };
+  const library = [
+    { id: 'already', title: 'Already Linked', kitsuId: '1', malId: 10, ...personal },
+    { id: 'safe', title: 'Safe Mapping', kitsuId: '2', ...personal },
+    { id: 'none', title: 'No MAL Mapping', kitsuId: '3', ...personal },
+    { id: 'no-kitsu', title: 'No Kitsu Identity', ...personal },
+    { id: 'review', title: 'Needs Review', kitsuId: '4', identityNeedsReview: true, ...personal },
+    { id: 'collision-owner', title: 'Owns MAL ID', kitsuId: '5', malId: 200, ...personal },
+    { id: 'collision-target', title: 'Duplicate Mapping', kitsuId: '6', ...personal }
+  ];
+
+  const result = await libraryMalLinkageRepair.repairLibraryMalLinkages({
+    library,
+    fetchMappings: async () => new Map([
+      ['2', '100'],
+      ['3', ''],
+      ['6', '200']
+    ]),
+    yieldControl: async () => {}
+  });
+
+  assert.equal(result.scanned, 7);
+  assert.equal(result.eligible, 3);
+  assert.equal(result.skippedLinked, 2);
+  assert.equal(result.skippedNoKitsu, 1);
+  assert.equal(result.skippedReview, 1);
+  assert.equal(result.repaired, 1);
+  assert.equal(result.unresolved, 2);
+  assert.equal(result.collisions, 1);
+  assert.equal(result.linkedBefore, 2);
+  assert.equal(result.linkedAfter, 3);
+  assert.equal(result.library.find((item) => item.id === 'safe').malId, 100);
+  assert.equal(result.library.find((item) => item.id === 'none').malId, undefined);
+  assert.equal(result.library.find((item) => item.id === 'collision-target').malId, undefined);
+  assert.strictEqual(result.library.find((item) => item.id === 'already'), library[0]);
+
+  const repaired = result.library.find((item) => item.id === 'safe');
+  for (const field of Object.keys(personal)) {
+    assert.deepEqual(repaired[field], library[1][field], `MAL repair changed personal field ${field}`);
+  }
+});
+
+check('Kitsu mapping fetch accepts only official MyAnimeList anime relationships', async () => {
+  let requestedUrl = '';
+  const mappings = await libraryMalLinkageRepair.fetchMalMappingsForKitsuIds(
+    ['2', '3'],
+    async (url) => {
+      requestedUrl = url;
+      return {
+        ok: true,
+        json: async () => ({
+          data: [
+            { id: '2', relationships: { mappings: { data: [{ id: 'map-mal' }, { id: 'map-other' }] } } },
+            { id: '3', relationships: { mappings: { data: [{ id: 'map-manga' }] } } }
+          ],
+          included: [
+            { id: 'map-mal', type: 'mappings', attributes: { externalSite: 'myanimelist/anime', externalId: '100' } },
+            { id: 'map-other', type: 'mappings', attributes: { externalSite: 'anidb', externalId: '20' } },
+            { id: 'map-manga', type: 'mappings', attributes: { externalSite: 'myanimelist/manga', externalId: '300' } }
+          ]
+        })
+      };
+    }
+  );
+
+  assert.match(requestedUrl, /include=mappings/);
+  assert.equal(mappings.get('2'), '100');
+  assert.equal(mappings.get('3'), '');
+});
+
 check('Update Database invokes full-library repair after its existing maintenance phases', async () => {
   const hookSource = await source('src/hooks/useAnimeLibrary.js');
   const genomeIndex = hookSource.indexOf('generateMissingGenomesForLibrary');
@@ -650,6 +729,8 @@ check('Update Database invokes full-library repair after its existing maintenanc
   assert.ok(genomeIndex >= 0);
   assert.ok(repairIndex > genomeIndex);
   assert.match(hookSource, /kitsuLinkage:\s*\{[\s\S]*?linkedBefore:[\s\S]*?linkedAfter:/);
+  assert.ok(hookSource.indexOf('repairLibraryMalLinkages({', repairIndex) > repairIndex);
+  assert.match(hookSource, /malLinkage:\s*\{[\s\S]*?linkedBefore:[\s\S]*?linkedAfter:/);
   const persistenceStart = hookSource.indexOf('// Persist identity-only patches', repairIndex);
   const repairPersistence = hookSource.slice(
     persistenceStart,
@@ -674,12 +755,16 @@ check('identity linkage persistence is exact-row and collision guarded on every 
   );
   assert.match(exactUpdate, /UPDATE anime/);
   assert.match(exactUpdate, /kitsu-collision/);
+  assert.match(exactUpdate, /mal-collision/);
+  assert.match(exactUpdate, /SET kitsuId = \?, malId = \?/);
   assert.match(exactUpdate, /afterCount !== beforeCount/);
   assert.doesNotMatch(exactUpdate, /DELETE FROM anime/);
   assert.match(mainSource, /db:updateAnimeIdentityLinkage/);
   assert.match(preloadSource, /updateAnimeIdentityLinkage/);
   assert.match(repositorySource, /async updateAnimeIdentityLinkage/);
+  assert.match(repositorySource, /reason: 'mal-collision'/);
   assert.match(mobileSource, /async updateAnimeIdentityLinkage/);
+  assert.match(mobileSource, /reason: 'mal-collision'/);
   assert.match(appSource, /joeanime-last-update-summary-v1/);
 });
 

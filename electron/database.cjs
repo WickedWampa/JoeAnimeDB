@@ -759,6 +759,9 @@ function updateAnimeIdentityLinkage(patch = {}) {
   const proposedKitsuId = String(
     patch.kitsuId ?? patch.kitsu_id ?? existing.kitsuId ?? ''
   ).trim();
+  const proposedMalId = String(
+    patch.malId ?? patch.mal_id ?? existing.malId ?? existing.mal_id ?? ''
+  ).trim();
 
   if (proposedKitsuId) {
     const collision = db
@@ -776,6 +779,22 @@ function updateAnimeIdentityLinkage(patch = {}) {
     }
   }
 
+  if (proposedMalId) {
+    const collision = db
+      .prepare('SELECT * FROM anime WHERE malId = ? AND id != ? LIMIT 1')
+      .get(proposedMalId, id);
+    if (collision) {
+      return {
+        ok: false,
+        reason: 'mal-collision',
+        id,
+        collision: debugAnimeRow(collision),
+        countBefore: beforeCount,
+        countAfter: beforeCount
+      };
+    }
+  }
+
   const identityFields = [
     'identityNeedsReview',
     'metadataNeedsReview',
@@ -783,9 +802,15 @@ function updateAnimeIdentityLinkage(patch = {}) {
     'identityResolutionStatus',
     'identityLinkageSource',
     'identityLinkageConfidence',
-    'identityLinkageUpdatedAt'
+    'identityLinkageUpdatedAt',
+    'malIdentityLinkageSource',
+    'malIdentityLinkageUpdatedAt'
   ];
-  const next = { ...existing, kitsuId: proposedKitsuId };
+  const next = {
+    ...existing,
+    kitsuId: proposedKitsuId,
+    malId: proposedMalId ? Number(proposedMalId) : existing.malId
+  };
   identityFields.forEach((field) => {
     if (Object.prototype.hasOwnProperty.call(patch, field)) next[field] = patch[field];
   });
@@ -793,9 +818,15 @@ function updateAnimeIdentityLinkage(patch = {}) {
   const updatedAt = new Date().toISOString();
   db.prepare(`
     UPDATE anime
-    SET kitsuId = ?, payload = ?, updatedAt = ?
+    SET kitsuId = ?, malId = ?, payload = ?, updatedAt = ?
     WHERE id = ?
-  `).run(proposedKitsuId || null, JSON.stringify(next), updatedAt, id);
+  `).run(
+    proposedKitsuId || null,
+    proposedMalId ? Number(proposedMalId) : null,
+    JSON.stringify(next),
+    updatedAt,
+    id
+  );
 
   const afterCount = db.prepare('SELECT COUNT(*) AS count FROM anime').get().count;
   if (afterCount !== beforeCount) {
