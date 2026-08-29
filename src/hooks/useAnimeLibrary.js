@@ -1022,16 +1022,25 @@ export function useAnimeLibrary() {
 
     let savedData = catalogResult.saved;
 
+    const nativeGenomeGenerator = Boolean(window.JoeAnimeDB?.generateMissingGenomesForLibrary);
+    const shouldGenerateGenomes = nativeGenomeGenerator && !import.meta.env.DEV;
     let genomeSummary = {
-      supported: Boolean(window.JoeAnimeDB?.generateMissingGenomesForLibrary),
+      supported: nativeGenomeGenerator,
       covered: 0,
       missing: 0,
       generated: 0,
       tiers: {},
-      status: 'not-run'
+      status: nativeGenomeGenerator && import.meta.env.DEV ? 'deferred-dev' : 'not-run'
     };
 
-    if (window.JoeAnimeDB?.generateMissingGenomesForLibrary) {
+    // The native generator rewrites a module under src/. In Electron Dev mode
+    // that can make Vite reload the renderer while this updater is still
+    // running, interrupting Kitsu/MAL linkage persistence. Dev mode therefore
+    // defers this optional source-generating task; packaged builds keep it.
+    if (nativeGenomeGenerator && import.meta.env.DEV) {
+      console.info('Genome generation deferred in Dev mode to keep Update Database uninterrupted.');
+      setSyncText('Dev mode: Genome generation deferred. Continuing with identity repair...');
+    } else if (shouldGenerateGenomes) {
       const genomeAudit = auditGenomeCoverage(savedData.anime || []);
       genomeSummary = {
         supported: true,
