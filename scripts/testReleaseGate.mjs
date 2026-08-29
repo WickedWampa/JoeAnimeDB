@@ -74,6 +74,7 @@ const titleIdentity = await viteTestServer.ssrLoadModule('/src/services/titleIde
 const libraryLinkageRepair = await viteTestServer.ssrLoadModule('/src/services/libraryKitsuLinkageRepair.js');
 const libraryMalLinkageRepair = await viteTestServer.ssrLoadModule('/src/services/libraryMalLinkageRepair.js');
 const catalogService = await viteTestServer.ssrLoadModule('/src/services/catalogService.js');
+const malKitsuMappingService = await viteTestServer.ssrLoadModule('/src/services/malKitsuMappingService.js');
 const discoverServicePool = await viteTestServer.ssrLoadModule('/src/services/discoverServicePool.js');
 const watchmodeService = await viteTestServer.ssrLoadModule('/src/services/watchmodeService.js');
 const kitsuStreamingService = await viteTestServer.ssrLoadModule('/src/services/kitsuStreamingService.js');
@@ -761,6 +762,67 @@ check('recommendation catalog refresh rotates past recently attempted titles', a
   assert.deepEqual(ratingQueue.map(({ item }) => item.id), ['rating-never', 'rating-old']);
 });
 
+check('onboarding identity failures remain reachable from every Needs Review entry point', async () => {
+  const [onboardingSource, librarySource, settingsSource] = await Promise.all([
+    source('src/components/FirstTimeOnboarding.jsx'),
+    source('src/pages/LibraryPage.jsx'),
+    source('src/pages/PlaceholderPages.jsx')
+  ]);
+  assert.match(onboardingSource, /identityDecision\?\.needsReview\s*\|\|\s*result\.identityDecision\?\.unresolved/);
+  assert.match(onboardingSource, /libraryNeedsReview:\s*Boolean/);
+  assert.match(onboardingSource, /identityReviewCandidates:/);
+  assert.match(onboardingSource, /joeanime:library-import-review-changed/);
+  assert.match(librarySource, /item\.libraryNeedsReview\s*\|\|\s*item\.identityNeedsReview/);
+  assert.match(settingsSource, /addEventListener\('joeanime:library-import-review-changed'/);
+  assert.match(settingsSource, /libraryNeedsReview:\s*false/);
+});
+
+check('onboarding uses exact MAL mappings before title matching', async () => {
+  let requestedUrl = '';
+  const matches = await malKitsuMappingService.fetchKitsuAnimeByMalIds(['269', '21'], async (url) => {
+    requestedUrl = url;
+    return {
+      ok: true,
+      json: async () => ({
+        data: [{
+          id: 'mapping-269',
+          type: 'mappings',
+          attributes: { externalSite: 'myanimelist/anime', externalId: '269' },
+          relationships: { item: { data: { type: 'anime', id: '244' } } }
+        }],
+        included: [{
+          id: '244',
+          type: 'anime',
+          attributes: {
+            canonicalTitle: 'Bleach',
+            titles: { en: 'Bleach' },
+            synopsis: 'Soul Reapers defend the living world.',
+            posterImage: { large: 'https://example.com/bleach.jpg' },
+            subtype: 'TV',
+            startDate: '2004-10-05',
+            episodeCount: 366
+          }
+        }]
+      })
+    };
+  });
+
+  assert.match(requestedUrl, /mappings\?/);
+  assert.match(requestedUrl, /include=item/);
+  assert.equal(matches.get('269').kitsuId, '244');
+  assert.equal(matches.get('269').malId, 269);
+  assert.equal(matches.get('269').cover, 'https://example.com/bleach.jpg');
+  assert.equal(matches.has('21'), false);
+
+  const onboardingSource = await source('src/components/FirstTimeOnboarding.jsx');
+  const exactLookup = onboardingSource.indexOf('fetchKitsuAnimeByMalIds(malIds)');
+  const titleLookup = onboardingSource.indexOf('importAnimeByTitle({', exactLookup);
+  assert.ok(exactLookup >= 0);
+  assert.ok(titleLookup > exactLookup);
+  assert.match(onboardingSource, /exactMalCandidate\s*\?/);
+  assert.match(onboardingSource, /Official Kitsu MyAnimeList mapping/);
+});
+
 check('Dev mode does not reload midway through Update Database genome generation', async () => {
   const [viteConfig, hookSource] = await Promise.all([
     source('vite.config.js'),
@@ -824,7 +886,10 @@ check('Library poster cards hide review badges without removing review workflow'
   assert.match(cardSource, /showReviewBadge\s*=\s*true/);
   assert.match(cardSource, /showReviewBadge && reviewLabel/);
   assert.match(librarySource, /Review Queue \(\$\{needsReviewCount\}\)/);
-  assert.match(librarySource, /showNeedsReview \? anime\.filter\(\(item\) => item\.libraryNeedsReview\) : anime/);
+  assert.match(
+    librarySource,
+    /showNeedsReview[\s\S]*?anime\.filter\(\(item\) => item\.libraryNeedsReview \|\| item\.identityNeedsReview\)/
+  );
   assert.match(libraryStyles, /@media \(max-width: 760px\)[\s\S]*?\.libraryArchiveLiveCopy \{[\s\S]*?padding-bottom: 84px/);
   assert.match(libraryStyles, /\.libraryArchiveLiveAdd \{[\s\S]*?left: 22px;[\s\S]*?right: 22px;[\s\S]*?bottom: 18px/);
 });

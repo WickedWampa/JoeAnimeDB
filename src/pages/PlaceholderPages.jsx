@@ -4985,6 +4985,14 @@ export function SettingsPage({
     return () => window.removeEventListener('joeanime:streaming-apps-changed', syncStreamingApps);
   }, []);
 
+  useEffect(() => {
+    const syncImportReview = (event) => {
+      setLibraryImportSummary(event?.detail || null);
+    };
+    window.addEventListener('joeanime:library-import-review-changed', syncImportReview);
+    return () => window.removeEventListener('joeanime:library-import-review-changed', syncImportReview);
+  }, []);
+
   function toggleStreamingApp(appId) {
     const selected = new Set(streamingApps);
 
@@ -5448,6 +5456,9 @@ export function SettingsPage({
           ...importedRecord,
           kitsuId: candidate.kitsuId,
           identityNeedsReview: false,
+          libraryNeedsReview: false,
+          libraryReviewReason: '',
+          identityReviewCandidates: [],
           metadataNeedsReview: Boolean(importedRecord.metadataNeedsRefresh),
           metadataReviewReason: '',
           identityResolutionStatus: 'user-reviewed',

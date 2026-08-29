@@ -741,11 +741,13 @@ export function LibraryPage({
   const [showNeedsReview, setShowNeedsReview] = useState(false);
   const libraryForDupes = useMemo(() => allAnime || anime || [], [allAnime, anime]);
   const needsReviewCount = useMemo(
-    () => libraryForDupes.filter((item) => item.libraryNeedsReview).length,
+    () => libraryForDupes.filter((item) => item.libraryNeedsReview || item.identityNeedsReview).length,
     [libraryForDupes]
   );
   const visibleAnime = useMemo(
-    () => showNeedsReview ? anime.filter((item) => item.libraryNeedsReview) : anime,
+    () => showNeedsReview
+      ? anime.filter((item) => item.libraryNeedsReview || item.identityNeedsReview)
+      : anime,
     [anime, showNeedsReview]
   );
 

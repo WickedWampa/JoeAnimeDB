@@ -2,12 +2,14 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Poster } from './Poster';
 import {
   applySafeKitsuIdentity,
+  mergeAnimeMetadata,
   enrichAnimeCandidate,
   findDuplicateAnime,
   importAnimeByTitle,
   resolveSafeKitsuIdentity,
   searchAnimeCandidates
 } from '../services/animeImporter';
+import { fetchKitsuAnimeByMalIds } from '../services/malKitsuMappingService';
 import {
   importTitleKey,
   importedPersonalData,
@@ -337,6 +339,9 @@ export function FirstTimeOnboarding({
 
     try {
       localStorage.setItem('joeanime-library-import-review-v1', JSON.stringify(summary));
+      window.dispatchEvent(new CustomEvent('joeanime:library-import-review-changed', {
+        detail: summary
+      }));
     } catch (error) {
       console.warn('Could not persist onboarding import review:', error);
     }
@@ -362,8 +367,15 @@ export function FirstTimeOnboarding({
       failed: [],
       sourceName
     };
+    let exactMalCandidates = new Map();
 
     try {
+      const malIds = rows.map((row) => row.malId).filter(Boolean);
+      if (malIds.length) {
+        setMessage(`Resolving ${malIds.length} exact MyAnimeList identities through Kitsu…`);
+        exactMalCandidates = await fetchKitsuAnimeByMalIds(malIds);
+      }
+
       for (let index = 0; index < rows.length; index += 1) {
         const row = rows[index];
         const progress = { processed: index + 1, total: rows.length, title: row.title };
@@ -371,20 +383,42 @@ export function FirstTimeOnboarding({
         setMessage(`Importing ${progress.processed}/${progress.total}: ${progress.title}`);
 
         try {
+          const exactMalCandidate = exactMalCandidates.get(String(row.malId || '')) || null;
           const existingBeforeLookup = findImportedLibraryItem(row, liveLibrary);
           if (existingBeforeLookup) {
-            let merged = {
-              ...existingBeforeLookup,
+            let merged = exactMalCandidate
+              ? mergeAnimeMetadata(existingBeforeLookup, exactMalCandidate, row.status)
+              : { ...existingBeforeLookup };
+            merged = {
+              ...merged,
               ...importedPersonalData(row),
               id: existingBeforeLookup.id,
-              title: existingBeforeLookup.title,
-              officialTitle: existingBeforeLookup.officialTitle || existingBeforeLookup.title
+              title: exactMalCandidate?.title || existingBeforeLookup.title,
+              officialTitle:
+                exactMalCandidate?.officialTitle ||
+                existingBeforeLookup.officialTitle ||
+                existingBeforeLookup.title,
+              libraryNeedsReview: false,
+              libraryReviewReason: '',
+              identityReviewCandidates: []
             };
 
-            if (!String(existingBeforeLookup.kitsuId || existingBeforeLookup.kitsu_id || '').trim()) {
+            if (
+              !exactMalCandidate &&
+              !String(existingBeforeLookup.kitsuId || existingBeforeLookup.kitsu_id || '').trim()
+            ) {
               const linkage = await resolveSafeKitsuIdentity(merged);
               merged = applySafeKitsuIdentity(merged, linkage, 'onboarding-import-safe-resolution');
-              if (linkage.identityDecision.needsReview) {
+              const requiresReview = Boolean(
+                linkage.identityDecision.needsReview || linkage.identityDecision.unresolved
+              );
+              if (requiresReview) {
+                merged = {
+                  ...merged,
+                  libraryNeedsReview: true,
+                  libraryReviewReason: linkage.identityDecision.reason,
+                  identityReviewCandidates: (linkage.results || []).slice(0, 5)
+                };
                 summary.needsReview.push({
                   ...row,
                   title: row.requestedTitle || row.title,
@@ -403,22 +437,48 @@ export function FirstTimeOnboarding({
             continue;
           }
 
-          const result = await importAnimeByTitle({
-            title: row.requestedTitle || row.title,
-            normalizedTitle: row.title,
-            status: row.status || 'Completed',
-            library: liveLibrary,
-            requireSafeIdentity: true
-          });
+          const result = exactMalCandidate
+            ? {
+                candidate: exactMalCandidate,
+                duplicate: findDuplicateAnime(liveLibrary, exactMalCandidate),
+                results: [exactMalCandidate],
+                identityDecision: {
+                  safe: true,
+                  kitsuId: exactMalCandidate.kitsuId,
+                  needsReview: false,
+                  unresolved: false,
+                  reason: 'Official Kitsu MyAnimeList mapping.'
+                }
+              }
+            : await importAnimeByTitle({
+                title: row.requestedTitle || row.title,
+                normalizedTitle: row.title,
+                status: row.status || 'Completed',
+                library: liveLibrary,
+                requireSafeIdentity: true
+              });
 
           if (result.duplicate) {
-            if (importedTitleMatchesLibraryItem(row.requestedTitle || row.title, result.duplicate)) {
+            const sameMalIdentity = Boolean(
+              row.malId &&
+              String(result.duplicate.malId || result.duplicate.mal_id || '') === String(row.malId)
+            );
+            if (sameMalIdentity || importedTitleMatchesLibraryItem(row.requestedTitle || row.title, result.duplicate)) {
+              const mergedBase = exactMalCandidate
+                ? mergeAnimeMetadata(result.duplicate, exactMalCandidate, row.status)
+                : result.duplicate;
               const merged = {
-                ...result.duplicate,
+                ...mergedBase,
                 ...importedPersonalData(row),
                 id: result.duplicate.id,
-                title: result.duplicate.title,
-                officialTitle: result.duplicate.officialTitle || result.duplicate.title
+                title: exactMalCandidate?.title || result.duplicate.title,
+                officialTitle:
+                  exactMalCandidate?.officialTitle ||
+                  result.duplicate.officialTitle ||
+                  result.duplicate.title,
+                libraryNeedsReview: false,
+                libraryReviewReason: '',
+                identityReviewCandidates: []
               };
               const saved = await onUpdateAnime(merged);
               liveLibrary = saved?.anime || liveLibrary.map((item) =>
@@ -456,14 +516,20 @@ export function FirstTimeOnboarding({
             favorite: Boolean(result.candidate.favorite),
             rewatches: row.rewatches !== undefined ? row.rewatches : Number(result.candidate.rewatches || 0),
             finalRank: liveLibrary.length + 1,
-            notes: row.notes !== undefined ? row.notes : (result.candidate.notes || '')
+            notes: row.notes !== undefined ? row.notes : (result.candidate.notes || ''),
+            libraryNeedsReview: Boolean(
+              result.identityDecision?.needsReview || result.identityDecision?.unresolved
+            ),
+            libraryReviewReason:
+              result.identityDecision?.reason || result.candidate.libraryReviewReason || '',
+            identityReviewCandidates: (result.results || []).slice(0, 5)
           };
 
           const saved = await onUpdateAnime(next);
           liveLibrary = saved?.anime || [...liveLibrary, next];
           summary.added.push(next.officialTitle || next.title);
 
-          if (result.identityDecision?.needsReview) {
+          if (result.identityDecision?.needsReview || result.identityDecision?.unresolved) {
             summary.needsReview.push({
               ...row,
               title: row.requestedTitle || row.title,
