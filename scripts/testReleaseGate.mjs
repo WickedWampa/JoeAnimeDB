@@ -775,6 +775,8 @@ check('onboarding identity failures remain reachable from every Needs Review ent
   assert.match(librarySource, /item\.libraryNeedsReview\s*\|\|\s*item\.identityNeedsReview/);
   assert.match(settingsSource, /addEventListener\('joeanime:library-import-review-changed'/);
   assert.match(settingsSource, /libraryNeedsReview:\s*false/);
+  assert.match(settingsSource, /persistedLibraryReviewItems/);
+  assert.match(settingsSource, /item\.identityReviewCandidates \|\| \[\]/);
 });
 
 check('onboarding uses exact MAL mappings before title matching', async () => {

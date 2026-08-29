@@ -35,6 +35,23 @@ async function fetchMappingBatch(malIds, fetchImpl) {
   }
 }
 
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchMappingBatchWithRetry(malIds, fetchImpl, attempts = 3) {
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await fetchMappingBatch(malIds, fetchImpl);
+    } catch (error) {
+      lastError = error;
+      if (attempt < attempts) await wait(300 * attempt);
+    }
+  }
+  throw lastError;
+}
+
 /**
  * Resolves MAL anime IDs through Kitsu's provider-owned mapping relationship.
  * This is exact identity data, so it is safer and faster than title search.
@@ -43,13 +60,19 @@ export async function fetchKitsuAnimeByMalIds(malIds = [], fetchImpl = fetch) {
   const uniqueIds = [...new Set(malIds.map(numericId).filter(Boolean))];
   const results = new Map();
   const batches = chunk(uniqueIds);
-  const responses = await Promise.allSettled(
-    batches.map((batch) => fetchMappingBatch(batch, fetchImpl))
-  );
+  const responses = [];
+  // Kitsu can throttle a burst of parallel mapping requests. Sequential,
+  // retried batches keep one transient failure from turning 20 valid imports
+  // into false Needs Review entries.
+  for (const batch of batches) {
+    try {
+      responses.push(await fetchMappingBatchWithRetry(batch, fetchImpl));
+    } catch (error) {
+      console.warn('Kitsu MAL mapping batch failed after retries:', batch, error);
+    }
+  }
 
-  for (const response of responses) {
-    if (response.status !== 'fulfilled') continue;
-    const payload = response.value || {};
+  for (const payload of responses) {
     const animeById = new Map(
       (Array.isArray(payload.included) ? payload.included : [])
         .filter((resource) => resource?.type === 'anime')

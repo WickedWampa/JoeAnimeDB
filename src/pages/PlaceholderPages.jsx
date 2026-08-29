@@ -6090,10 +6090,27 @@ export function SettingsPage({
   const metadataHealthPercent = animeCount
     ? Math.round((metadataHealthyCount / animeCount) * 100)
     : 100;
-  const importReviewItems = [
+  const storedImportReviewItems = [
     ...(libraryImportSummary?.needsReview || []),
     ...(libraryImportSummary?.failed || [])
   ];
+  const persistedLibraryReviewItems = animeRows
+    .filter((item) => item.libraryNeedsReview || item.identityNeedsReview)
+    .map((item) => ({
+      importedRecordId: item.id,
+      title: item.officialTitle || item.title,
+      reason:
+        item.libraryReviewReason ||
+        item.metadataReviewReason ||
+        'This imported title needs an identity match.',
+      candidates: item.identityReviewCandidates || []
+    }));
+  const importReviewItems = [...new Map(
+    [...storedImportReviewItems, ...persistedLibraryReviewItems].map((item) => [
+      String(item.importedRecordId || item.title || '').toLowerCase(),
+      item
+    ])
+  ).values()];
   const themeOptions = [
     { id: 'neon', label: 'Neon', description: 'Cyber blue and pink' },
     { id: 'sakura', label: 'Sakura', description: 'Warm cherry blossom' },
