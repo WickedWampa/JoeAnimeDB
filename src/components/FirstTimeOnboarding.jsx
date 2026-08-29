@@ -480,7 +480,15 @@ export function FirstTimeOnboarding({
                 requireSafeIdentity: true
               });
 
-          if (result.duplicate) {
+          const duplicateIsOnlyFuzzy = Boolean(
+            result.duplicate &&
+            !exactMalCandidate &&
+            result.identityDecision?.safe &&
+            importedTitleMatchesLibraryItem(row.requestedTitle || row.title, result.candidate) &&
+            !importedTitleMatchesLibraryItem(row.requestedTitle || row.title, result.duplicate)
+          );
+
+          if (result.duplicate && !duplicateIsOnlyFuzzy) {
             const sameMalIdentity = Boolean(
               row.malId &&
               String(result.duplicate.malId || result.duplicate.mal_id || '') === String(row.malId)

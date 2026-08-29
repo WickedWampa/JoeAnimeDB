@@ -827,6 +827,8 @@ check('onboarding uses exact MAL mappings before title matching', async () => {
   assert.match(onboardingSource, /exactMalCandidate\s*\?/);
   assert.match(onboardingSource, /if \(row\.malId\) \{/);
   assert.match(onboardingSource, /duplicate: findExactMappedDuplicate\(exactMalCandidate, liveLibrary\)/);
+  assert.match(onboardingSource, /const duplicateIsOnlyFuzzy = Boolean\(/);
+  assert.match(onboardingSource, /result\.duplicate && !duplicateIsOnlyFuzzy/);
   assert.match(onboardingSource, /Official Kitsu MyAnimeList mapping/);
 });
 
