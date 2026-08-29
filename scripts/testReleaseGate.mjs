@@ -740,6 +740,12 @@ check('Update Database invokes full-library repair after its existing maintenanc
   assert.doesNotMatch(repairPersistence, /updateData\s*\(/);
 });
 
+check('Dev mode does not reload midway through Update Database genome generation', async () => {
+  const viteConfig = await source('vite.config.js');
+  assert.match(viteConfig, /watch:\s*\{[\s\S]*?ignored:/);
+  assert.match(viteConfig, /generatedGenomeCards\.js/);
+});
+
 check('identity linkage persistence is exact-row and collision guarded on every platform', async () => {
   const [databaseSource, mainSource, preloadSource, repositorySource, mobileSource, appSource] = await Promise.all([
     source('electron/database.cjs'),

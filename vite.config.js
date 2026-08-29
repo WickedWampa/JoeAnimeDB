@@ -9,6 +9,14 @@ const packageMetadata = JSON.parse(
 export default defineConfig({
   base: './',
   plugins: [react()],
+  server: {
+    watch: {
+      // Update Database regenerates this registry. Reloading the renderer while
+      // that maintenance pass is still running interrupts later linkage repair
+      // phases and prevents their audit summary from being saved in Dev mode.
+      ignored: ['**/src/ai/genome/generated/generatedGenomeCards.js'],
+    },
+  },
   define: {
     __APP_VERSION__: JSON.stringify(packageMetadata.version),
   },
