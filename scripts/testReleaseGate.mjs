@@ -341,7 +341,7 @@ check('MAL import and metadata repair paths enforce identity review safety', asy
   assert.match(libraryHookSource, /if \(item\.identityNeedsReview\) return false/);
   assert.match(homeHookSource, /onLinkageRepairs:[\s\S]*?applyVerifiedCatalogLinkageRepair/);
   assert.match(importerSource, /\(!requireSafeIdentity \|\| identityDecision\.safe\)/);
-  assert.match(importerSource, /if \(!\(requireSafeIdentity && identityDecision\.needsReview\)\)/);
+  assert.match(importerSource, /!deferMetadataCompletion && !\(requireSafeIdentity && identityDecision\.needsReview\)/);
 });
 
 check('AniList JSON, CSV, and text import normalization', () => {
@@ -819,7 +819,10 @@ check('onboarding uses exact MAL mappings before title matching', async () => {
   assert.equal(matches.get('269').cover, 'https://example.com/bleach.jpg');
   assert.equal(matches.has('21'), false);
 
-  const onboardingSource = await source('src/components/FirstTimeOnboarding.jsx');
+  const [onboardingSource, importerSource] = await Promise.all([
+    source('src/components/FirstTimeOnboarding.jsx'),
+    source('src/services/animeImporter.js')
+  ]);
   const exactLookup = onboardingSource.indexOf('fetchKitsuAnimeByMalIds(malIds)');
   const titleLookup = onboardingSource.indexOf('importAnimeByTitle({', exactLookup);
   assert.ok(exactLookup >= 0);
@@ -827,9 +830,12 @@ check('onboarding uses exact MAL mappings before title matching', async () => {
   assert.match(onboardingSource, /exactMalCandidate\s*\?/);
   assert.match(onboardingSource, /if \(row\.malId\) \{/);
   assert.match(onboardingSource, /duplicate: findExactMappedDuplicate\(exactMalCandidate, liveLibrary\)/);
+  assert.match(onboardingSource, /deferMetadataCompletion: true/);
   assert.match(onboardingSource, /const duplicateIsOnlyFuzzy = Boolean\(/);
   assert.match(onboardingSource, /result\.duplicate && !duplicateIsOnlyFuzzy/);
   assert.match(onboardingSource, /Official Kitsu MyAnimeList mapping/);
+  assert.match(importerSource, /if \(duplicate\) \{[\s\S]*?titleResolution,\s*identityDecision/);
+  assert.match(importerSource, /needsKitsuEnrichment && !deferMetadataCompletion/);
 });
 
 check('Dev mode does not reload midway through Update Database genome generation', async () => {

@@ -626,7 +626,8 @@ export async function importAnimeByTitle({
   title,
   status = 'Watching',
   library = [],
-  requireSafeIdentity = false
+  requireSafeIdentity = false,
+  deferMetadataCompletion = false
 }) {
   const localDuplicate = findLocalTitleMatch(library, title);
 
@@ -757,7 +758,7 @@ export async function importAnimeByTitle({
       )
   );
 
-  if (needsKitsuEnrichment) {
+  if (needsKitsuEnrichment && !deferMetadataCompletion) {
     try {
       const enrichmentInput = {
         ...candidate,
@@ -845,7 +846,7 @@ export async function importAnimeByTitle({
 
   // Automatic completion is best-effort. A Wikidata miss must never throw the
   // whole title into the list-import Needs Review queue.
-  if (!(requireSafeIdentity && identityDecision.needsReview)) {
+  if (!deferMetadataCompletion && !(requireSafeIdentity && identityDecision.needsReview)) {
     try {
       const completion = await completeImportedMetadata(candidate, library);
       candidate = completion.candidate;
@@ -873,7 +874,8 @@ export async function importAnimeByTitle({
       metadataLookupFailed: Boolean(lookupError),
       lookupError,
       metadataEnrichment,
-      titleResolution
+      titleResolution,
+      identityDecision
     };
   }
 
@@ -894,6 +896,7 @@ export async function importAnimeByTitle({
         ),
       metadataNeedsRefresh: Boolean(
         candidate.metadataNeedsRefresh ||
+          deferMetadataCompletion ||
           lookupError ||
           metadataEnrichment.unresolved
       )

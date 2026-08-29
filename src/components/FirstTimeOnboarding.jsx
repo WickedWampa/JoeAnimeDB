@@ -477,7 +477,8 @@ export function FirstTimeOnboarding({
                 normalizedTitle: row.title,
                 status: row.status || 'Completed',
                 library: liveLibrary,
-                requireSafeIdentity: true
+                requireSafeIdentity: true,
+                deferMetadataCompletion: true
               });
 
           const duplicateIsOnlyFuzzy = Boolean(
