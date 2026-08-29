@@ -845,6 +845,9 @@ check('onboarding uses exact MAL mappings before title matching', async () => {
   assert.match(onboardingSource, /if \(row\.malId\) \{/);
   assert.match(onboardingSource, /duplicate: findExactMappedDuplicate\(exactMalCandidate, liveLibrary\)/);
   assert.match(onboardingSource, /deferMetadataCompletion: true/);
+  assert.match(onboardingSource, /ONBOARDING_TITLE_LOOKUP_CONCURRENCY = 6/);
+  assert.match(onboardingSource, /await Promise\.all\(workers\)/);
+  assert.match(onboardingSource, /prefetchedTitleResults\.get/);
   assert.match(onboardingSource, /const duplicateIsOnlyFuzzy = Boolean\(/);
   assert.match(onboardingSource, /result\.duplicate && !duplicateIsOnlyFuzzy/);
   assert.match(onboardingSource, /Official Kitsu MyAnimeList mapping/);

@@ -41,6 +41,8 @@ const THEMES = [
   { id: 'amoled', label: 'AMOLED', colors: ['#42f5ff', '#050505'] }
 ];
 
+const ONBOARDING_TITLE_LOOKUP_CONCURRENCY = 6;
+
 const PAGE_TIPS = {
   dashboard: {
     icon: '⌂',
@@ -391,6 +393,7 @@ export function FirstTimeOnboarding({
     };
     let exactMalCandidates = new Map();
     let exactKitsuCandidates = new Map();
+    const prefetchedTitleResults = new Map();
 
     try {
       const malIds = rows.map((row) => row.malId).filter(Boolean);
@@ -402,6 +405,47 @@ export function FirstTimeOnboarding({
       if (kitsuIds.length) {
         setMessage(`Loading ${kitsuIds.length} saved Kitsu identities…`);
         exactKitsuCandidates = await fetchKitsuAnimeByIds(kitsuIds);
+      }
+
+      const titleLookupRows = rows.filter((row) =>
+        !exactMalCandidates.has(String(row.malId || '')) &&
+        !exactKitsuCandidates.has(String(row.kitsuId || ''))
+      );
+      if (titleLookupRows.length) {
+        let nextLookupIndex = 0;
+        let completedLookups = 0;
+        setMessage(`Matching ${titleLookupRows.length} title-only entries…`);
+
+        const workers = Array.from(
+          { length: Math.min(ONBOARDING_TITLE_LOOKUP_CONCURRENCY, titleLookupRows.length) },
+          async () => {
+            while (nextLookupIndex < titleLookupRows.length) {
+              const row = titleLookupRows[nextLookupIndex++];
+              const key = importTitleKey(row.requestedTitle || row.title);
+              try {
+                const result = await importAnimeByTitle({
+                  title: row.requestedTitle || row.title,
+                  normalizedTitle: row.title,
+                  status: row.status || 'Completed',
+                  library: [],
+                  requireSafeIdentity: true,
+                  deferMetadataCompletion: true
+                });
+                prefetchedTitleResults.set(key, result);
+              } catch (error) {
+                prefetchedTitleResults.set(key, { lookupError: error });
+              } finally {
+                completedLookups += 1;
+                setLibraryImportProgress({
+                  processed: completedLookups,
+                  total: titleLookupRows.length,
+                  title: `Matching titles: ${completedLookups}/${titleLookupRows.length}`
+                });
+              }
+            }
+          }
+        );
+        await Promise.all(workers);
       }
 
       for (let index = 0; index < rows.length; index += 1) {
@@ -468,6 +512,10 @@ export function FirstTimeOnboarding({
             continue;
           }
 
+          const prefetchedResult = prefetchedTitleResults.get(
+            importTitleKey(row.requestedTitle || row.title)
+          );
+          if (prefetchedResult?.lookupError) throw prefetchedResult.lookupError;
           const result = exactMalCandidate
             ? {
                 candidate: exactMalCandidate,
@@ -481,7 +529,7 @@ export function FirstTimeOnboarding({
                   reason: 'Official Kitsu MyAnimeList mapping.'
                 }
               }
-            : await importAnimeByTitle({
+            : prefetchedResult || await importAnimeByTitle({
                 title: row.requestedTitle || row.title,
                 normalizedTitle: row.title,
                 status: row.status || 'Completed',
