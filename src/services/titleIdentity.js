@@ -128,6 +128,9 @@ export function animeIdentityKeys(item = {}) {
 
   titleAliases(item).forEach((title) => {
     const identity = parseTitleIdentity(title);
+    // ASCII folding can turn Japanese titles into just a season number.
+    // Neither that number nor a bare "Season 4" identifies a franchise.
+    if (!/[a-z]/.test(identity.base)) return;
     if (identity.key) keys.add(`title:${identity.key}`);
     if (identity.normalized) keys.add(`exact:${identity.normalized}`);
   });
@@ -207,7 +210,7 @@ export function sameAnimeIdentity(a = {}, b = {}) {
 
   for (const left of aTitles) {
     for (const right of bTitles) {
-      if (!left.base || !right.base) continue;
+      if (!/[a-z]/.test(left.base) || !/[a-z]/.test(right.base)) continue;
       if (left.normalized === right.normalized) return true;
       if (left.base !== right.base) continue;
 

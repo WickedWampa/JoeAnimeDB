@@ -26,6 +26,40 @@ function titleWords(value = '') {
   return parseTitleIdentity(value).normalized.split(/\s+/).filter(Boolean);
 }
 
+function foldRomanization(value = '') {
+  return String(value)
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word
+      .replace(/ou/g, 'o')
+      .replace(/oo/g, 'o')
+      .replace(/uu/g, 'u'))
+    .join(' ');
+}
+
+export function titleComparisonKey(value = '') {
+  const identity = parseTitleIdentity(value);
+  let base = identity.base;
+  let season = identity.season;
+
+  // Providers commonly return a numbered season as "Title 5" while another
+  // alias says "Title: The 5th Season". Treat those forms as equivalent for
+  // ranking only; stored identity and duplicate protection stay strict.
+  if (!season) {
+    const trailingNumber = identity.normalized.match(/^(.*[a-z])\s+(\d+)$/);
+    if (trailingNumber) {
+      base = trailingNumber[1];
+      season = Number(trailingNumber[2]);
+    }
+  }
+
+  base = base.replace(/\s+the$/, '').trim();
+  const foldedBase = foldRomanization(base);
+  return [foldedBase, season ? `s${season}` : '', identity.part ? `p${identity.part}` : '', identity.cour ? `c${identity.cour}` : '']
+    .filter(Boolean)
+    .join('|');
+}
+
 function extractTitleRequest(query = '', hints = {}) {
   let title = String(query || '').trim();
   const yearMatch = title.match(/(?:[\s([])((?:19|20)\d{2})[)\]]?$/);
@@ -59,7 +93,9 @@ function scoreCandidate(candidate = {}, request) {
   const aliases = titleAliases(candidate);
   const identities = aliases.map(parseTitleIdentity);
   const queryWords = titleWords(request.title);
-  const exactAlias = identities.some((identity) => identity.normalized === request.identity.normalized);
+  const requestComparisonKey = titleComparisonKey(request.title);
+  const exactAlias = identities.some((identity) => identity.normalized === request.identity.normalized) ||
+    (Boolean(requestComparisonKey) && aliases.some((alias) => titleComparisonKey(alias) === requestComparisonKey));
   const exactBase = identities.some((identity) => identity.base && identity.base === request.identity.base);
   const containsAllWords = identities.some((identity) => {
     const words = titleWords(identity.normalized);

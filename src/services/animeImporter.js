@@ -1,5 +1,5 @@
-import { animeIdentityKeys } from './titleIdentity';
-import { resolveAnimeTitleCandidates } from './titleResolver';
+import { animeIdentityKeys, parseTitleIdentity } from './titleIdentity';
+import { resolveAnimeTitleCandidates, titleComparisonKey } from './titleResolver';
 import { getManualMetadataForAnime, applyMetadataToAnime } from './metadataProvider';
 import { cleanTitle } from './metadata';
 import { fetchKitsuMetadata, searchKitsuAnime } from './kitsuProvider';
@@ -61,8 +61,9 @@ function allCandidateTitleKeys(candidate = {}) {
     ...(candidate.titles || []).map((item) => item.title)
   ]
     .filter(Boolean)
+    .filter((title) => /[a-z]/.test(parseTitleIdentity(title).base))
     .map(titleKey)
-    .filter(Boolean);
+    .filter((key) => /[a-z]/.test(key));
 }
 
 function getCandidateTitles(result) {
@@ -99,13 +100,17 @@ function isDifferentFranchise(title, query) {
   return queryWords.length === 1 && titleWords.includes(queryWords[0]) && titleWords[0] !== queryWords[0];
 }
 
-function classifyResult(result, query) {
+export function classifyAnimeSearchResult(result, query) {
   const wantedKey = titleKey(query);
+  const wantedComparisonKey = titleComparisonKey(query);
   const titles = getCandidateTitles(result);
   const keys = titles.map(titleKey);
   const mainTitle = result.title || result.officialTitle || '';
 
-  if (keys.some((key) => key === wantedKey)) return 'Exact Match';
+  if (
+    keys.some((key) => key === wantedKey) ||
+    (Boolean(wantedComparisonKey) && titles.some((title) => titleComparisonKey(title) === wantedComparisonKey))
+  ) return 'Exact Match';
 
   if (titles.some((title) => startsWithQueryTitle(title, query))) {
     if (/sinbad|gaiden|side story|spin/i.test(mainTitle)) return 'Spinoff';
@@ -168,7 +173,7 @@ export function animeIdFromTitle(item) {
 }
 
 export function findDuplicateAnime(library = [], candidate = {}) {
-  const candidateKitsuId = candidate.kitsuId;
+  const candidateKitsuId = candidate.kitsuId || candidate.kitsu_id;
   const candidateMalId = candidate.malId || candidate.mal_id;
   const candidateKeys = new Set([
     ...allCandidateTitleKeys(candidate),
@@ -176,10 +181,13 @@ export function findDuplicateAnime(library = [], candidate = {}) {
   ]);
 
   return library.find((item) => {
-    const itemKitsuId = item.kitsuId;
+    const itemKitsuId = item.kitsuId || item.kitsu_id;
     const itemMalId = item.malId || item.mal_id;
     if (candidateKitsuId && itemKitsuId && String(candidateKitsuId) === String(itemKitsuId)) return true;
     if (candidateMalId && itemMalId && String(candidateMalId) === String(itemMalId)) return true;
+    // Different provider identities cannot become duplicates through a synonym.
+    if (candidateKitsuId && itemKitsuId) return false;
+    if (candidateMalId && itemMalId) return false;
 
     const itemKeys = [
       ...allCandidateTitleKeys(item),
@@ -600,7 +608,7 @@ export async function searchAnimeCandidates(title, { limit = 8 } = {}) {
 
   return kitsuResults
     .map((item) => {
-      const label = classifyResult(item, clean);
+      const label = classifyAnimeSearchResult(item, clean);
       const score = labelWeight(label) + (label === 'Exact Match' ? 120 : 0);
 
       return {

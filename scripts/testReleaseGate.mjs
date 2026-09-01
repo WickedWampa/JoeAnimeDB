@@ -397,6 +397,56 @@ check('AniList JSON, CSV, and text import normalization', async () => {
   assert.match(storageSource, /`Kitsu ID: \$\{item\.kitsuId \|\| item\.kitsu_id\}`/);
 });
 
+check('duplicate matching never confuses unrelated fourth seasons', () => {
+  const slime = {
+    title: 'That Time I Got Reincarnated as a Slime Season 4',
+    kitsuId: '100001', malId: 100002,
+    japaneseTitle: '転生したらスライムだった件 第4期',
+    titleSynonyms: ['Season 4']
+  };
+  const bungo = {
+    title: 'Bungou Stray Dogs 4', kitsuId: '200001', malId: 200002,
+    japaneseTitle: '文豪ストレイドッグス 第4期',
+    titleSynonyms: ['Season 4']
+  };
+  assert.equal(animeImporter.findDuplicateAnime([slime], bungo), undefined);
+  assert.equal(animeImporter.findDuplicateAnime(
+    [{ ...slime, kitsuId: '', malId: '' }],
+    { ...bungo, kitsuId: '', malId: '' }
+  ), undefined);
+  assert.equal(animeImporter.findDuplicateAnime([bungo], { ...bungo }), bungo);
+  assert.equal(animeImporter.findDuplicateAnime([bungo], {
+    title: 'Different display title', kitsu_id: bungo.kitsuId
+  }), bungo);
+});
+
+check('season search normalizes ordinals and common romanization variants', () => {
+  const candidate = {
+    title: 'Bungou Stray Dogs 5',
+    officialTitle: 'Bungou Stray Dogs 5',
+    titleSynonyms: ['Bungo Stray Dogs: The 5th Season'],
+    year: 2023,
+    type: 'TV'
+  };
+  assert.equal(
+    animeImporter.classifyAnimeSearchResult(candidate, 'Bungo Stray Dogs Season 5'),
+    'Exact Match'
+  );
+  const resolution = titleResolver.resolveAnimeTitleCandidates({
+    query: 'Bungo Stray Dogs Season 5',
+    candidates: [candidate]
+  });
+  assert.equal(resolution.candidate.resolutionConfidence, 100);
+  assert.equal(resolution.candidate.resolutionExact, true);
+  assert.equal(resolution.autoAct, true);
+
+  const wrongSeason = titleResolver.resolveAnimeTitleCandidates({
+    query: 'Bungo Stray Dogs Season 4',
+    candidates: [candidate]
+  });
+  assert.equal(wrongSeason.candidate.resolutionExact, false);
+});
+
 check('content filtering enforces each safety mode', () => {
   const titles = [
     { id: 'g', ageRating: 'G' },
@@ -793,7 +843,11 @@ check('onboarding identity failures remain reachable from every Needs Review ent
   assert.match(settingsSource, /libraryNeedsReview:\s*false/);
   assert.match(settingsSource, /persistedLibraryReviewItems/);
   assert.match(settingsSource, /item\.identityReviewCandidates \|\| \[\]/);
-  assert.match(settingsSource, /Already saved in your Library\. Kitsu has no matching identity yet/);
+  assert.match(settingsSource, /libraryImportSummary \|\| importReviewItems\.length/);
+  assert.match(settingsSource, /findPersistedReviewCandidates/);
+  assert.match(settingsSource, /identityReviewCandidates: candidates\.slice\(0, 5\)/);
+  assert.match(settingsSource, /Find Matches/);
+  assert.match(settingsSource, /Already saved in your Library without a questionable Kitsu link/);
 });
 
 check('onboarding uses exact MAL mappings before title matching', async () => {
