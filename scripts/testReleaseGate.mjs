@@ -64,6 +64,7 @@ const viteTestServer = await createViteServer({
 const relationships = await viteTestServer.ssrLoadModule('/src/services/kitsuRelationshipService.js');
 const animeImporter = await viteTestServer.ssrLoadModule('/src/services/animeImporter.js');
 const titleResolver = await viteTestServer.ssrLoadModule('/src/services/titleResolver.js');
+const kitsuProvider = await viteTestServer.ssrLoadModule('/src/services/kitsuProvider.js');
 const homeSelector = await viteTestServer.ssrLoadModule('/src/services/homeDecisionSelector.js');
 const homeDecisionData = await viteTestServer.ssrLoadModule('/src/hooks/useHomeDecisionData.js');
 const recommendations = await viteTestServer.ssrLoadModule('/src/engine/recommendationEngine.js');
@@ -445,6 +446,30 @@ check('season search normalizes ordinals and common romanization variants', () =
     candidates: [candidate]
   });
   assert.equal(wrongSeason.candidate.resolutionExact, false);
+});
+
+check('Kitsu aborts stop variant retries and catalog responses are null-safe', async () => {
+  const originalFetch = globalThis.fetch;
+  let requestCount = 0;
+
+  try {
+    globalThis.fetch = async () => {
+      requestCount += 1;
+      throw new DOMException('Request aborted.', 'AbortError');
+    };
+
+    await assert.rejects(
+      () => kitsuProvider.searchKitsuAnime('Gintama'),
+      (error) => error?.name === 'AbortError'
+    );
+    assert.equal(requestCount, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  const discoverSource = await readFile(path.join(root, 'src/pages/Discover.jsx'), 'utf8');
+  assert.match(discoverSource, /if \(!result \|\| typeof result !== 'object'\)/);
+  assert.match(discoverSource, /Array\.isArray\(result\.added\)/);
 });
 
 check('content filtering enforces each safety mode', () => {

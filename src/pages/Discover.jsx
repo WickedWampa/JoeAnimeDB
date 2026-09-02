@@ -1706,10 +1706,15 @@ function DiscoverPage({
 
     try {
       const result = await fetchMoreCatalogTitles({ limit: 25 });
+      if (!result || typeof result !== 'object') {
+        throw new Error('The catalog returned no usable response. Your existing titles are unchanged.');
+      }
+
+      const added = Array.isArray(result.added) ? result.added : [];
 
       setCatalogMessage(
-        result.added.length
-          ? `✓ Added ${result.added.length} new catalog title${result.added.length === 1 ? '' : 's'} from ${result.provider || 'the live provider'}.`
+        added.length
+          ? `✓ Added ${added.length} new catalog title${added.length === 1 ? '' : 's'} from ${result.provider || 'the live provider'}.`
           : result.received
             ? 'That page only contained titles already in your library or catalog. Try Fetch More again.'
             : 'Neither provider returned titles for that page.'

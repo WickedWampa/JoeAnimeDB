@@ -366,7 +366,11 @@ const KITSU_REQUEST_TIMEOUT_MS = 9000;
 
 async function fetchKitsuWithTimeout(path, timeoutMs = KITSU_REQUEST_TIMEOUT_MS) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
 
   try {
     const response = await fetch(`${KITSU_API_BASE}${path}`, {
@@ -383,6 +387,13 @@ async function fetchKitsuWithTimeout(path, timeoutMs = KITSU_REQUEST_TIMEOUT_MS)
     }
 
     return response.json();
+  } catch (error) {
+    if (timedOut && error?.name === 'AbortError') {
+      const timeoutError = new Error(`Kitsu timed out after ${Math.round(timeoutMs / 1000)} seconds.`);
+      timeoutError.code = 'KITSU_TIMEOUT';
+      throw timeoutError;
+    }
+    throw error;
   } finally {
     clearTimeout(timer);
   }
@@ -436,6 +447,9 @@ export async function searchKitsuAnime(title, { limit = 8 } = {}) {
 
       if (exactFound) break;
     } catch (error) {
+      // A timeout affects the provider, not just one spelling. Stop immediately
+      // instead of waiting another nine seconds and logging every variant.
+      if (error?.code === 'KITSU_TIMEOUT' || error?.name === 'AbortError') throw error;
       console.warn('Kitsu search variant failed:', query, error);
     }
   }
