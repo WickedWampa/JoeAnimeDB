@@ -232,30 +232,7 @@ export function useAnimeLibrary() {
 
   useEffect(() => {
     let alive = true;
-    let contentRatingTimer;
     let cancelCatalogBootstrap;
-
-    function startContentRatingBackfill(database) {
-      contentRatingTimer = window.setTimeout(async () => {
-        try {
-          const result = await updateCatalogContentRatings({
-            library: database.anime || [],
-            catalog: database.catalog || [],
-            repository: animeRepository,
-            limit: 200,
-            batchSize: 4
-          });
-
-          if (!alive || !result.updated) return;
-          dataRef.current = result.saved;
-          setData(result.saved);
-        } catch (error) {
-          // Startup must remain usable offline. Failed or unmatched titles keep
-          // no completion marker, so the next launch or Update Database retries.
-          console.warn('Background content-rating backfill was deferred.', error);
-        }
-      }, 1200);
-    }
 
     async function load() {
       try {
@@ -293,7 +270,6 @@ export function useAnimeLibrary() {
             );
             dataRef.current = bootstrapped;
             setData(bootstrapped);
-            startContentRatingBackfill(bootstrapped);
           });
         }
       } catch (error) {
@@ -308,7 +284,6 @@ export function useAnimeLibrary() {
     return () => {
       alive = false;
       cancelCatalogBootstrap?.();
-      window.clearTimeout(contentRatingTimer);
     };
   }, []);
 

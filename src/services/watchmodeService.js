@@ -1,3 +1,5 @@
+import { fetchWithDeadline } from './networkSafety';
+
 const DEFAULT_PROXY_URL = 'https://joeanimedb.com/api/watchmode';
 const MATCH_CACHE_KEY = 'joeanime-watchmode-title-matches-v1';
 const PROVIDER_CACHE_KEY = 'joeanime-watchmode-provider-results-v1';
@@ -327,9 +329,9 @@ async function requestWhereToWatch(item, {
     : 'interactive';
   query.set('requestMode', normalizedRequestMode);
 
-  const response = await fetch(`${proxyUrl()}?${query.toString()}`, {
+  const response = await fetchWithDeadline(`${proxyUrl()}?${query.toString()}`, {
     headers: { Accept: 'application/json' }
-  });
+  }, { timeoutMs: 12_000, label: 'Where to Watch' });
 
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {

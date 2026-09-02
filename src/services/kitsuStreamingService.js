@@ -145,8 +145,20 @@ async function fetchBatch(ids, signal) {
       headers: { Accept: 'application/vnd.api+json' },
       signal: controller.signal
     });
-    if (!response.ok) throw new Error(`Kitsu streaming links ${response.status}`);
-    return response.json();
+    if (!response.ok) {
+      throw new Error(
+        response.status === 429
+          ? 'Kitsu is rate-limiting streaming-link refreshes. Saved links remain available.'
+          : `Kitsu streaming links returned HTTP ${response.status}.`
+      );
+    }
+    try {
+      const payload = await response.json();
+      if (!payload || typeof payload !== 'object') throw new Error('empty');
+      return payload;
+    } catch {
+      throw new Error('Kitsu returned invalid streaming-link data. Saved links remain available.');
+    }
   } finally {
     globalThis.clearTimeout(timeout);
     signal?.removeEventListener?.('abort', abort);

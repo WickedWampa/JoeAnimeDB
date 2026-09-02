@@ -132,7 +132,12 @@ export function UpcomingAnime({
   }
 
   useEffect(() => {
-    void loadFeeds();
+    // Page entry is deliberately cache-only. Live Kitsu traffic happens only
+    // when the user presses Refresh, so normal navigation also works offline.
+    const hasSavedRows = current.length || upcoming.length;
+    setLoading(false);
+    setDataState(hasSavedRows ? 'cached' : 'empty');
+    setSourceNote(hasSavedRows ? 'Saved Kitsu catalog' : 'No saved release catalog yet');
   }, []);
 
   useEffect(() => {

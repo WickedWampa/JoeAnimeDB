@@ -1,5 +1,6 @@
 import { APP_VERSION } from '../appVersion.js';
 import { buildBackupPayload, resolveLiveBackupDatabase } from './storage.js';
+import { fetchWithDeadline } from './networkSafety.js';
 
 const SYNC_CONFIG_KEY = 'joeanime-cloud-sync-v1';
 const RECOVERY_KIT_FORMAT = 'JoeAnimeDB Recovery Kit';
@@ -201,14 +202,14 @@ async function request(path, options = {}, config = readCloudSyncConfig()) {
   }
   if (!config) throw new Error('This device is not linked to a sync library.');
 
-  const response = await fetch(`${baseUrl}${path}`, {
+  const response = await fetchWithDeadline(`${baseUrl}${path}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${await authenticationToken(config.secret)}`,
       ...(options.headers || {})
     }
-  });
+  }, { timeoutMs: 15_000, label: 'Cloud Sync' });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
     const error = new Error(body.error || `Sync request failed with status ${response.status}.`);

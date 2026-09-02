@@ -1,4 +1,5 @@
 import { Browser } from '@capacitor/browser';
+import { fetchWithDeadline } from '../services/networkSafety';
 
 const RELEASES_API_URL = 'https://api.github.com/repos/WickedWampa/JoeAnimeDB/releases?per_page=20';
 const RELEASES_PAGE_URL = 'https://github.com/WickedWampa/JoeAnimeDB/releases';
@@ -107,10 +108,10 @@ export function createMobileUpdateManager({ currentVersion }) {
     });
 
     try {
-      const response = await fetch(RELEASES_API_URL, {
+      const response = await fetchWithDeadline(RELEASES_API_URL, {
         headers: { Accept: 'application/vnd.github+json' },
         cache: 'no-store'
-      });
+      }, { timeoutMs: 10_000, label: 'Android update check' });
       if (!response.ok) throw new Error(`GitHub returned HTTP ${response.status}.`);
 
       const releases = await response.json();

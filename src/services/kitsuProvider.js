@@ -381,12 +381,32 @@ async function fetchKitsuWithTimeout(path, timeoutMs = KITSU_REQUEST_TIMEOUT_MS)
     });
 
     if (!response.ok) {
-      const error = new Error(`Kitsu ${response.status}`);
+      const error = new Error(
+        response.status === 429
+          ? 'Kitsu is rate-limiting requests. Saved data is still available; try again later.'
+          : `Kitsu returned HTTP ${response.status}. Saved data is still available.`
+      );
       error.status = response.status;
+      error.code = response.status === 429 ? 'KITSU_RATE_LIMITED' : 'KITSU_HTTP_ERROR';
+      const retryAfter = Number(response.headers?.get?.('retry-after') || 0);
+      if (Number.isFinite(retryAfter) && retryAfter > 0) error.retryAfterMs = retryAfter * 1000;
       throw error;
     }
 
-    return response.json();
+    let payload;
+    try {
+      payload = await response.json();
+    } catch {
+      const malformedError = new Error('Kitsu returned an invalid response. Saved data is still available.');
+      malformedError.code = 'KITSU_INVALID_RESPONSE';
+      throw malformedError;
+    }
+    if (!payload || typeof payload !== 'object') {
+      const malformedError = new Error('Kitsu returned an empty response. Saved data is still available.');
+      malformedError.code = 'KITSU_INVALID_RESPONSE';
+      throw malformedError;
+    }
+    return payload;
   } catch (error) {
     if (timedOut && error?.name === 'AbortError') {
       const timeoutError = new Error(`Kitsu timed out after ${Math.round(timeoutMs / 1000)} seconds.`);

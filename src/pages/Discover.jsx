@@ -31,14 +31,12 @@ import { buildDiscoverPlan } from '../services/recommendationEngineV3';
 import { isNativeAndroid, openExternalUrl } from '../platform/runtime';
 import { buildQuickAddEntry } from '../services/quickAdd';
 import { buildCachedServiceDiscoverPool } from '../services/discoverServicePool';
-import { runWatchmodeSharedCacheDiscovery } from '../services/watchmodeSharedCacheDiscovery';
 import {
   getSavedStreamingApps,
   getSavedWatchRegion,
   getWatchmodeProviderCacheSnapshot
 } from '../services/watchmodeService';
 import {
-  getCachedKitsuStreamingLinks,
   getKitsuStreamingCacheSnapshot,
   primeKitsuStreamingLinks
 } from '../services/kitsuStreamingService';
@@ -277,7 +275,6 @@ function identityKeys(item = {}) {
 
 
 const LIVE_DISCOVER_CACHE_KEY = 'joeanime-live-discover-cache-v1';
-const LIVE_DISCOVER_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const DISCOVER_FINAL_STAGE = 4;
 const KITSU_STREAMING_DISCOVER_LIMIT = 160;
 
@@ -318,11 +315,6 @@ function writeLiveDiscoverCache(rows = [], savedAt = Date.now()) {
   } catch (error) {
     console.warn('Could not save live Discover cache.', error);
   }
-}
-
-function liveDiscoverCacheIsFresh() {
-  const { savedAt } = readLiveDiscoverCacheSnapshot();
-  return Boolean(savedAt && Date.now() - savedAt < LIVE_DISCOVER_CACHE_MAX_AGE_MS);
 }
 
 const DELETED_CATALOG_TITLES = new Set([
@@ -1169,22 +1161,6 @@ function DiscoverPage({
     }
   }, [active, catalog, catalogStageReady]);
 
-  useEffect(() => {
-    if (!active) return;
-    if (!refreshLiveDiscover) return;
-    if (!discoverReady) return;
-    if (liveDiscoverCacheIsFresh()) return;
-
-    const lastSync = new Date(
-      localStorage.getItem('joeanime-discover-live-synced-at') || 0
-    ).getTime();
-    const oneDay = 24 * 60 * 60 * 1000;
-
-    if (!Number.isFinite(lastSync) || Date.now() - lastSync > oneDay) {
-      void refreshLive();
-    }
-  }, [active, discoverReady, refreshLiveDiscover]);
-
   const libraryLookup = useMemo(() => {
     const kitsuIds = new Set();
     const malIds = new Set();
@@ -1310,77 +1286,6 @@ function DiscoverPage({
       getKitsuStreamingCacheSnapshot()
     );
   }, [catalogStageReady, serviceCacheRevision, unseenCatalog]);
-
-  useEffect(() => {
-    if (!active || !catalogStageReady || !unseenCatalog.length) return undefined;
-    if (!getSavedStreamingApps().length) return undefined;
-
-    const controller = new AbortController();
-    let idleHandle = null;
-    const timeoutHandle = window.setTimeout(() => {
-      const primeFreeStreamingLinks = () => {
-        void primeKitsuStreamingLinks(
-          unseenCatalog.slice(0, KITSU_STREAMING_DISCOVER_LIMIT),
-          { signal: controller.signal }
-        ).catch(() => {});
-      };
-
-      if (typeof window.requestIdleCallback === 'function') {
-        idleHandle = window.requestIdleCallback(primeFreeStreamingLinks, { timeout: 1200 });
-      } else {
-        primeFreeStreamingLinks();
-      }
-    }, mobileDiscover ? 1200 : 600);
-
-    return () => {
-      controller.abort();
-      window.clearTimeout(timeoutHandle);
-      if (idleHandle !== null && typeof window.cancelIdleCallback === 'function') {
-        window.cancelIdleCallback(idleHandle);
-      }
-    };
-  }, [active, catalogStageReady, mobileDiscover, unseenCatalog]);
-
-  useEffect(() => {
-    if (!active || !catalogStageReady || !unseenCatalog.length) return undefined;
-    if (!getSavedStreamingApps().length) return undefined;
-
-    const kitsuCacheSnapshot = getKitsuStreamingCacheSnapshot();
-    const kitsuGaps = unseenCatalog.filter((item) => (
-      getCachedKitsuStreamingLinks(item, {
-        allowStale: true,
-        cacheSnapshot: kitsuCacheSnapshot
-      })?.status === 'not_found'
-    ));
-    if (!kitsuGaps.length) return undefined;
-
-    const controller = new AbortController();
-    let idleHandle = null;
-    const timeoutHandle = window.setTimeout(() => {
-      const discoverSharedResults = () => {
-        void runWatchmodeSharedCacheDiscovery({
-          library: anime,
-          catalog: kitsuGaps,
-          region: getSavedWatchRegion(),
-          signal: controller.signal
-        });
-      };
-
-      if (typeof window.requestIdleCallback === 'function') {
-        idleHandle = window.requestIdleCallback(discoverSharedResults, { timeout: 1200 });
-      } else {
-        discoverSharedResults();
-      }
-    }, mobileDiscover ? 1800 : 900);
-
-    return () => {
-      controller.abort();
-      window.clearTimeout(timeoutHandle);
-      if (idleHandle !== null && typeof window.cancelIdleCallback === 'function') {
-        window.cancelIdleCallback(idleHandle);
-      }
-    };
-  }, [active, anime, catalogStageReady, mobileDiscover, serviceCacheRevision, unseenCatalog]);
 
   const airingNow = useMemo(
     () => [...unseenCatalog]
@@ -1670,6 +1575,14 @@ function DiscoverPage({
         writeLiveDiscoverCache(
           refreshedLiveRows,
           result.received > 0 ? Date.now() : previousSavedAt
+        );
+      }
+
+      // Streaming-link enrichment is network work, so it only runs as part of
+      // this explicit user refresh. Ordinary Discover visits stay cache-only.
+      if (getSavedStreamingApps().length && refreshedLiveRows.length) {
+        await primeKitsuStreamingLinks(
+          refreshedLiveRows.slice(0, KITSU_STREAMING_DISCOVER_LIMIT)
         );
       }
 

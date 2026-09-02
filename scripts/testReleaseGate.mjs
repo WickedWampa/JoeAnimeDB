@@ -65,6 +65,7 @@ const relationships = await viteTestServer.ssrLoadModule('/src/services/kitsuRel
 const animeImporter = await viteTestServer.ssrLoadModule('/src/services/animeImporter.js');
 const titleResolver = await viteTestServer.ssrLoadModule('/src/services/titleResolver.js');
 const kitsuProvider = await viteTestServer.ssrLoadModule('/src/services/kitsuProvider.js');
+const networkSafety = await viteTestServer.ssrLoadModule('/src/services/networkSafety.js');
 const homeSelector = await viteTestServer.ssrLoadModule('/src/services/homeDecisionSelector.js');
 const homeDecisionData = await viteTestServer.ssrLoadModule('/src/hooks/useHomeDecisionData.js');
 const recommendations = await viteTestServer.ssrLoadModule('/src/engine/recommendationEngine.js');
@@ -472,6 +473,59 @@ check('Kitsu aborts stop variant retries and catalog responses are null-safe', a
   assert.match(discoverSource, /Array\.isArray\(result\.added\)/);
 });
 
+check('provider hardening handles timeouts, rate limits, and malformed Kitsu data', async () => {
+  await assert.rejects(
+    () => networkSafety.fetchWithDeadline('https://example.invalid', {}, {
+      timeoutMs: 5,
+      label: 'Test provider',
+      fetchImpl: (_url, options) => new Promise((_, reject) => {
+        options.signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+      })
+    }),
+    (error) => error?.code === 'REQUEST_TIMEOUT' && /Saved data is still available/.test(error.message)
+  );
+
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => ({
+      ok: false,
+      status: 429,
+      headers: { get: () => '30' },
+      json: async () => ({})
+    });
+    await assert.rejects(
+      () => kitsuProvider.fetchKitsuCatalogPage(),
+      (error) => error?.code === 'KITSU_RATE_LIMITED' && error?.retryAfterMs === 30_000
+    );
+
+    globalThis.fetch = async () => ({
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      json: async () => { throw new SyntaxError('bad json'); }
+    });
+    await assert.rejects(
+      () => kitsuProvider.fetchKitsuCatalogPage(),
+      (error) => error?.code === 'KITSU_INVALID_RESPONSE'
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+check('ordinary startup, Discover, and Upcoming navigation stay cache-only', async () => {
+  const [hookSource, discoverSource, upcomingSource] = await Promise.all([
+    readFile(path.join(root, 'src/hooks/useAnimeLibrary.js'), 'utf8'),
+    readFile(path.join(root, 'src/pages/Discover.jsx'), 'utf8'),
+    readFile(path.join(root, 'src/pages/UpcomingAnime.jsx'), 'utf8')
+  ]);
+  assert.doesNotMatch(hookSource, /startContentRatingBackfill/);
+  assert.doesNotMatch(discoverSource, /runWatchmodeSharedCacheDiscovery/);
+  assert.doesNotMatch(discoverSource, /void refreshLive\(\)/);
+  assert.match(discoverSource, /explicit user refresh/);
+  assert.match(upcomingSource, /Page entry is deliberately cache-only/);
+});
+
 check('content filtering enforces each safety mode', () => {
   const titles = [
     { id: 'g', ageRating: 'G' },
@@ -868,7 +922,7 @@ check('onboarding identity failures remain reachable from every Needs Review ent
   assert.match(settingsSource, /libraryNeedsReview:\s*false/);
   assert.match(settingsSource, /persistedLibraryReviewItems/);
   assert.match(settingsSource, /item\.identityReviewCandidates \|\| \[\]/);
-  assert.match(settingsSource, /libraryImportSummary \|\| importReviewItems\.length/);
+  assert.match(settingsSource, /\{importReviewItems\.length \? \(/);
   assert.match(settingsSource, /findPersistedReviewCandidates/);
   assert.match(settingsSource, /identityReviewCandidates: candidates\.slice\(0, 5\)/);
   assert.match(settingsSource, /Find Matches/);
@@ -1262,7 +1316,8 @@ check('Kitsu-first streaming cache is batched, persistent, and overridden by reg
   ]);
   assert.match(homeSource, /primeKitsuStreamingLinks/);
   assert.match(discoverSource, /KITSU_STREAMING_DISCOVER_LIMIT/);
-  assert.match(discoverSource, /kitsuGaps/);
+  assert.match(discoverSource, /explicit user refresh/);
+  assert.match(discoverSource, /await primeKitsuStreamingLinks/);
   assert.match(detailSource, /Check with Watchmode/);
   assert.match(detailSource, /Availability may vary by region/);
 });
@@ -1323,7 +1378,7 @@ check('Discover samples the shared Watchmode cache safely and rotates through ti
     source('src/pages/Discover.jsx'),
     source('src/services/watchmodeSharedCacheDiscovery.js')
   ]);
-  assert.match(discoverSource, /runWatchmodeSharedCacheDiscovery/);
+  assert.doesNotMatch(discoverSource, /runWatchmodeSharedCacheDiscovery/);
   assert.match(discoverSource, /browse\('services', 'On Your Services'\)/);
   assert.match(samplerSource, /requestMode:\s*'cache-only'/);
   assert.doesNotMatch(samplerSource, /requestMode:\s*'interactive'|requestMode:\s*'background'/);
@@ -2075,7 +2130,8 @@ check('Discover mounts lazily, stays cached, and does no hidden-page work', asyn
   assert.match(appSource, /<Discover[\s\S]*?active=\{view === 'discover'\}/);
   assert.match(discoverSource, /if \(!active \|\| renderStage >= DISCOVER_FINAL_STAGE\)/);
   assert.match(discoverSource, /if \(!active \|\| !catalogStageReady/);
-  assert.match(discoverSource, /if \(!active\) return;[\s\S]*?if \(!refreshLiveDiscover\) return;/);
+  assert.doesNotMatch(discoverSource, /void refreshLive\(\)/);
+  assert.match(discoverSource, /explicit user refresh/);
   assert.match(discoverSource, /if \(!previous\.active && !next\.active\) return true;/);
   assert.match(discoverSource, /previous\.active === next\.active/);
 });

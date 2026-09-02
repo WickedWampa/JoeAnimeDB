@@ -4946,6 +4946,8 @@ export function SettingsPage({
   const [metadataRepairSummary, setMetadataRepairSummary] = React.useState(null);
   const [libraryImportStatus, setLibraryImportStatus] = React.useState('');
   const [libraryImportProgress, setLibraryImportProgress] = React.useState(null);
+  const [reviewCandidateResults, setReviewCandidateResults] = React.useState({});
+  const [reviewCandidateLoading, setReviewCandidateLoading] = React.useState({});
   const [libraryExportSummary, setLibraryExportSummary] = React.useState(null);
   const [joeAIMemoryStatus, setJoeAIMemoryStatus] = React.useState('');
   const [systemStatus, setSystemStatus] = React.useState('');
@@ -5550,6 +5552,40 @@ export function SettingsPage({
       setLibraryImportStatus(`Copied ${reviewItems.length} review title${reviewItems.length === 1 ? '' : 's'} to the clipboard.`);
     } catch {
       setLibraryImportStatus('Could not copy failed titles to the clipboard.');
+    }
+  }
+
+  async function findPersistedReviewCandidates(reviewItem) {
+    const key = String(reviewItem.importedRecordId || reviewItem.title || '').toLowerCase();
+    if (!key || reviewCandidateLoading[key]) return;
+
+    setReviewCandidateLoading((current) => ({ ...current, [key]: true }));
+    setLibraryImportStatus(`Finding Kitsu matches for ${reviewItem.title}...`);
+    try {
+      const candidates = await searchAnimeCandidates(reviewItem.title, { limit: 5 });
+      setReviewCandidateResults((current) => ({ ...current, [key]: candidates }));
+
+      if (reviewItem.importedRecordId && updateAnime) {
+        const savedRecord = (data?.anime || []).find(
+          (item) => String(item.id) === String(reviewItem.importedRecordId)
+        );
+        if (savedRecord) {
+          await updateAnime({
+            ...savedRecord,
+            identityReviewCandidates: candidates.slice(0, 5)
+          });
+        }
+      }
+
+      setLibraryImportStatus(
+        candidates.length
+          ? `Found ${candidates.length} possible match${candidates.length === 1 ? '' : 'es'} for ${reviewItem.title}.`
+          : `Kitsu returned no matches for ${reviewItem.title}.`
+      );
+    } catch (error) {
+      setLibraryImportStatus(`Could not search for ${reviewItem.title}: ${error?.message || String(error)}`);
+    } finally {
+      setReviewCandidateLoading((current) => ({ ...current, [key]: false }));
     }
   }
 
@@ -6822,30 +6858,30 @@ export function SettingsPage({
         </section>
       ) : null}
 
-      {libraryImportSummary ? (
+      {(libraryImportSummary || importReviewItems.length) ? (
         <section className="settingsImportSummary">
           <div>
-            <strong>{libraryImportSummary.added?.length || 0}</strong>
+            <strong>{libraryImportSummary?.added?.length || 0}</strong>
             <span>Added</span>
           </div>
           <div>
-            <strong>{libraryImportSummary.updated?.length || 0}</strong>
+            <strong>{libraryImportSummary?.updated?.length || 0}</strong>
             <span>Personal Data Updated</span>
           </div>
           <div>
-            <strong>{libraryImportSummary.skipped?.length || 0}</strong>
+            <strong>{libraryImportSummary?.skipped?.length || 0}</strong>
             <span>Already Present</span>
           </div>
           <div>
-            <strong>{libraryImportSummary.needsReview?.length || 0}</strong>
+            <strong>{libraryImportSummary?.needsReview?.length || persistedLibraryReviewItems.length}</strong>
             <span>Needs Review</span>
           </div>
           <div>
-            <strong>{libraryImportSummary.failed?.length || 0}</strong>
+            <strong>{libraryImportSummary?.failed?.length || 0}</strong>
             <span>Failed</span>
           </div>
 
-          {libraryImportSummary.updated?.length ? (
+          {libraryImportSummary?.updated?.length ? (
             <details className="settingsImportSkipped">
               <summary>
                 Show {libraryImportSummary.updated.length} updated title{libraryImportSummary.updated.length === 1 ? '' : 's'}
@@ -6861,7 +6897,7 @@ export function SettingsPage({
             </details>
           ) : null}
 
-          {libraryImportSummary.skipped?.length ? (
+          {libraryImportSummary?.skipped?.length ? (
             <details className="settingsImportSkipped">
               <summary>
                 Show {libraryImportSummary.skipped.length} already-present title{libraryImportSummary.skipped.length === 1 ? '' : 's'}
@@ -6900,16 +6936,19 @@ export function SettingsPage({
               </p>
 
               <div className="settingsImportReviewList">
-                {importReviewItems.map((item) => (
+                {importReviewItems.map((item) => {
+                  const reviewKey = String(item.importedRecordId || item.title || '').toLowerCase();
+                  const candidates = reviewCandidateResults[reviewKey] || item.candidates || [];
+                  return (
                   <article key={`${item.importedRecordId || 'unresolved'}-${item.title}`}>
                     <div className="settingsImportReviewTitle">
                       <strong>{item.title}</strong>
                       <small>{item.reason}</small>
                     </div>
 
-                    {item.candidates?.length ? (
+                    {candidates.length ? (
                       <div className="settingsImportCandidates">
-                        {item.candidates.slice(0, 5).map((candidate) => (
+                        {candidates.slice(0, 5).map((candidate) => (
                           <button
                             type="button"
                             key={candidate.id || candidate.kitsuId || candidate.title}
@@ -6926,12 +6965,22 @@ export function SettingsPage({
                         ))}
                       </div>
                     ) : (
-                      <p className="settingsImportNoCandidates">
-                        No likely candidates were returned. Add this title manually from Library.
-                      </p>
+                      <div className="settingsImportNoCandidates">
+                        <p>{item.importedRecordId
+                          ? 'Already saved in your Library without a questionable Kitsu link.'
+                          : 'No likely candidates are currently loaded.'}</p>
+                        <button
+                          type="button"
+                          onClick={() => findPersistedReviewCandidates(item)}
+                          disabled={Boolean(reviewCandidateLoading[reviewKey])}
+                        >
+                          {reviewCandidateLoading[reviewKey] ? 'Searching Kitsu...' : 'Find Matches'}
+                        </button>
+                      </div>
                     )}
                   </article>
-                ))}
+                  );
+                })}
               </div>
             </section>
           ) : null}
